@@ -1,4 +1,4 @@
-import { classifyObservation } from "@/lib/confidence";
+import { classifyOfficialLsr } from "@/lib/confidence";
 import { parseCsv } from "@/lib/csv";
 import { ringSpanKm, validLatLon } from "@/lib/geo";
 import { stableId } from "@/lib/ids";
@@ -60,7 +60,7 @@ export function parseSpcHailCsv(csv: string, convectiveDate: string): IncomingRe
     reports.push({
       source: "spc",
       externalId: stableId(["spc", occurredAt, lat.toFixed(3), lon.toFixed(3), sizeIn]),
-      confidence: classifyObservation(cols[7] ?? "", remark),
+      confidence: classifyOfficialLsr(null, remark),
       lat,
       lon,
       sizeIn,
@@ -114,8 +114,19 @@ export function parseIemGeoJson(payload: unknown): IncomingReport[] {
     const stateRaw = String(props.st ?? props.state ?? "").trim();
     reports.push({
       source: "iem",
-      externalId: String(props.product_id ?? stableId(["iem", occurred.toISOString(), lat, lon, sizeIn])),
-      confidence: classifyObservation(sourceText, remark),
+      // product_id is the LSR bulletin, which often lists several cities. Keying
+      // only on it kept the last report in the product and dropped the rest
+      // (Salt Lake Holladay was overwritten by Spanish Fork).
+      externalId: stableId([
+        "iem",
+        props.product_id == null ? "" : String(props.product_id),
+        occurred.toISOString(),
+        lat,
+        lon,
+        sizeIn,
+        props.city == null ? "" : String(props.city),
+      ]),
+      confidence: classifyOfficialLsr(sourceText, remark),
       lat,
       lon,
       sizeIn,

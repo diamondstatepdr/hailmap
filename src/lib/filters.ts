@@ -1,3 +1,4 @@
+import type { FeatureCollection, Point } from "geojson";
 import type { Confidence } from "@/lib/confidence";
 import type { HailReport } from "@/lib/types";
 
@@ -31,6 +32,22 @@ export function formatWhen(iso: string): string {
     minute: "2-digit",
     timeZoneName: "short",
   }).format(date);
+}
+
+/** GeoJSON points the map circle layer renders. Coordinates are [lon, lat]. */
+export function reportsToPointCollection(reports: HailReport[]): FeatureCollection<Point> {
+  return {
+    type: "FeatureCollection",
+    features: reports.map((report) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [report.lon, report.lat] },
+      properties: {
+        id: report.id,
+        confidence: report.confidence,
+        ...(report.sizeIn != null ? { sizeIn: report.sizeIn } : {}),
+      },
+    })),
+  };
 }
 
 export function placeLabel(report: Pick<HailReport, "location" | "county" | "state">): string {

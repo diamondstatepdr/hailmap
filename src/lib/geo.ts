@@ -30,6 +30,40 @@ export function unproject(x: number, y: number, originLon: number, originLat: nu
   return { lon: originLon + x / kx, lat: originLat + y / ky };
 }
 
+export interface LngLatBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+/** Padded bounds for framing a set of reports. Single points stay a small area. */
+export function boundsOf(
+  points: Array<{ lon: number; lat: number }>,
+  padDegrees = 0.4,
+): LngLatBounds | null {
+  const valid = points.filter((point) => validLatLon(point.lat, point.lon));
+  if (!valid.length) return null;
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const point of valid) {
+    west = Math.min(west, point.lon);
+    east = Math.max(east, point.lon);
+    south = Math.min(south, point.lat);
+    north = Math.max(north, point.lat);
+  }
+  const latPad = Math.max(padDegrees, (north - south) * 0.2);
+  const lonPad = Math.max(padDegrees, (east - west) * 0.2);
+  return {
+    west: Math.max(-180, west - lonPad),
+    south: Math.max(-90, south - latPad),
+    east: Math.min(180, east + lonPad),
+    north: Math.min(90, north + latPad),
+  };
+}
+
 /** Rough diagonal span of a lon/lat ring, in kilometres. */
 export function ringSpanKm(ring: Array<[number, number]>): number {
   if (ring.length === 0) return 0;

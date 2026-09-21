@@ -36,8 +36,16 @@ body {
   font-family: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
 }
 
+.map-state-jumps {
+  top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.45rem);
+}
+
+.map-banner {
+  top: calc(max(0.6rem, env(safe-area-inset-top)) + 6.35rem);
+}
+
 .maplibregl-ctrl-top-right {
-  top: 4.75rem;
+  top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.45rem);
 }
 
 .prose-hail h1 {

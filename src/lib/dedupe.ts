@@ -15,6 +15,9 @@ export interface DedupeReport {
   confidence: Confidence;
   damageTags?: string[];
   remark?: string | null;
+  /** Set when the report has a stored photo. Those pins are never dropped. */
+  photoId?: string | null;
+  photoUrl?: string | null;
 }
 
 export interface DedupeOptions {
@@ -26,6 +29,8 @@ export interface DedupeOptions {
 /**
  * Collapse nearby reports of similar size into one marker.
  * The survivor is the highest-confidence report. Damage tags are unioned.
+ * A community photo is kept as its own pin so fusion cannot drop the photo
+ * or replace an official report with it.
  */
 export function fuseReports<T extends DedupeReport>(reports: T[], options: DedupeOptions = {}): T[] {
   const radiusKm = options.radiusKm ?? DEDUPE_RADIUS_KM;
@@ -67,6 +72,13 @@ export function fuseReports<T extends DedupeReport>(reports: T[], options: Dedup
     }
 
     match.damageTags = sortDamageTags([...(match.damageTags ?? []), ...(report.damageTags ?? [])]);
+    if (report.photoId) {
+      kept.push({
+        ...report,
+        damageTags: sortDamageTags(report.damageTags ?? []),
+      });
+      continue;
+    }
     if (!match.remark && report.remark) match.remark = report.remark;
   }
 

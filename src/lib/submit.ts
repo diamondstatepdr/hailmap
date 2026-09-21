@@ -1,10 +1,12 @@
 import { confidenceForImport, type Confidence } from "@/lib/confidence";
 import { parseCsv } from "@/lib/csv";
+import { extractDamageTags } from "@/lib/damage";
 import { upsertReports } from "@/lib/db";
 import { validLatLon } from "@/lib/geo";
 import { stableId } from "@/lib/ids";
+import { PHOTO_FILENAME_RE, photoUrlFor } from "@/lib/photos";
 import { parseHailSizeInches } from "@/lib/size";
-import type { IncomingReport } from "@/lib/types";
+import type { HailReport, IncomingReport } from "@/lib/types";
 
 const MAX_ROWS = 5000;
 
@@ -76,6 +78,89 @@ export function manualReport(
       state: clip(record.state, 32),
       remark,
     },
+  };
+}
+
+const PHOTO_REMARK_MAX = 500;
+const SEVEN_DAYS_MS = 7 * 86400000;
+const FUTURE_SKEW_MS = 15 * 60 * 1000;
+
+/**
+ * In-app photo reports are always community. A caller cannot set NWS, MESH, or spotter.
+ * The pin is the lat/lon the user confirmed. Photo GPS is not an input.
+ */
+export function buildPhotoSubmission(input: {
+  lat: unknown;
+  lon: unknown;
+  sizeIn: unknown;
+  occurredAt?: unknown;
+  location?: unknown;
+  county?: unknown;
+  state?: unknown;
+  remark?: unknown;
+  photoId: string;
+}): { ok: true; report: IncomingReport } | { ok: false; error: string } {
+  const lat = Number(input.lat);
+  const lon = Number(input.lon);
+  if (!validLatLon(lat, lon)) return { ok: false, error: "Confirm a location on the map" };
+
+  const sizeRaw = input.sizeIn == null ? "" : String(input.sizeIn).trim();
+  if (!sizeRaw) return { ok: false, error: "Choose a hail size" };
+  const sizeIn = parseHailSizeInches(sizeRaw);
+  if (sizeIn == null) return { ok: false, error: "Unrecognized hail size" };
+
+  if (!PHOTO_FILENAME_RE.test(input.photoId)) return { ok: false, error: "Photo could not be stored" };
+
+  let occurredAt = new Date().toISOString();
+  const provided = input.occurredAt == null ? "" : String(input.occurredAt).trim();
+  if (provided) {
+    const when = new Date(provided);
+    if (Number.isNaN(when.getTime())) return { ok: false, error: "Invalid time" };
+    const now = Date.now();
+    if (when.getTime() > now + FUTURE_SKEW_MS) return { ok: false, error: "Time is in the future" };
+    if (now - when.getTime() > SEVEN_DAYS_MS) {
+      return { ok: false, error: "Photo reports must be from the last 7 days" };
+    }
+    occurredAt = when.toISOString();
+  }
+
+  return {
+    ok: true,
+    report: {
+      source: "photo",
+      externalId: input.photoId.replace(/\.[a-z0-9]+$/i, ""),
+      confidence: "community",
+      lat,
+      lon,
+      sizeIn,
+      sizeRaw,
+      occurredAt,
+      location: clip(input.location, 200),
+      county: clip(input.county, 120),
+      state: clip(input.state, 32),
+      remark: clip(input.remark, PHOTO_REMARK_MAX),
+      photoId: input.photoId,
+    },
+  };
+}
+
+export function toHailReport(report: IncomingReport): HailReport {
+  return {
+    id: `${report.source}:${report.externalId}`,
+    source: report.source,
+    confidence: report.confidence,
+    lat: report.lat,
+    lon: report.lon,
+    sizeIn: report.sizeIn,
+    sizeRaw: report.sizeRaw,
+    occurredAt: report.occurredAt,
+    location: report.location,
+    county: report.county,
+    state: report.state,
+    remark: report.remark,
+    damageTags: extractDamageTags(report.remark),
+    photoId: report.photoId ?? null,
+    photoUrl: photoUrlFor(report.photoId),
   };
 }
 

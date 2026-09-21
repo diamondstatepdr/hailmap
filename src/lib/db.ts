@@ -21,6 +21,7 @@ interface ReportRow {
   state: string | null;
   remark: string | null;
   damage_tags: string;
+  photo_id: string | null;
 }
 
 const globalForDb = globalThis as unknown as { hailDb?: Database.Database };
@@ -51,6 +52,8 @@ function mapRow(row: ReportRow): HailReport {
     state: row.state,
     remark: row.remark,
     damageTags,
+    photoId: row.photo_id,
+    photoUrl: row.photo_id ? `/api/photos/${row.photo_id.replace(/\.(jpg|png|webp|heic)$/i, "")}` : null,
   };
 }
 
@@ -80,7 +83,16 @@ function migrate(db: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS photo_submits (
+      ip_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_photo_submits_ip ON photo_submits(ip_hash, created_at);
   `);
+  const columns = db.prepare("PRAGMA table_info(reports)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "photo_id")) {
+    db.exec("ALTER TABLE reports ADD COLUMN photo_id TEXT");
+  }
 }
 
 function hoursAgo(hours: number): string {
@@ -169,10 +181,10 @@ function insertAll(db: Database.Database, rows: IncomingReport[]): number {
   const stmt = db.prepare(`
     INSERT INTO reports (
       id, source, external_id, confidence, lat, lon, size_in, size_raw,
-      occurred_at, location, county, state, remark, damage_tags, created_at, updated_at
+      occurred_at, location, county, state, remark, damage_tags, photo_id, created_at, updated_at
     ) VALUES (
       @id, @source, @external_id, @confidence, @lat, @lon, @size_in, @size_raw,
-      @occurred_at, @location, @county, @state, @remark, @damage_tags, @created_at, @updated_at
+      @occurred_at, @location, @county, @state, @remark, @damage_tags, @photo_id, @created_at, @updated_at
     )
     ON CONFLICT(source, external_id) DO UPDATE SET
       confidence = excluded.confidence,
@@ -186,6 +198,7 @@ function insertAll(db: Database.Database, rows: IncomingReport[]): number {
       state = excluded.state,
       remark = excluded.remark,
       damage_tags = excluded.damage_tags,
+      photo_id = COALESCE(excluded.photo_id, reports.photo_id),
       updated_at = excluded.updated_at
   `);
   const now = new Date().toISOString();
@@ -210,6 +223,7 @@ function insertAll(db: Database.Database, rows: IncomingReport[]): number {
         state: item.state,
         remark: item.remark,
         damage_tags: JSON.stringify(extractDamageTags(item.remark)),
+        photo_id: item.photoId ?? null,
         created_at: now,
         updated_at: now,
       });

@@ -5,6 +5,7 @@ import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
   Layer,
+  Marker,
   NavigationControl,
   Source,
   type MapLayerMouseEvent,
@@ -68,6 +69,7 @@ export interface MapFocus {
   lon: number;
   lat: number;
   nonce: number;
+  zoom?: number;
 }
 
 export interface MapFrame {
@@ -89,6 +91,10 @@ interface Props {
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
+  draftPin: { lat: number; lon: number } | null;
+  pickMode: boolean;
+  blockSelection: boolean;
+  onPickLocation: (lon: number, lat: number) => void;
   onSelectReport: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
 }
@@ -104,6 +110,10 @@ export default function HailMap({
   selectedId,
   focus,
   frame,
+  draftPin,
+  pickMode,
+  blockSelection,
+  onPickLocation,
   onSelectReport,
   onSelectCounty,
 }: Props) {
@@ -136,7 +146,7 @@ export default function HailMap({
         [next.east, next.north],
       ],
       {
-        padding: { top: 124, bottom: 188, left: 36, right: 48 },
+        padding: { top: 124, bottom: 232, left: 36, right: 48 },
         duration: 800,
         maxZoom: 8.2,
       },
@@ -145,10 +155,13 @@ export default function HailMap({
 
   useEffect(() => {
     if (!focus) return;
-    mapRef.current?.flyTo({
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
       center: [focus.lon, focus.lat],
-      zoom: Math.max(mapRef.current.getZoom(), 8),
+      zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
       duration: 700,
+      padding: focus.zoom ? { top: 96, bottom: 260, left: 28, right: 28 } : undefined,
     });
   }, [focus]);
 
@@ -179,6 +192,11 @@ export default function HailMap({
   }
 
   function onClick(event: MapLayerMouseEvent) {
+    if (pickMode) {
+      onPickLocation(event.lngLat.lng, event.lngLat.lat);
+      return;
+    }
+    if (blockSelection) return;
     const feature = event.features?.[0];
     if (!feature) return;
     const props = feature.properties ?? {};
@@ -222,7 +240,7 @@ export default function HailMap({
       onClick={onClick}
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();
-        if (canvas) canvas.style.cursor = event.features?.length ? "pointer" : "";
+        if (canvas) canvas.style.cursor = pickMode ? "crosshair" : event.features?.length ? "pointer" : "";
       }}
       style={{ width: "100%", height: "100%" }}
     >
@@ -354,12 +372,37 @@ export default function HailMap({
             paint={{
               "circle-color": sizeColor as never,
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 8, 6, 11, 10, 15],
-              "circle-stroke-color": theme === "dark" ? "#0e141c" : "#ffffff",
-              "circle-stroke-width": ["case", ["==", ["get", "id"], selectedId ?? ""], 3.5, 2],
+              "circle-stroke-color": [
+                "case",
+                ["==", ["get", "id"], selectedId ?? ""],
+                theme === "dark" ? "#2dd4bf" : "#0f766e",
+                ["==", ["get", "hasPhoto"], 1],
+                theme === "dark" ? "#2dd4bf" : "#0f766e",
+                theme === "dark" ? "#0e141c" : "#ffffff",
+              ] as never,
+              "circle-stroke-width": [
+                "case",
+                ["==", ["get", "id"], selectedId ?? ""],
+                4,
+                ["==", ["get", "hasPhoto"], 1],
+                3,
+                2,
+              ] as never,
               "circle-opacity": 0.96,
             }}
           />
         </Source>
+      ) : null}
+      {draftPin ? (
+        <Marker
+          longitude={draftPin.lon}
+          latitude={draftPin.lat}
+          anchor="center"
+          draggable={pickMode}
+          onDragEnd={(event) => onPickLocation(event.lngLat.lng, event.lngLat.lat)}
+        >
+          <span className="block h-7 w-7 rounded-full border-[3px] border-white bg-accent shadow-sheet" />
+        </Marker>
       ) : null}
     </Map>
   );

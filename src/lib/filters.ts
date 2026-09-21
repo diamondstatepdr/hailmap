@@ -44,6 +44,7 @@ export function reportsToPointCollection(reports: HailReport[]): FeatureCollecti
       properties: {
         id: report.id,
         confidence: report.confidence,
+        hasPhoto: report.photoUrl ? 1 : 0,
         ...(report.sizeIn != null ? { sizeIn: report.sizeIn } : {}),
       },
     })),

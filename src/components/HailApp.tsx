@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
+import PhotoReportSheet from "@/components/PhotoReportSheet";
 import { boundsOf } from "@/lib/geo";
 import { applyReportFilter, formatWhen, placeLabel, reportsToPointCollection, type ReportFilter } from "@/lib/filters";
 import { reportsToSwaths } from "@/lib/swath";
@@ -79,6 +80,9 @@ export default function HailApp() {
   const [frame, setFrame] = useState<MapFrame | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [draftPin, setDraftPin] = useState<{ lat: number; lon: number } | null>(null);
+  const [picking, setPicking] = useState(false);
   const [filter, setFilter] = useState<ReportFilter>({
     minSize: 0,
     hours: 168,
@@ -214,6 +218,31 @@ export default function HailApp() {
     setReloadKey((value) => value + 1);
   }
 
+  function closeReport() {
+    setReportOpen(false);
+    setPicking(false);
+    setDraftPin(null);
+  }
+
+  function onPhotoSubmitted(report: HailReport) {
+    setReports((current) => [report, ...current.filter((item) => item.id !== report.id)]);
+    setRawCount((count) => count + 1);
+    setFilter((current) => ({
+      ...current,
+      minSize: report.sizeIn != null && report.sizeIn < current.minSize ? 0 : current.minSize,
+      state: current.state && (report.state ?? "").toUpperCase() !== current.state ? "" : current.state,
+      confidences: current.confidences.includes("community")
+        ? current.confidences
+        : [...current.confidences, "community"],
+    }));
+    setSelectedId(report.id);
+    setCounty(null);
+    setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 11 });
+    setSheetOpen(true);
+    closeReport();
+    setReloadKey((value) => value + 1);
+  }
+
   const folded = Math.max(0, rawCount - reports.length);
   const advancedOn =
     filter.confidences.length !== CONFIDENCE_OPTIONS.length || showIncome || !showPoints || !showSwaths;
@@ -261,6 +290,10 @@ export default function HailApp() {
           selectedId={selectedId}
           focus={focus}
           frame={frame}
+          draftPin={draftPin}
+          pickMode={picking}
+          blockSelection={reportOpen}
+          onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
           onSelectReport={(id) => {
             setSelectedId(id);
             setCounty(null);
@@ -319,13 +352,30 @@ export default function HailApp() {
         </p>
       ) : null}
 
-      {!loading && filtered.length === 0 ? (
+      {picking ? (
+        <p className="pointer-events-none absolute left-1/2 top-[36%] z-20 -translate-x-1/2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accentink shadow-sheet">
+          Tap the map to place the pin
+        </p>
+      ) : null}
+
+      {!loading && filtered.length === 0 && !reportOpen ? (
         <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 -translate-x-1/2 rounded-full bg-panel px-4 py-2 text-sm text-muted shadow-sheet">
           No hail reports in this window.
         </p>
       ) : null}
 
-      <section className="absolute inset-x-0 bottom-0 z-30">
+      {reportOpen ? (
+        <PhotoReportSheet
+          pin={draftPin}
+          onPinChange={setDraftPin}
+          onPickingChange={setPicking}
+          onFocus={setFocus}
+          onClose={closeReport}
+          onSubmitted={onPhotoSubmitted}
+        />
+      ) : null}
+
+      <section className={`absolute inset-x-0 bottom-0 z-30 ${reportOpen ? "hidden" : ""}`}>
         <div className="mx-auto w-full max-w-3xl rounded-t-3xl border border-line bg-panel shadow-sheet">
           <div className={`px-4 pt-2 ${sheetOpen ? "pb-2" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}>
             <button
@@ -363,16 +413,41 @@ export default function HailApp() {
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftPin(null);
+                setPicking(false);
+                setReportOpen(true);
+              }}
+              className="mt-2 w-full rounded-2xl bg-accent px-3 py-2.5 text-sm font-semibold text-accentink"
+            >
+              Report hail
+            </button>
           </div>
           {sheetOpen ? (
             <div className="max-h-[58dvh] space-y-4 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {selected ? (
                 <article className="rounded-2xl border border-line bg-app p-3">
-                  <p className="text-sm font-semibold">{placeLabel(selected)}</p>
+                  <p className="text-sm font-semibold">
+                    {selected.location || selected.county || selected.state
+                      ? placeLabel(selected)
+                      : `${selected.lat.toFixed(3)}, ${selected.lon.toFixed(3)}`}
+                  </p>
+                  {selected.photoUrl ? <p className="text-xs font-medium text-accent">Community photo</p> : null}
                   <p className="text-sm text-muted">
                     {selected.sizeIn != null ? `${selected.sizeIn.toFixed(2)} in` : "Size unknown"} ·{" "}
                     {confidenceLabel(selected.confidence)} · {formatWhen(selected.occurredAt)}
                   </p>
+                  {selected.photoUrl ? (
+                    <a href={selected.photoUrl} target="_blank" rel="noreferrer" className="mt-2 block">
+                      <img
+                        src={selected.photoUrl}
+                        alt={`Hail photo, ${placeLabel(selected)}`}
+                        className="max-h-64 w-full rounded-xl bg-panel object-cover"
+                      />
+                    </a>
+                  ) : null}
                   {selected.remark ? <p className="mt-1 text-sm">{selected.remark}</p> : null}
                   {selected.damageTags.length ? (
                     <p className="mt-2 flex flex-wrap gap-1">
@@ -446,7 +521,7 @@ export default function HailApp() {
                   <div>
                     <p className="mb-1 text-sm font-medium">Report sources</p>
                     <p className="mb-2 text-xs text-muted">
-                      Official reports come from the weather service. Radar is an estimate. Community is only a file or a private feed.
+                      Official reports come from the weather service. Radar is an estimate. Community is a file, a private feed, or a photo you add with Report hail.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {CONFIDENCE_OPTIONS.map((option) => {
@@ -529,7 +604,7 @@ export default function HailApp() {
                     ) : null}
                     <p className="mt-2 text-xs leading-relaxed text-muted">
                       Published local storm reports stay Official or Spotter, even when they mention the public or mPING.
-                      HailMap does not scrape social networks.
+                      Photo reports stay on their own pins. HailMap does not scrape social networks.
                     </p>
                   </div>
                 </div>
@@ -549,10 +624,20 @@ export default function HailApp() {
                         setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now() });
                       }}
                     >
-                      <span>
-                        <span className="block text-sm font-medium">{placeLabel(report)}</span>
-                        <span className="block text-xs text-muted">
-                          {formatWhen(report.occurredAt)} · {confidenceLabel(report.confidence)}
+                      <span className="flex min-w-0 items-start gap-2">
+                        {report.photoUrl ? (
+                          <img src={report.photoUrl} alt="" className="mt-0.5 h-10 w-10 shrink-0 rounded-lg object-cover" />
+                        ) : null}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">
+                            {report.location || report.county || report.state
+                              ? placeLabel(report)
+                              : `${report.lat.toFixed(3)}, ${report.lon.toFixed(3)}`}
+                          </span>
+                          <span className="block text-xs text-muted">
+                            {formatWhen(report.occurredAt)} · {confidenceLabel(report.confidence)}
+                            {report.photoUrl ? " · photo" : ""}
+                          </span>
                         </span>
                       </span>
                       <span className="text-sm font-semibold">

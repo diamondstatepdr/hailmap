@@ -90,4 +90,28 @@ describe("fuseReports", () => {
     ]);
     expect(differentSize).toHaveLength(2);
   });
+
+  it("keeps a community photo beside a nearby official report", () => {
+    const fused = fuseReports([
+      report({ id: "nws", confidence: "nws", remark: "official lsr" }),
+      {
+        ...report({
+          id: "photo",
+          confidence: "community",
+          photoId: "11111111-1111-4111-8111-111111111111.jpg",
+          remark: "hail on the driveway",
+        }),
+        photoUrl: "/api/photos/11111111-1111-4111-8111-111111111111",
+      },
+    ]);
+    expect(fused.map((item) => item.id).sort()).toEqual(["nws", "photo"]);
+    const official = fused.find((item) => item.id === "nws");
+    const photo = fused.find((item) => item.id === "photo");
+    expect(official?.confidence).toBe("nws");
+    expect(official?.remark).toBe("official lsr");
+    expect(official?.photoId ?? null).toBeNull();
+    expect(photo?.photoId).toBe("11111111-1111-4111-8111-111111111111.jpg");
+    expect(photo?.photoUrl).toBe("/api/photos/11111111-1111-4111-8111-111111111111");
+    expect(photo?.remark).toBe("hail on the driveway");
+  });
 });

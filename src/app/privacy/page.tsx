@@ -30,8 +30,8 @@ export default function PrivacyPage() {
 
         <h2>Data we do not collect</h2>
         <ul className="list-disc space-y-1 pl-5">
-          <li>No account, name, phone number, or precise device location is required to use the map.</li>
-          <li>The app does not request GPS permission and does not read contacts, photos, or SMS.</li>
+          <li>No account, name, or phone number is required to view the map.</li>
+          <li>Viewing the map does not read contacts, SMS, or your photo library.</li>
           <li>We do not sell personal information and we do not show third-party ads.</li>
           <li>We do not pull posts from X, Facebook, Instagram, or any other social platform.</li>
         </ul>
@@ -57,17 +57,25 @@ export default function PrivacyPage() {
           and cannot overwrite official NWS confidence.
         </p>
         <p>
+          Report hail in the app sends a photo plus the pin you confirm, a hail size, and an optional
+          note. The app asks for the camera or photo library, and for location only if you choose
+          “Use my location.” You can place the pin by tapping the map instead. The photo is stored
+          on the server volume and shown on the public map as a community report. We do not read GPS
+          from the photo. JPEG, PNG, and WebP location metadata is removed when the file is saved.
+          A hashed network address is kept briefly to limit how many reports one network can send.
+        </p>
+        <p>
           Do not include a person&apos;s name, phone number, address of a private residence beyond
-          the hail location, or any other personal data in a remark. If you did, email us and we
-          will delete that stored report.
+          the hail location, or any other personal data in a remark or photo. If you did, email us
+          and we will delete that stored report and its photo.
         </p>
 
         <h2>Retention</h2>
         <p>
-          Official feed rows older than eight days are removed on sync. Reports you import or post
-          to a webhook stay until you ask us to delete them or we remove the database. The database
-          lives on the server volume, not on the phone, except for a short-lived cache of the app
-          shell in the browser.
+          Official feed rows older than eight days are removed on sync. Reports you import, post
+          to a webhook, or submit with a photo stay until you ask us to delete them or we remove
+          the database. The database and photo files live on the server volume, not on the phone,
+          except for a short-lived cache of the app shell in the browser.
         </p>
 
         <h2>The Android app</h2>

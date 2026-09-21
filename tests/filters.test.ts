@@ -133,4 +133,13 @@ describe("7-day Wasatch filter and point layer", () => {
     expect(points.features.every((feature) => feature.geometry.type === "Point")).toBe(true);
     expect(points.features.some((feature) => feature.properties?.id === "taylorsville")).toBe(true);
   });
+
+  it("marks photo reports on the map points", () => {
+    const points = reportsToPointCollection([
+      report({ id: "photo", photoUrl: "/api/photos/11111111-1111-4111-8111-111111111111" }),
+      report({ id: "plain" }),
+    ]);
+    expect(points.features[0].properties?.hasPhoto).toBe(1);
+    expect(points.features[1].properties?.hasPhoto).toBe(0);
+  });
 });

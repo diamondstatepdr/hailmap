@@ -14,6 +14,10 @@ export interface HailReport {
   state: string | null;
   remark: string | null;
   damageTags: string[];
+  /** Stored filename under HAILMAP_DATA_DIR/photos, when this report has a photo. */
+  photoId?: string | null;
+  /** Public path for the photo, when one was stored. */
+  photoUrl?: string | null;
 }
 
 export interface IncomingReport {
@@ -29,6 +33,7 @@ export interface IncomingReport {
   county: string | null;
   state: string | null;
   remark: string | null;
+  photoId?: string | null;
 }
 
 export type FeedStatus = "ok" | "error" | "empty" | "skipped";

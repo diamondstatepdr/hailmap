@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --text: #122033;
+  --muted: #5c6b80;
+  --border: #d5deea;
+  --accent: #0f766e;
+  --accent-ink: #ffffff;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg: #0e141c;
+  --panel: #17202b;
+  --text: #e7eef8;
+  --muted: #9aafc4;
+  --border: #2c3c4e;
+  --accent: #2dd4bf;
+  --accent-ink: #042f2e;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+}
+
+.maplibregl-ctrl-top-right {
+  top: 4.75rem;
+}
+
+.prose-hail h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.prose-hail h2 {
+  margin-top: 1.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.prose-hail p,
+.prose-hail li {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.prose-hail strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.prose-hail a {
+  color: var(--accent);
+}

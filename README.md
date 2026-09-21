@@ -2,6 +2,8 @@
 
 Nationwide live map of United States hail. Reports come from the National Weather Service, the Storm Prediction Center, and Iowa Environmental Mesonet local storm reports. Nearby reports are fused, with confidence ordered **NWS > spotter > MESH > community**. Size colors the markers. Clusters within about 45 km and 3 hours become a buffered hail swath. Counties can be shaded by Census ACS median household income.
 
+The map opens on the last 7 days. SPC and IEM local storm reports are stored as NWS or spotter confidence, including public and mPING reports that an NWS office published. Community confidence is only for file import and the community webhook.
+
 HailMap does not scrape social networks. Spotter and community observations arrive only through webhooks or CSV/GeoJSON import.
 
 ## Local run
@@ -44,7 +46,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
 
-Imports are stored as community reports, or spotter when the file says so. They cannot claim NWS or MESH confidence.
+Imports are stored as community reports, or spotter when the file says so. They cannot claim NWS or MESH confidence. Official SPC and IEM reports cannot be stored as community.
 
 ## Railway
 

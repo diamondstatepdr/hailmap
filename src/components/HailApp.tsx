@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { MapFocus } from "@/components/HailMap";
-import { applyReportFilter, formatWhen, placeLabel, type ReportFilter } from "@/lib/filters";
+import type { MapFocus, MapFrame } from "@/components/HailMap";
+import { boundsOf } from "@/lib/geo";
+import { applyReportFilter, formatWhen, placeLabel, reportsToPointCollection, type ReportFilter } from "@/lib/filters";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
 import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
@@ -52,11 +53,12 @@ export default function HailApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [county, setCounty] = useState<{ fips?: string; income: number | null } | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
+  const [frame, setFrame] = useState<MapFrame | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [filter, setFilter] = useState<ReportFilter>({
     minSize: 0,
-    hours: 24,
+    hours: 168,
     confidences: ["nws", "spotter", "mesh", "community"],
     state: "",
   });
@@ -110,21 +112,17 @@ export default function HailApp() {
 
   const filtered = useMemo(() => applyReportFilter(reports, filter), [reports, filter]);
   const selected = filtered.find((report) => report.id === selectedId) ?? null;
-  const points = useMemo<GeoJSON.FeatureCollection>(
-    () => ({
-      type: "FeatureCollection",
-      features: filtered.map((report) => ({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [report.lon, report.lat] },
-        properties: {
-          id: report.id,
-          confidence: report.confidence,
-          ...(report.sizeIn != null ? { sizeIn: report.sizeIn } : {}),
-        },
-      })),
-    }),
-    [filtered],
-  );
+  const points = useMemo(() => reportsToPointCollection(filtered), [filtered]);
+  const stateCounts = useMemo(() => {
+    const visible = applyReportFilter(reports, { ...filter, state: "" });
+    const counts = new Map<string, number>();
+    for (const report of visible) {
+      const code = (report.state ?? "").toUpperCase();
+      if (!/^[A-Z]{2}$/.test(code)) continue;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [reports, filter]);
   const swaths = useMemo(
     () =>
       reportsToSwaths(
@@ -148,6 +146,25 @@ export default function HailApp() {
     localStorage.setItem("hailmap-theme", next);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", next === "dark" ? "#0e141c" : "#f3f6fb");
+  }
+
+  function frameFilter(next: ReportFilter) {
+    const bounds = boundsOf(applyReportFilter(reports, next));
+    if (!bounds) return;
+    setFrame({ ...bounds, nonce: Date.now() });
+  }
+
+  function setHours(hours: number) {
+    if (filter.hours === hours) return;
+    const next = { ...filter, hours };
+    setFilter(next);
+    frameFilter(next);
+  }
+
+  function setStateFilter(state: string) {
+    const next = { ...filter, state };
+    setFilter(next);
+    frameFilter(next);
   }
 
   function toggleConfidence(id: Confidence) {
@@ -218,6 +235,7 @@ export default function HailApp() {
           showIncome={showIncome}
           selectedId={selectedId}
           focus={focus}
+          frame={frame}
           onSelectReport={(id) => {
             setSelectedId(id);
             setCounty(null);
@@ -231,13 +249,49 @@ export default function HailApp() {
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-20 flex justify-center px-3">
+      <div className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-20 flex justify-center px-3 pr-16">
         <div className="pointer-events-auto flex flex-wrap justify-center gap-2">
           <LayerButton on={showPoints} label="Points" onClick={() => setShowPoints((value) => !value)} />
           <LayerButton on={showSwaths} label="Swaths" onClick={() => setShowSwaths((value) => !value)} />
           <LayerButton on={showIncome} label="Income" onClick={() => setShowIncome((value) => !value)} />
         </div>
       </div>
+
+      {stateCounts.length ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[7.35rem] z-20 px-3 pr-16">
+          <div
+            className="pointer-events-auto flex gap-2 overflow-x-auto pb-1"
+            role="toolbar"
+            aria-label="Jump to state"
+          >
+            {filter.state ? (
+              <button
+                type="button"
+                onClick={() => setStateFilter("")}
+                className="shrink-0 rounded-full border border-line bg-panel px-3 py-1.5 text-sm font-medium shadow-sheet"
+              >
+                All states
+              </button>
+            ) : null}
+            {stateCounts.map(([code, count]) => {
+              const on = filter.state === code;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setStateFilter(on ? "" : code)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sheet ${
+                    on ? "bg-accent text-accentink" : "border border-line bg-panel"
+                  }`}
+                >
+                  {code} {count}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="absolute inset-x-3 top-28 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
@@ -262,7 +316,8 @@ export default function HailApp() {
             <span className="h-1.5 w-10 rounded-full bg-line" />
             <span className="text-sm font-semibold">Filters and reports</span>
             <span className="text-xs text-muted">
-              {WINDOWS.find((item) => item.hours === filter.hours)?.label} · min {filter.minSize.toFixed(2)} in
+              {WINDOWS.find((item) => item.hours === filter.hours)?.label}
+              {filter.state ? ` · ${filter.state}` : ""} · min {filter.minSize.toFixed(2)} in
             </span>
           </button>
           {sheetOpen ? (
@@ -304,7 +359,7 @@ export default function HailApp() {
                     key={item.hours}
                     type="button"
                     aria-pressed={filter.hours === item.hours}
-                    onClick={() => setFilter((current) => ({ ...current, hours: item.hours }))}
+                    onClick={() => setHours(item.hours)}
                     className={`rounded-full px-3 py-1.5 text-sm ${
                       filter.hours === item.hours ? "bg-accent text-accentink" : "border border-line"
                     }`}
@@ -352,9 +407,11 @@ export default function HailApp() {
                   value={filter.state}
                   maxLength={2}
                   placeholder="Any"
-                  onChange={(event) =>
-                    setFilter((current) => ({ ...current, state: event.target.value.toUpperCase() }))
-                  }
+                  onChange={(event) => {
+                    const state = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+                    if (state.length === 2 || state.length === 0) setStateFilter(state);
+                    else setFilter((current) => ({ ...current, state }));
+                  }}
                   className="w-24 rounded-xl border border-line bg-app px-3 py-2 uppercase"
                 />
               </label>
@@ -405,8 +462,13 @@ export default function HailApp() {
                 {syncedAt ? <span>Synced {formatWhen(syncedAt)}</span> : null}
               </div>
 
+              <p className="text-xs text-muted">
+                SPC and IEM local storm reports stay under NWS or Spotter, including public and mPING
+                reports an office published. Community is only file import and the community webhook.
+              </p>
+
               <ul className="divide-y divide-line">
-                {filtered.slice(0, 80).map((report) => (
+                {filtered.slice(0, 200).map((report) => (
                   <li key={report.id}>
                     <button
                       type="button"
@@ -432,6 +494,7 @@ export default function HailApp() {
               </ul>
               <p className="text-xs leading-relaxed text-muted">
                 Live points fuse NWS warnings, SPC hail reports, and IEM local storm reports.
+                The map opens on 7 days. State buttons jump to that cluster.
                 Swaths cluster reports within about 45 km and 3 hours, then draw a buffered hull.
                 HailMap does not scrape social networks. Spotter and community reports arrive only
                 through webhooks or file import.

@@ -18,29 +18,35 @@ export function asConfidence(value: unknown): Confidence | null {
   return null;
 }
 
+const NWS_OBSERVER =
+  /\bnws\b|national weather service|official nws|\basos\b|\bawos\b|\bmesonet\b|law enforcement|emergency mngr|emergency manager/;
+
+const SPOTTER_OBSERVER =
+  /trained\s+spotter|\bspotter\b|spotter network|cocorahs|co-?op observer|broadcast media|storm chaser|amateur radio|\bpublic\b|\bmping\b|social\s*media|\bfacebook\b|\btwitter\b|\binstagram\b/;
+
+function observerRank(text: string | null | undefined): "nws" | "spotter" | null {
+  if (!text) return null;
+  const blob = text.toLowerCase();
+  if (NWS_OBSERVER.test(blob)) return "nws";
+  if (SPOTTER_OBSERVER.test(blob)) return "spotter";
+  return null;
+}
+
 /**
- * Rank a text source/remark from an official feed.
- * Community signals (public, social, mPING) are checked before office keywords
- * so a remark that merely mentions radar still stays community when the
- * observer was the public. This does not scrape any social network.
+ * Confidence for an official NWS product: SPC hail reports and IEM local storm reports.
+ * A bulletin that mentions the public, mPING, or social media is still an office LSR,
+ * so it stays spotter (or nws when the observer is the office, ASOS/AWOS, law
+ * enforcement, or an emergency manager). It is never community or MESH.
+ * A radar time estimate in the remark does not by itself raise the rank.
+ * Imports and webhooks use confidenceForImport instead.
  */
-export function classifyObservation(
+export function classifyOfficialLsr(
   source: string | null | undefined,
   remark: string | null | undefined,
 ): Confidence {
-  const blob = `${source ?? ""} ${remark ?? ""}`.toLowerCase();
-  if (/\bmrms\b|\bmesh\b/.test(blob)) return "mesh";
-  if (/social\s*media|\bpublic\b|\bmping\b|\bfacebook\b|\btwitter\b|\binstagram\b|\bx\.com\b/.test(blob)) {
-    return "community";
-  }
-  if (/spotter|cocorahs|co-?op observer|\bbroadcast\b|\bmedia\b/.test(blob)) return "spotter";
-  if (
-    /\bnws\b|national weather|official|\basos\b|\bawos\b|mesonet|law enforcement|emergency|radar|meteorologist|measured/.test(
-      blob,
-    )
-  ) {
-    return "nws";
-  }
+  const fromSource = observerRank(source);
+  const fromRemark = observerRank(remark);
+  if (fromSource === "nws" || fromRemark === "nws") return "nws";
   return "spotter";
 }
 

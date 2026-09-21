@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { GeoJSONSource } from "maplibre-gl";
+import type { FeatureCollection } from "geojson";
+import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
   Layer,
   NavigationControl,
@@ -9,7 +10,10 @@ import Map, {
   type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
+import stateOverlay from "@/data/us-states.json";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+const states = stateOverlay as FeatureCollection;
 
 const LIGHT_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
@@ -34,6 +38,10 @@ const sizeColor = [
   ],
   "#64748b",
 ];
+
+const stateCoreWidth = ["interpolate", ["linear"], ["zoom"], 2, 1.5, 3.6, 2.15, 6, 2.7, 9, 3.5];
+const stateCasingWidth = ["interpolate", ["linear"], ["zoom"], 2, 3.6, 3.6, 4.6, 6, 5.4, 9, 6.4];
+const stateTextSize = ["interpolate", ["linear"], ["zoom"], 3, 12, 4.5, 15, 6.5, 18, 9, 23];
 
 const swathColor = [
   "case",
@@ -101,6 +109,7 @@ export default function HailMap({
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const frameRef = useRef(frame);
+  const frameWait = useRef(false);
   frameRef.current = frame;
   const interactiveLayerIds = [
     showPoints ? "hail-clusters" : "",
@@ -110,14 +119,24 @@ export default function HailMap({
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
     const map = mapRef.current;
-    if (!next || !map || !map.getMap().isStyleLoaded()) return;
+    if (!next || !map) return;
+    const raw = map.getMap();
+    if (!raw.isStyleLoaded()) {
+      if (frameWait.current) return;
+      frameWait.current = true;
+      raw.once("idle", () => {
+        frameWait.current = false;
+        if (frameRef.current?.nonce === next.nonce) applyFrame(next);
+      });
+      return;
+    }
     map.fitBounds(
       [
         [next.west, next.south],
         [next.east, next.north],
       ],
       {
-        padding: { top: 132, bottom: 156, left: 36, right: 48 },
+        padding: { top: 124, bottom: 188, left: 36, right: 48 },
         duration: 800,
         maxZoom: 8.2,
       },
@@ -136,6 +155,28 @@ export default function HailMap({
   useEffect(() => {
     applyFrame(frame);
   }, [frame]);
+
+  function quietBaseStateLayers() {
+    const map = mapRef.current?.getMap();
+    if (!map?.isStyleLoaded()) return;
+    for (const id of ["label_state", "place_state", "boundary_state"]) {
+      if (!map.getLayer(id)) continue;
+      if (map.getLayoutProperty(id, "visibility") !== "none") {
+        map.setLayoutProperty(id, "visibility", "none");
+      }
+    }
+    if (map.getLayer("boundary_3")) {
+      const filter = map.getFilter("boundary_3");
+      const adminChecks = JSON.stringify(filter ?? null).split("admin_level").length - 1;
+      if (filter && adminChecks < 3) {
+        map.setFilter("boundary_3", ["all", filter, ["!=", ["get", "admin_level"], 4]] as FilterSpecification);
+      }
+    }
+    const layers = map.getStyle().layers ?? [];
+    if (map.getLayer("state-names") && layers[layers.length - 1]?.id !== "state-names") {
+      map.moveLayer("state-names");
+    }
+  }
 
   function onClick(event: MapLayerMouseEvent) {
     const feature = event.features?.[0];
@@ -172,7 +213,11 @@ export default function HailMap({
       ref={mapRef}
       initialViewState={{ longitude: -97.5, latitude: 39.2, zoom: 3.7 }}
       mapStyle={theme === "dark" ? DARK_STYLE : LIGHT_STYLE}
-      onLoad={() => applyFrame()}
+      onLoad={() => {
+        quietBaseStateLayers();
+        applyFrame();
+      }}
+      onStyleData={() => quietBaseStateLayers()}
       interactiveLayerIds={interactiveLayerIds}
       onClick={onClick}
       onMouseMove={(event) => {
@@ -229,6 +274,53 @@ export default function HailMap({
           />
         </Source>
       ) : null}
+      <Source id="us-states" type="geojson" data={states}>
+        <Layer
+          id="state-border-casing"
+          type="line"
+          filter={["==", ["get", "kind"], "boundary"]}
+          layout={{ "line-join": "round", "line-cap": "round" }}
+          paint={{
+            "line-color": theme === "dark" ? "#0b1220" : "#ffffff",
+            "line-width": stateCasingWidth as never,
+            "line-opacity": 0.95,
+          }}
+        />
+        <Layer
+          id="state-border"
+          type="line"
+          filter={["==", ["get", "kind"], "boundary"]}
+          layout={{ "line-join": "round", "line-cap": "round" }}
+          paint={{
+            "line-color": theme === "dark" ? "#f8fafc" : "#1e293b",
+            "line-width": stateCoreWidth as never,
+            "line-opacity": 0.95,
+          }}
+        />
+        <Layer
+          id="state-names"
+          type="symbol"
+          filter={["==", ["get", "kind"], "label"]}
+          minzoom={2.8}
+          maxzoom={10.5}
+          layout={{
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": stateTextSize as never,
+            "text-max-width": 8,
+            "text-padding": 2,
+            "text-letter-spacing": 0.04,
+            "text-allow-overlap": false,
+            "symbol-sort-key": ["get", "area"],
+          }}
+          paint={{
+            "text-color": theme === "dark" ? "#f8fafc" : "#122033",
+            "text-halo-color": theme === "dark" ? "#0b1220" : "#ffffff",
+            "text-halo-width": 1.8,
+            "text-halo-blur": 0.3,
+          }}
+        />
+      </Source>
       {showPoints ? (
         <Source id="reports" type="geojson" data={points} cluster clusterRadius={52} clusterMaxZoom={5}>
           <Layer

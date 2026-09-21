@@ -18,18 +18,40 @@ const HailMap = dynamic(() => import("@/components/HailMap"), {
 });
 
 const CONFIDENCE_OPTIONS: Array<{ id: Confidence; label: string }> = [
-  { id: "nws", label: "NWS" },
+  { id: "nws", label: "Official (NWS)" },
   { id: "spotter", label: "Spotter" },
-  { id: "mesh", label: "MESH" },
+  { id: "mesh", label: "Radar (MESH)" },
   { id: "community", label: "Community" },
 ];
 
 const WINDOWS = [
-  { hours: 6, label: "6h" },
-  { hours: 24, label: "24h" },
-  { hours: 72, label: "3d" },
-  { hours: 168, label: "7d" },
+  { hours: 6, label: "6 hours" },
+  { hours: 24, label: "24 hours" },
+  { hours: 72, label: "3 days" },
+  { hours: 168, label: "7 days" },
 ];
+
+function windowPhrase(hours: number): string {
+  const item = WINDOWS.find((entry) => entry.hours === hours);
+  return item ? `Last ${item.label.toLowerCase()}` : "Selected time";
+}
+
+function sizePhrase(minSize: number): string {
+  if (minSize <= 0) return "Any size";
+  return `${minSize.toFixed(2)} in and larger`;
+}
+
+function confidenceLabel(id: Confidence): string {
+  return CONFIDENCE_OPTIONS.find((option) => option.id === id)?.label ?? id;
+}
+
+function feedPhrase(status?: string): string {
+  if (status === "ok") return "up to date";
+  if (status === "empty") return "no reports";
+  if (status === "error") return "unavailable";
+  if (status === "skipped") return "off";
+  return "checking";
+}
 
 function readTheme(): "light" | "dark" {
   if (typeof document === "undefined") return "light";
@@ -45,6 +67,7 @@ export default function HailApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
   const [showSwaths, setShowSwaths] = useState(true);
   const [showIncome, setShowIncome] = useState(false);
@@ -192,6 +215,8 @@ export default function HailApp() {
   }
 
   const folded = Math.max(0, rawCount - reports.length);
+  const advancedOn =
+    filter.confidences.length !== CONFIDENCE_OPTIONS.length || showIncome || !showPoints || !showSwaths;
 
   return (
     <div className="map-shell relative h-[100dvh] overflow-hidden bg-app text-ink">
@@ -203,8 +228,7 @@ export default function HailApp() {
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold leading-tight">HailMap</p>
             <p className="truncate text-xs text-muted">
-              {loading ? "Syncing live reports…" : `${filtered.length} shown`}
-              {folded > 0 ? ` · ${folded} duplicates folded` : ""}
+              {loading ? "Loading reports…" : `${filtered.length} ${filtered.length === 1 ? "report" : "reports"}`}
             </p>
           </div>
         </div>
@@ -212,6 +236,7 @@ export default function HailApp() {
           type="button"
           onClick={toggleTheme}
           aria-pressed={theme === "dark"}
+          aria-label={theme === "dark" ? "Switch to light map" : "Switch to dark map"}
           className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-medium shadow-sheet"
         >
           {theme === "dark" ? "Light" : "Dark"}
@@ -249,21 +274,16 @@ export default function HailApp() {
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-20 flex justify-center px-3 pr-16">
-        <div className="pointer-events-auto flex flex-wrap justify-center gap-2">
-          <LayerButton on={showPoints} label="Points" onClick={() => setShowPoints((value) => !value)} />
-          <LayerButton on={showSwaths} label="Swaths" onClick={() => setShowSwaths((value) => !value)} />
-          <LayerButton on={showIncome} label="Income" onClick={() => setShowIncome((value) => !value)} />
-        </div>
-      </div>
-
       {stateCounts.length ? (
-        <div className="pointer-events-none absolute inset-x-0 top-[7.35rem] z-20 px-3 pr-16">
+        <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
           <div
-            className="pointer-events-auto flex gap-2 overflow-x-auto pb-1"
+            className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-1"
             role="toolbar"
-            aria-label="Jump to state"
+            aria-label="Jump to a state"
           >
+            <span className="shrink-0 rounded-full border border-line bg-panel px-2.5 py-1.5 text-xs font-semibold shadow-sheet">
+              Go to
+            </span>
             {filter.state ? (
               <button
                 type="button"
@@ -294,7 +314,7 @@ export default function HailApp() {
       ) : null}
 
       {error ? (
-        <p className="absolute inset-x-3 top-28 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
+        <p className="map-banner absolute inset-x-3 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
           {error}
         </p>
       ) : null}
@@ -307,27 +327,51 @@ export default function HailApp() {
 
       <section className="absolute inset-x-0 bottom-0 z-30">
         <div className="mx-auto w-full max-w-3xl rounded-t-3xl border border-line bg-panel shadow-sheet">
-          <button
-            type="button"
-            className="flex w-full flex-col items-center gap-1 px-4 pb-3 pt-2"
-            aria-expanded={sheetOpen}
-            onClick={() => setSheetOpen((open) => !open)}
-          >
-            <span className="h-1.5 w-10 rounded-full bg-line" />
-            <span className="text-sm font-semibold">Filters and reports</span>
-            <span className="text-xs text-muted">
-              {WINDOWS.find((item) => item.hours === filter.hours)?.label}
-              {filter.state ? ` · ${filter.state}` : ""} · min {filter.minSize.toFixed(2)} in
-            </span>
-          </button>
+          <div className={`px-4 pt-2 ${sheetOpen ? "pb-2" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}>
+            <button
+              type="button"
+              className="flex w-full flex-col items-center gap-1"
+              aria-expanded={sheetOpen}
+              onClick={() => setSheetOpen((open) => !open)}
+            >
+              <span className="h-1.5 w-10 rounded-full bg-line" />
+              <span className="flex w-full items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold">
+                  {loading ? "Loading reports…" : `${filtered.length} hail ${filtered.length === 1 ? "report" : "reports"}`}
+                </span>
+                <span className="text-sm font-medium text-accent">{sheetOpen ? "Hide list" : "Show list"}</span>
+              </span>
+              <span className="w-full text-left text-xs text-muted">
+                {windowPhrase(filter.hours)}
+                {filter.state ? ` · ${filter.state}` : ""}
+                {" · "}
+                {sizePhrase(filter.minSize)}
+              </span>
+            </button>
+            <div className="mt-2 grid grid-cols-4 gap-2" role="group" aria-label="Time window">
+              {WINDOWS.map((item) => (
+                <button
+                  key={item.hours}
+                  type="button"
+                  aria-pressed={filter.hours === item.hours}
+                  onClick={() => setHours(item.hours)}
+                  className={`rounded-full px-1 py-1.5 text-sm ${
+                    filter.hours === item.hours ? "bg-accent font-semibold text-accentink" : "border border-line"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {sheetOpen ? (
-            <div className="max-h-[62dvh] space-y-4 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="max-h-[58dvh] space-y-4 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {selected ? (
                 <article className="rounded-2xl border border-line bg-app p-3">
                   <p className="text-sm font-semibold">{placeLabel(selected)}</p>
                   <p className="text-sm text-muted">
                     {selected.sizeIn != null ? `${selected.sizeIn.toFixed(2)} in` : "Size unknown"} ·{" "}
-                    {selected.confidence.toUpperCase()} · {formatWhen(selected.occurredAt)}
+                    {confidenceLabel(selected.confidence)} · {formatWhen(selected.occurredAt)}
                   </p>
                   {selected.remark ? <p className="mt-1 text-sm">{selected.remark}</p> : null}
                   {selected.damageTags.length ? (
@@ -353,24 +397,9 @@ export default function HailApp() {
                 </article>
               ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                {WINDOWS.map((item) => (
-                  <button
-                    key={item.hours}
-                    type="button"
-                    aria-pressed={filter.hours === item.hours}
-                    onClick={() => setHours(item.hours)}
-                    className={`rounded-full px-3 py-1.5 text-sm ${
-                      filter.hours === item.hours ? "bg-accent text-accentink" : "border border-line"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">Minimum hail size ({filter.minSize.toFixed(2)} in)</span>
+                <span className="mb-1 block font-medium">Smallest hail to show</span>
+                <span className="mb-1 block text-muted">{sizePhrase(filter.minSize)}</span>
                 <input
                   type="range"
                   min={0}
@@ -384,40 +413,8 @@ export default function HailApp() {
                 />
               </label>
 
-              <div className="flex flex-wrap gap-2">
-                {CONFIDENCE_OPTIONS.map((option) => {
-                  const on = filter.confidences.includes(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => toggleConfidence(option.id)}
-                      className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent text-accentink" : "border border-line text-muted"}`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <label className="block text-sm">
-                <span className="mb-1 block text-muted">State</span>
-                <input
-                  value={filter.state}
-                  maxLength={2}
-                  placeholder="Any"
-                  onChange={(event) => {
-                    const state = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
-                    if (state.length === 2 || state.length === 0) setStateFilter(state);
-                    else setFilter((current) => ({ ...current, state }));
-                  }}
-                  className="w-24 rounded-xl border border-line bg-app px-3 py-2 uppercase"
-                />
-              </label>
-
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Size</p>
+                <p className="mb-1 text-sm font-medium">Hail size</p>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {[
                     ["#16a34a", "< 1 in"],
@@ -432,42 +429,115 @@ export default function HailApp() {
                     </span>
                   ))}
                 </div>
-                {showIncome ? (
-                  <p className="mt-2 text-xs text-muted">
-                    Income shading is county median household income (ACS). Lighter blue is lower.
-                  </p>
-                ) : null}
               </div>
 
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Import CSV or GeoJSON</span>
-                <input
-                  type="file"
-                  accept=".csv,.json,.geojson,text/csv,application/json,application/geo+json"
-                  className="block w-full text-sm text-muted"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void onImport(file);
-                    event.target.value = "";
-                  }}
-                />
-                {importNote ? <span className="mt-1 block text-xs text-muted">{importNote}</span> : null}
-              </label>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-2xl border border-line px-3 py-2 text-sm font-medium"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                <span>More filters</span>
+                <span className="text-muted">{moreOpen ? "Hide" : advancedOn ? "On" : "Show"}</span>
+              </button>
 
-              <div className="flex flex-wrap gap-2 text-xs text-muted">
-                <FeedPill label="SPC" status={status?.spc} />
-                <FeedPill label="IEM" status={status?.iem} />
-                <FeedPill label="NWS" status={status?.nws} />
-                <FeedPill label="MESH" status={status?.mesh} />
-                {syncedAt ? <span>Synced {formatWhen(syncedAt)}</span> : null}
-              </div>
+              {moreOpen ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1 text-sm font-medium">Report sources</p>
+                    <p className="mb-2 text-xs text-muted">
+                      Official reports come from the weather service. Radar is an estimate. Community is only a file or a private feed.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {CONFIDENCE_OPTIONS.map((option) => {
+                        const on = filter.confidences.includes(option.id);
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => toggleConfidence(option.id)}
+                            className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent text-accentink" : "border border-line text-muted"}`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              <p className="text-xs text-muted">
-                SPC and IEM local storm reports stay under NWS or Spotter, including public and mPING
-                reports an office published. Community is only file import and the community webhook.
-              </p>
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Map layers</p>
+                    <div className="flex flex-wrap gap-2">
+                      <LayerButton on={showPoints} label="Hail reports" onClick={() => setShowPoints((value) => !value)} />
+                      <LayerButton on={showSwaths} label="Hail areas" onClick={() => setShowSwaths((value) => !value)} />
+                      <LayerButton on={showIncome} label="County income" onClick={() => setShowIncome((value) => !value)} />
+                    </div>
+                    {showIncome ? (
+                      <p className="mt-2 text-xs text-muted">
+                        County shading is median household income. Lighter blue is lower.
+                        {incomeError ? " Income data is unavailable right now." : ""}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted">Hail areas group nearby reports from the same storm.</p>
+                    )}
+                  </div>
 
-              <ul className="divide-y divide-line">
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium">State code</span>
+                    <input
+                      value={filter.state}
+                      maxLength={2}
+                      placeholder="Any"
+                      aria-label="State code"
+                      onChange={(event) => {
+                        const state = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+                        if (state.length === 2 || state.length === 0) setStateFilter(state);
+                        else setFilter((current) => ({ ...current, state }));
+                      }}
+                      className="w-24 rounded-xl border border-line bg-app px-3 py-2 uppercase"
+                    />
+                  </label>
+
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium">Add reports from a file</span>
+                    <span className="mb-1 block text-xs text-muted">CSV or GeoJSON. This does not read social media.</span>
+                    <input
+                      type="file"
+                      accept=".csv,.json,.geojson,text/csv,application/json,application/geo+json"
+                      className="block w-full text-sm text-muted"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void onImport(file);
+                        event.target.value = "";
+                      }}
+                    />
+                    {importNote ? <span className="mt-1 block text-xs text-muted">{importNote}</span> : null}
+                  </label>
+
+                  <div>
+                    <p className="mb-1 text-sm font-medium">Live feeds</p>
+                    <div className="flex flex-wrap gap-2 text-xs text-muted">
+                      <FeedPill label="Storm Prediction Center" status={status?.spc} />
+                      <FeedPill label="Local storm reports" status={status?.iem} />
+                      <FeedPill label="Weather service" status={status?.nws} />
+                      <FeedPill label="Radar" status={status?.mesh} />
+                      {syncedAt ? <span>Updated {formatWhen(syncedAt)}</span> : null}
+                    </div>
+                    {folded > 0 ? (
+                      <p className="mt-2 text-xs text-muted">{folded} duplicate reports were combined.</p>
+                    ) : null}
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      Published local storm reports stay Official or Spotter, even when they mention the public or mPING.
+                      HailMap does not scrape social networks.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <h2 className="mb-1 text-sm font-medium">Reports</h2>
+                <ul className="divide-y divide-line">
                 {filtered.slice(0, 200).map((report) => (
                   <li key={report.id}>
                     <button
@@ -482,7 +552,7 @@ export default function HailApp() {
                       <span>
                         <span className="block text-sm font-medium">{placeLabel(report)}</span>
                         <span className="block text-xs text-muted">
-                          {formatWhen(report.occurredAt)} · {report.confidence}
+                          {formatWhen(report.occurredAt)} · {confidenceLabel(report.confidence)}
                         </span>
                       </span>
                       <span className="text-sm font-semibold">
@@ -492,13 +562,7 @@ export default function HailApp() {
                   </li>
                 ))}
               </ul>
-              <p className="text-xs leading-relaxed text-muted">
-                Live points fuse NWS warnings, SPC hail reports, and IEM local storm reports.
-                The map opens on 7 days. State buttons jump to that cluster.
-                Swaths cluster reports within about 45 km and 3 hours, then draw a buffered hull.
-                HailMap does not scrape social networks. Spotter and community reports arrive only
-                through webhooks or file import.
-              </p>
+              </div>
             </div>
           ) : null}
         </div>
@@ -514,8 +578,8 @@ function LayerButton({ on, label, onClick }: { on: boolean; label: string; onCli
       role="switch"
       aria-checked={on}
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm shadow-sheet ${
-        on ? "bg-accent text-accentink" : "border border-line bg-panel text-muted"
+      className={`rounded-full px-3 py-1.5 text-sm ${
+        on ? "bg-accent text-accentink" : "border border-line text-muted"
       }`}
     >
       {label}
@@ -526,7 +590,7 @@ function LayerButton({ on, label, onClick }: { on: boolean; label: string; onCli
 function FeedPill({ label, status }: { label: string; status?: string }) {
   return (
     <span className="rounded-full border border-line px-2 py-0.5">
-      {label} {status ?? "…"}
+      {label}: {feedPhrase(status)}
     </span>
   );
 }

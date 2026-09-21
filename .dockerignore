@@ -1,0 +1,14 @@
+node_modules
+.next
+.data
+.git
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+*.sqlite
+*.sqlite-*
+*.jks
+*.keystore
+*.md
+!README.md

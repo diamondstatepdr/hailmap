@@ -47,6 +47,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/photos/[id]` — the stored image. `id` is the file id without an extension.
 - `GET /api/swaths` — GeoJSON swaths from those reports
 - `GET /api/income` — county polygons with ACS median household income
+- `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
@@ -89,7 +90,7 @@ In Android Studio, generate a signed App Bundle with that keystore. Play Console
 
 ## Map
 
-Light theme is the default. Dark is a toggle and is remembered on the device. Filters open in a bottom sheet. Layer switches control hail points, swaths, and the income choropleth. The site is a mobile PWA (`public/manifest.webmanifest`).
+Light theme is the default. Dark is a toggle and is remembered on the device. Filters open in a bottom sheet. Layer switches control hail points, swaths, NWS severe threats, the SPC Day 1 outlook, and the income choropleth. Threats and the outlook are on by default and draw underneath hail markers. The site is a mobile PWA (`public/manifest.webmanifest`).
 
 ## Tests
 

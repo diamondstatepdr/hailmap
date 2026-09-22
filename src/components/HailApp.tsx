@@ -9,6 +9,13 @@ import { boundsOf } from "@/lib/geo";
 import { applyReportFilter, formatWhen, placeLabel, reportsToPointCollection, type ReportFilter } from "@/lib/filters";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
+import {
+  OUTLOOK_LEVELS,
+  SIGNIFICANT_COLOR,
+  THREAT_LEGEND,
+  type ThreatInfo,
+  type ThreatsResponse,
+} from "@/lib/threats";
 import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const HailMap = dynamic(() => import("@/components/HailMap"), {
@@ -72,10 +79,16 @@ export default function HailApp() {
   const [showPoints, setShowPoints] = useState(true);
   const [showSwaths, setShowSwaths] = useState(true);
   const [showIncome, setShowIncome] = useState(false);
+  const [showThreats, setShowThreats] = useState(true);
+  const [showOutlook, setShowOutlook] = useState(true);
   const [income, setIncome] = useState<GeoJSON.FeatureCollection | null>(null);
   const [incomeError, setIncomeError] = useState(false);
+  const [threats, setThreats] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [threatStatus, setThreatStatus] = useState<ThreatsResponse["status"] | null>(null);
+  const [threatError, setThreatError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [county, setCounty] = useState<{ fips?: string; income: number | null } | null>(null);
+  const [threat, setThreat] = useState<ThreatInfo | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [frame, setFrame] = useState<MapFrame | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -120,6 +133,30 @@ export default function HailApp() {
       window.clearInterval(timer);
     };
   }, [reloadKey]);
+
+  useEffect(() => {
+    if (!showThreats && !showOutlook) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const response = await fetch("/api/threats", { cache: "no-store" });
+        if (!response.ok) throw new Error("threats failed");
+        const payload = (await response.json()) as ThreatsResponse;
+        if (cancelled) return;
+        setThreats(payload.collection ?? { type: "FeatureCollection", features: [] });
+        setThreatStatus(payload.status ?? null);
+        setThreatError(false);
+      } catch {
+        if (!cancelled) setThreatError(true);
+      }
+    }
+    void load();
+    const timer = window.setInterval(load, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [showThreats, showOutlook, reloadKey]);
 
   useEffect(() => {
     if (!showIncome || income || incomeError) return;
@@ -237,6 +274,7 @@ export default function HailApp() {
     }));
     setSelectedId(report.id);
     setCounty(null);
+    setThreat(null);
     setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 11 });
     setSheetOpen(true);
     closeReport();
@@ -245,7 +283,15 @@ export default function HailApp() {
 
   const folded = Math.max(0, rawCount - reports.length);
   const advancedOn =
-    filter.confidences.length !== CONFIDENCE_OPTIONS.length || showIncome || !showPoints || !showSwaths;
+    filter.confidences.length !== CONFIDENCE_OPTIONS.length ||
+    showIncome ||
+    !showPoints ||
+    !showSwaths ||
+    !showThreats ||
+    !showOutlook;
+  const hasSignificant = Boolean(
+    threats?.features.some((feature) => feature.properties?.kind === "significant"),
+  );
 
   return (
     <div className="map-shell relative h-[100dvh] overflow-hidden bg-app text-ink">
@@ -284,9 +330,12 @@ export default function HailApp() {
           points={points}
           swaths={swaths}
           income={income}
+          threats={threats}
           showPoints={showPoints}
           showSwaths={showSwaths}
           showIncome={showIncome}
+          showThreats={showThreats}
+          showOutlook={showOutlook}
           selectedId={selectedId}
           focus={focus}
           frame={frame}
@@ -297,11 +346,19 @@ export default function HailApp() {
           onSelectReport={(id) => {
             setSelectedId(id);
             setCounty(null);
+            setThreat(null);
             setSheetOpen(true);
           }}
           onSelectCounty={(info) => {
             setCounty(info);
             setSelectedId(null);
+            setThreat(null);
+            setSheetOpen(true);
+          }}
+          onSelectThreat={(info) => {
+            setThreat(info);
+            setSelectedId(null);
+            setCounty(null);
             setSheetOpen(true);
           }}
         />
@@ -350,6 +407,18 @@ export default function HailApp() {
         <p className="map-banner absolute inset-x-3 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
           {error}
         </p>
+      ) : null}
+
+      {showOutlook && !reportOpen ? (
+        <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
+          <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-line bg-panel px-3 py-2 text-xs shadow-sheet">
+            <span className="font-semibold">Day 1</span>
+            {OUTLOOK_LEVELS.map((level) => (
+              <LegendSwatch key={level.category} label={level.label} fill={level.fill} />
+            ))}
+            {hasSignificant ? <LegendSwatch label="Significant" fill={SIGNIFICANT_COLOR} dashed /> : null}
+          </div>
+        </div>
       ) : null}
 
       {picking ? (
@@ -460,6 +529,19 @@ export default function HailApp() {
                   ) : null}
                 </article>
               ) : null}
+              {threat ? (
+                <article className="rounded-2xl border border-line bg-app p-3 text-sm">
+                  <p className="text-xs font-medium text-accent">
+                    {threat.kind === "outlook" || threat.kind === "significant"
+                      ? "Day 1 outlook"
+                      : "National Weather Service"}
+                  </p>
+                  <p className="font-semibold">{threat.event}</p>
+                  <p className="text-muted">{threatWhen(threat)}</p>
+                  {threat.hazard ? <p className="mt-1">{threat.hazard}</p> : null}
+                  {threat.area ? <p className="mt-1 line-clamp-3 text-muted">{threat.area}</p> : null}
+                </article>
+              ) : null}
               {county ? (
                 <article className="rounded-2xl border border-line bg-app p-3 text-sm">
                   <p className="font-semibold">County {county.fips ?? ""}</p>
@@ -546,6 +628,8 @@ export default function HailApp() {
                     <div className="flex flex-wrap gap-2">
                       <LayerButton on={showPoints} label="Hail reports" onClick={() => setShowPoints((value) => !value)} />
                       <LayerButton on={showSwaths} label="Hail areas" onClick={() => setShowSwaths((value) => !value)} />
+                      <LayerButton on={showThreats} label="Threats" onClick={() => setShowThreats((value) => !value)} />
+                      <LayerButton on={showOutlook} label="Outlook" onClick={() => setShowOutlook((value) => !value)} />
                       <LayerButton on={showIncome} label="County income" onClick={() => setShowIncome((value) => !value)} />
                     </div>
                     {showIncome ? (
@@ -556,6 +640,39 @@ export default function HailApp() {
                     ) : (
                       <p className="mt-2 text-xs text-muted">Hail areas group nearby reports from the same storm.</p>
                     )}
+                    {showThreats || showOutlook ? (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-xs text-muted">
+                          {showThreats
+                            ? "Threats are active tornado and severe thunderstorm watches and warnings, plus hail statements. "
+                            : ""}
+                          {showOutlook ? "Outlook is the Storm Prediction Center Day 1 severe risk." : ""}
+                          {showThreats && threatStatus?.nws === "empty" ? " No severe watches or warnings are active." : ""}
+                          {showThreats && (threatError || threatStatus?.nws === "error")
+                            ? " Watches and warnings are unavailable right now."
+                            : ""}
+                          {showOutlook && threatStatus?.spc === "empty" ? " No Day 1 severe risk is outlined." : ""}
+                          {showOutlook && (threatError || threatStatus?.spc === "error")
+                            ? " The Day 1 outlook is unavailable right now."
+                            : ""}
+                        </p>
+                        {showOutlook ? (
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            {OUTLOOK_LEVELS.map((level) => (
+                              <LegendSwatch key={level.category} label={level.label} fill={level.fill} />
+                            ))}
+                            <LegendSwatch label="Significant severe" fill={SIGNIFICANT_COLOR} dashed />
+                          </div>
+                        ) : null}
+                        {showThreats ? (
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            {THREAT_LEGEND.map((item) => (
+                              <LegendSwatch key={item.event} label={item.label} fill={item.fill} dashed={item.dashed} />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <label className="block text-sm">
@@ -596,6 +713,8 @@ export default function HailApp() {
                       <FeedPill label="Storm Prediction Center" status={status?.spc} />
                       <FeedPill label="Local storm reports" status={status?.iem} />
                       <FeedPill label="Weather service" status={status?.nws} />
+                      <FeedPill label="Watches and warnings" status={threatError ? "error" : threatStatus?.nws} />
+                      <FeedPill label="Day 1 outlook" status={threatError ? "error" : threatStatus?.spc} />
                       <FeedPill label="Radar" status={status?.mesh} />
                       {syncedAt ? <span>Updated {formatWhen(syncedAt)}</span> : null}
                     </div>
@@ -621,6 +740,7 @@ export default function HailApp() {
                       onClick={() => {
                         setSelectedId(report.id);
                         setCounty(null);
+                        setThreat(null);
                         setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now() });
                       }}
                     >
@@ -653,6 +773,42 @@ export default function HailApp() {
         </div>
       </section>
     </div>
+  );
+}
+
+function threatWhen(threat: ThreatInfo): string {
+  const office = threat.office;
+  if (!threat.until) return office;
+  const when = formatUntil(threat.until);
+  if (!when) return office;
+  const prefix = threat.kind === "outlook" || threat.kind === "significant" ? "valid until" : "until";
+  return office ? `${office} · ${prefix} ${when}` : `${prefix} ${when}`;
+}
+
+function formatUntil(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+function LegendSwatch({ label, fill, dashed = false }: { label: string; fill: string; dashed?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className="inline-block h-2.5 w-2.5 rounded-sm"
+        style={{
+          background: dashed ? "transparent" : fill,
+          border: `2px ${dashed ? "dashed" : "solid"} ${fill}`,
+        }}
+      />
+      {label}
+    </span>
   );
 }
 

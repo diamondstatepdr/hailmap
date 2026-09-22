@@ -21,6 +21,7 @@ HailMap is a nationwide map of recent United States hail.
 - Markers are colored by hail size
 - Hail swaths are drawn from report clusters (about 45 km and 3 hours) as a buffered hull
 - Optional county shading uses Census median household income
+- Active National Weather Service severe watches and warnings, plus the Storm Prediction Center Day 1 outlook
 - Light theme by default, with a dark toggle
 - Filter by time, size, confidence, and state
 - Import your own CSV or GeoJSON. Spotter feeds are webhook-only

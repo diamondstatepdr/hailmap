@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
@@ -12,6 +12,7 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import stateOverlay from "@/data/us-states.json";
+import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const states = stateOverlay as FeatureCollection;
@@ -80,14 +81,32 @@ export interface MapFrame {
   nonce: number;
 }
 
+const THREAT_LAYERS = new Set([
+  "threat-warning-fill",
+  "threat-watch-fill",
+  "threat-statement-fill",
+  "outlook-fill",
+  "significant-fill",
+]);
+
+const threatEventColor = [
+  "match",
+  ["get", "event"],
+  ...THREAT_LEGEND.flatMap((item) => [item.event, item.fill]),
+  "#64748b",
+] as never;
+
 interface Props {
   theme: "light" | "dark";
   points: GeoJSON.FeatureCollection;
   swaths: GeoJSON.FeatureCollection;
   income: GeoJSON.FeatureCollection | null;
+  threats: GeoJSON.FeatureCollection | null;
   showPoints: boolean;
   showSwaths: boolean;
   showIncome: boolean;
+  showThreats: boolean;
+  showOutlook: boolean;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -97,6 +116,7 @@ interface Props {
   onPickLocation: (lon: number, lat: number) => void;
   onSelectReport: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
+  onSelectThreat: (info: ThreatInfo) => void;
 }
 
 export default function HailMap({
@@ -104,9 +124,12 @@ export default function HailMap({
   points,
   swaths,
   income,
+  threats,
   showPoints,
   showSwaths,
   showIncome,
+  showThreats,
+  showOutlook,
   selectedId,
   focus,
   frame,
@@ -116,14 +139,22 @@ export default function HailMap({
   onPickLocation,
   onSelectReport,
   onSelectCounty,
+  onSelectThreat,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const frameRef = useRef(frame);
   const frameWait = useRef(false);
   frameRef.current = frame;
+  const outlookData = useMemo(() => subsetThreats(threats, ["outlook", "significant"]), [threats]);
+  const alertData = useMemo(() => subsetThreats(threats, ["watch", "warning", "statement"]), [threats]);
   const interactiveLayerIds = [
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
+    showThreats ? "threat-warning-fill" : "",
+    showThreats ? "threat-watch-fill" : "",
+    showThreats ? "threat-statement-fill" : "",
+    showOutlook ? "outlook-fill" : "",
+    showOutlook ? "significant-fill" : "",
     showIncome ? "income-fill" : "",
   ].filter(Boolean);
 
@@ -157,12 +188,12 @@ export default function HailMap({
     if (!focus) return;
     const map = mapRef.current;
     if (!map) return;
-    map.flyTo({
-      center: [focus.lon, focus.lat],
+    const camera = {
+      center: [focus.lon, focus.lat] as [number, number],
       zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
       duration: 700,
-      padding: focus.zoom ? { top: 96, bottom: 260, left: 28, right: 28 } : undefined,
-    });
+    };
+    map.flyTo(focus.zoom ? { ...camera, padding: { top: 96, bottom: 260, left: 28, right: 28 } } : camera);
   }, [focus]);
 
   useEffect(() => {
@@ -197,32 +228,38 @@ export default function HailMap({
       return;
     }
     if (blockSelection) return;
-    const feature = event.features?.[0];
-    if (!feature) return;
-    const props = feature.properties ?? {};
-    if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
-      const source = mapRef.current?.getSource("reports");
-      const geometry = feature.geometry;
-      if (!source || geometry.type !== "Point" || !("getClusterExpansionZoom" in source)) return;
-      const [lon, lat] = geometry.coordinates;
-      void (source as GeoJSONSource)
-        .getClusterExpansionZoom(Number(props.cluster_id))
-        .then((zoom) => {
-          mapRef.current?.easeTo({ center: [lon, lat], zoom, duration: 600 });
-        })
-        .catch(() => undefined);
-      return;
-    }
-    if (feature.layer?.id === "hail-points" && props.id) {
-      onSelectReport(String(props.id));
-      return;
-    }
-    if (feature.layer?.id === "income-fill") {
-      const incomeValue = props.income == null || props.income === "null" ? null : Number(props.income);
-      onSelectCounty({
-        fips: props.fips ? String(props.fips) : undefined,
-        income: incomeValue != null && Number.isFinite(incomeValue) ? incomeValue : null,
-      });
+    for (const feature of event.features ?? []) {
+      const props = feature.properties ?? {};
+      if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
+        const source = mapRef.current?.getSource("reports");
+        const geometry = feature.geometry;
+        if (!source || geometry.type !== "Point" || !("getClusterExpansionZoom" in source)) return;
+        const [lon, lat] = geometry.coordinates;
+        void (source as GeoJSONSource)
+          .getClusterExpansionZoom(Number(props.cluster_id))
+          .then((zoom) => {
+            mapRef.current?.easeTo({ center: [lon, lat], zoom, duration: 600 });
+          })
+          .catch(() => undefined);
+        return;
+      }
+      if (feature.layer?.id === "hail-points" && props.id) {
+        onSelectReport(String(props.id));
+        return;
+      }
+      if (feature.layer?.id && THREAT_LAYERS.has(feature.layer.id)) {
+        const threat = threatFromProperties(props as Record<string, unknown>);
+        if (threat) onSelectThreat(threat);
+        return;
+      }
+      if (feature.layer?.id === "income-fill") {
+        const incomeValue = props.income == null || props.income === "null" ? null : Number(props.income);
+        onSelectCounty({
+          fips: props.fips ? String(props.fips) : undefined,
+          income: incomeValue != null && Number.isFinite(incomeValue) ? incomeValue : null,
+        });
+        return;
+      }
     }
   }
 
@@ -271,6 +308,62 @@ export default function HailMap({
           />
         </Source>
       ) : null}
+      {showOutlook && outlookData.features.length ? (
+        <Source id="outlook" type="geojson" data={outlookData}>
+          <Layer
+            id="outlook-fill"
+            type="fill"
+            filter={["==", ["get", "kind"], "outlook"]}
+            paint={{
+              "fill-color": ["get", "fill"] as never,
+              "fill-opacity": theme === "dark" ? 0.42 : 0.34,
+            }}
+          />
+          <Layer
+            id="outlook-casing"
+            type="line"
+            filter={["==", ["get", "kind"], "outlook"]}
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{
+              "line-color": theme === "dark" ? "#f8fafc" : "#ffffff",
+              "line-width": 3.4,
+              "line-opacity": theme === "dark" ? 0.45 : 0.9,
+            }}
+          />
+          <Layer
+            id="outlook-line"
+            type="line"
+            filter={["==", ["get", "kind"], "outlook"]}
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{
+              "line-color": ["get", "stroke"] as never,
+              "line-width": 1.8,
+              "line-opacity": 0.95,
+            }}
+          />
+          <Layer
+            id="significant-fill"
+            type="fill"
+            filter={["==", ["get", "kind"], "significant"]}
+            paint={{
+              "fill-color": SIGNIFICANT_COLOR,
+              "fill-opacity": theme === "dark" ? 0.18 : 0.12,
+            }}
+          />
+          <Layer
+            id="significant-line"
+            type="line"
+            filter={["==", ["get", "kind"], "significant"]}
+            layout={{ "line-join": "round", "line-cap": "butt" }}
+            paint={{
+              "line-color": theme === "dark" ? "#ddd6fe" : SIGNIFICANT_COLOR,
+              "line-width": 2.2,
+              "line-opacity": 0.95,
+              "line-dasharray": [2, 1.4],
+            }}
+          />
+        </Source>
+      ) : null}
       {showSwaths ? (
         <Source id="swaths" type="geojson" data={swaths}>
           <Layer
@@ -288,6 +381,83 @@ export default function HailMap({
               "line-color": swathColor as never,
               "line-width": 1.5,
               "line-opacity": 0.85,
+            }}
+          />
+        </Source>
+      ) : null}
+      {showThreats && alertData.features.length ? (
+        <Source id="alerts" type="geojson" data={alertData}>
+          <Layer
+            id="threat-watch-fill"
+            type="fill"
+            filter={["==", ["get", "kind"], "watch"]}
+            paint={{
+              "fill-color": threatEventColor,
+              "fill-opacity": theme === "dark" ? 0.16 : 0.12,
+            }}
+          />
+          <Layer
+            id="threat-watch-line"
+            type="line"
+            filter={["==", ["get", "kind"], "watch"]}
+            layout={{ "line-join": "round", "line-cap": "butt" }}
+            paint={{
+              "line-color": threatEventColor,
+              "line-width": 2.4,
+              "line-opacity": 0.95,
+              "line-dasharray": [3, 1.6],
+            }}
+          />
+          <Layer
+            id="threat-statement-fill"
+            type="fill"
+            filter={["==", ["get", "kind"], "statement"]}
+            paint={{
+              "fill-color": threatEventColor,
+              "fill-opacity": theme === "dark" ? 0.16 : 0.1,
+            }}
+          />
+          <Layer
+            id="threat-statement-line"
+            type="line"
+            filter={["==", ["get", "kind"], "statement"]}
+            layout={{ "line-join": "round", "line-cap": "butt" }}
+            paint={{
+              "line-color": threatEventColor,
+              "line-width": 2,
+              "line-opacity": 0.95,
+              "line-dasharray": [1.2, 1.2],
+            }}
+          />
+          <Layer
+            id="threat-warning-casing"
+            type="line"
+            filter={["==", ["get", "kind"], "warning"]}
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{
+              "line-color": theme === "dark" ? "#0b1220" : "#ffffff",
+              "line-width": 4.2,
+              "line-opacity": 0.9,
+            }}
+          />
+          <Layer
+            id="threat-warning-fill"
+            type="fill"
+            filter={["==", ["get", "kind"], "warning"]}
+            paint={{
+              "fill-color": threatEventColor,
+              "fill-opacity": theme === "dark" ? 0.28 : 0.22,
+            }}
+          />
+          <Layer
+            id="threat-warning-line"
+            type="line"
+            filter={["==", ["get", "kind"], "warning"]}
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{
+              "line-color": threatEventColor,
+              "line-width": 2.4,
+              "line-opacity": 1,
             }}
           />
         </Source>
@@ -406,4 +576,11 @@ export default function HailMap({
       ) : null}
     </Map>
   );
+}
+
+function subsetThreats(collection: GeoJSON.FeatureCollection | null, kinds: string[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: (collection?.features ?? []).filter((feature) => kinds.includes(String(feature.properties?.kind ?? ""))),
+  };
 }

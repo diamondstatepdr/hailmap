@@ -45,7 +45,7 @@ body {
 }
 
 .map-legend {
-  bottom: calc(13.25rem + env(safe-area-inset-bottom));
+  bottom: calc(15.75rem + env(safe-area-inset-bottom));
 }
 
 .maplibregl-ctrl-top-right {

@@ -6,7 +6,20 @@ import { useEffect, useMemo, useState } from "react";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
 import { boundsOf } from "@/lib/geo";
-import { applyReportFilter, formatWhen, placeLabel, reportsToPointCollection, type ReportFilter } from "@/lib/filters";
+import {
+  applyReportFilter,
+  DEFAULT_WINDOW_HOURS,
+  emptyWindowMessage,
+  formatWhen,
+  LIVE_WINDOW_HOURS,
+  placeLabel,
+  refreshIntervalMs,
+  reportsToPointCollection,
+  TIME_WINDOWS,
+  wantsFreshSync,
+  windowPhrase,
+  type ReportFilter,
+} from "@/lib/filters";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
 import {
@@ -31,18 +44,6 @@ const CONFIDENCE_OPTIONS: Array<{ id: Confidence; label: string }> = [
   { id: "mesh", label: "Radar (MESH)" },
   { id: "community", label: "Community" },
 ];
-
-const WINDOWS = [
-  { hours: 6, label: "6 hours" },
-  { hours: 24, label: "24 hours" },
-  { hours: 72, label: "3 days" },
-  { hours: 168, label: "7 days" },
-];
-
-function windowPhrase(hours: number): string {
-  const item = WINDOWS.find((entry) => entry.hours === hours);
-  return item ? `Last ${item.label.toLowerCase()}` : "Selected time";
-}
 
 function sizePhrase(minSize: number): string {
   if (minSize <= 0) return "Any size";
@@ -98,10 +99,12 @@ export default function HailApp() {
   const [picking, setPicking] = useState(false);
   const [filter, setFilter] = useState<ReportFilter>({
     minSize: 0,
-    hours: 168,
+    hours: DEFAULT_WINDOW_HOURS,
     confidences: ["nws", "spotter", "mesh", "community"],
     state: "",
   });
+  const refreshMs = refreshIntervalMs(filter.hours);
+  const freshSync = wantsFreshSync(filter.hours);
 
   useEffect(() => {
     setTheme(readTheme());
@@ -109,9 +112,12 @@ export default function HailApp() {
 
   useEffect(() => {
     let cancelled = false;
+    let running = false;
     async function load() {
+      if (running) return;
+      running = true;
       try {
-        const response = await fetch("/api/reports", { cache: "no-store" });
+        const response = await fetch(freshSync ? "/api/reports?fresh=1" : "/api/reports", { cache: "no-store" });
         if (!response.ok) throw new Error("reports failed");
         const payload = (await response.json()) as ReportsResponse;
         if (cancelled) return;
@@ -123,16 +129,17 @@ export default function HailApp() {
       } catch {
         if (!cancelled) setError("Live reports are unavailable. Saved reports will show when the database is reachable.");
       } finally {
+        running = false;
         if (!cancelled) setLoading(false);
       }
     }
     void load();
-    const timer = window.setInterval(load, 5 * 60 * 1000);
+    const timer = window.setInterval(() => void load(), refreshMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [reloadKey]);
+  }, [reloadKey, refreshMs, freshSync]);
 
   useEffect(() => {
     if (!showThreats && !showOutlook) return;
@@ -428,8 +435,8 @@ export default function HailApp() {
       ) : null}
 
       {!loading && filtered.length === 0 && !reportOpen ? (
-        <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 -translate-x-1/2 rounded-full bg-panel px-4 py-2 text-sm text-muted shadow-sheet">
-          No hail reports in this window.
+        <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(20rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl bg-panel px-4 py-3 text-center text-sm text-muted shadow-sheet">
+          {emptyWindowMessage(filter.hours)}
         </p>
       ) : null}
 
@@ -467,18 +474,19 @@ export default function HailApp() {
                 {sizePhrase(filter.minSize)}
               </span>
             </button>
-            <div className="mt-2 grid grid-cols-4 gap-2" role="group" aria-label="Time window">
-              {WINDOWS.map((item) => (
+            <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="Time window">
+              {TIME_WINDOWS.map((item) => (
                 <button
                   key={item.hours}
                   type="button"
                   aria-pressed={filter.hours === item.hours}
+                  aria-label={item.hours === LIVE_WINDOW_HOURS ? `Live, ${item.detail}` : item.label}
                   onClick={() => setHours(item.hours)}
                   className={`rounded-full px-1 py-1.5 text-sm ${
                     filter.hours === item.hours ? "bg-accent font-semibold text-accentink" : "border border-line"
                   }`}
                 >
-                  {item.label}
+                  {item.hours === LIVE_WINDOW_HOURS ? "Live · 45m" : item.label}
                 </button>
               ))}
             </div>

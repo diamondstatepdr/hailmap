@@ -19,6 +19,12 @@ import {
 import type { IncomingReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const SYNC_TTL_MS = 10 * 60 * 1000;
+/** Live and 1-hour views. One shared in-flight sync still caps upstream calls. */
+export const SHORT_SYNC_TTL_MS = 45 * 1000;
+
+export function syncMaxAgeMs(fresh: boolean): number {
+  return fresh ? SHORT_SYNC_TTL_MS : SYNC_TTL_MS;
+}
 
 let lastSync = 0;
 let inflight: Promise<void> | null = null;
@@ -133,8 +139,8 @@ export async function syncLive(): Promise<SourceStatus> {
   return status;
 }
 
-export async function ensureFresh() {
-  if (Date.now() - lastSync < SYNC_TTL_MS) return;
+export async function ensureFresh(maxAgeMs = SYNC_TTL_MS) {
+  if (Date.now() - lastSync < maxAgeMs) return;
   if (!inflight) {
     inflight = syncLive()
       .then(() => undefined)
@@ -149,8 +155,8 @@ export async function ensureFresh() {
   await inflight;
 }
 
-export async function getMapReports(): Promise<ReportsResponse> {
-  await ensureFresh();
+export async function getMapReports(options?: { fresh?: boolean }): Promise<ReportsResponse> {
+  await ensureFresh(syncMaxAgeMs(Boolean(options?.fresh)));
   const all = listRecentReports(7);
   const live = all.filter((report) => report.source !== "seed");
   const chosen = live.length ? live : all;

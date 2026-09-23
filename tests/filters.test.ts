@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { applyReportFilter, reportsToPointCollection, type ReportFilter } from "@/lib/filters";
+import {
+  applyReportFilter,
+  DEFAULT_WINDOW_HOURS,
+  emptyWindowMessage,
+  LIVE_WINDOW_HOURS,
+  refreshIntervalMs,
+  reportsToPointCollection,
+  TIME_WINDOWS,
+  wantsFreshSync,
+  windowPhrase,
+  type ReportFilter,
+} from "@/lib/filters";
 import { boundsOf } from "@/lib/geo";
 import type { HailReport } from "@/lib/types";
 
@@ -141,5 +152,74 @@ describe("7-day Wasatch filter and point layer", () => {
     ]);
     expect(points.features[0].properties?.hasPhoto).toBe(1);
     expect(points.features[1].properties?.hasPhoto).toBe(0);
+  });
+});
+
+describe("live and 1 hour windows", () => {
+  const recent = report({ id: "recent", occurredAt: new Date(NOW - 20 * 60 * 1000).toISOString() });
+  const forty = report({ id: "forty", occurredAt: new Date(NOW - 44 * 60 * 1000).toISOString() });
+  const atLiveEdge = report({ id: "edge", occurredAt: new Date(NOW - 45 * 60 * 1000).toISOString() });
+  const justOlderThanLive = report({
+    id: "past-live",
+    occurredAt: new Date(NOW - 45 * 60 * 1000 - 1).toISOString(),
+  });
+  const fifty = report({ id: "fifty", occurredAt: new Date(NOW - 50 * 60 * 1000).toISOString() });
+  const atHourEdge = report({ id: "hour-edge", occurredAt: new Date(NOW - 60 * 60 * 1000).toISOString() });
+  const ninety = report({ id: "ninety", occurredAt: new Date(NOW - 90 * 60 * 1000).toISOString() });
+  const rows = [recent, forty, atLiveEdge, justOlderThanLive, fifty, atHourEdge, ninety];
+
+  it("places Live and 1 hour first and keeps 7 days as the default", () => {
+    expect(TIME_WINDOWS.map((item) => item.hours)).toEqual([LIVE_WINDOW_HOURS, 1, 6, 24, 72, 168]);
+    expect(TIME_WINDOWS.map((item) => item.label)).toEqual([
+      "Live",
+      "1 hour",
+      "6 hours",
+      "24 hours",
+      "3 days",
+      "7 days",
+    ]);
+    expect(LIVE_WINDOW_HOURS).toBe(0.75);
+    expect(DEFAULT_WINDOW_HOURS).toBe(168);
+    expect(windowPhrase(LIVE_WINDOW_HOURS)).toBe("Live · last 45 minutes");
+    expect(windowPhrase(1)).toBe("Last 1 hour");
+    expect(windowPhrase(168)).toBe("Last 7 days");
+  });
+
+  it("keeps the last 45 minutes on Live and the last 60 minutes on 1 hour", () => {
+    expect(applyReportFilter(rows, { ...OPEN, hours: LIVE_WINDOW_HOURS }, NOW).map((item) => item.id)).toEqual([
+      "recent",
+      "forty",
+      "edge",
+    ]);
+    expect(applyReportFilter(rows, { ...OPEN, hours: 1 }, NOW).map((item) => item.id)).toEqual([
+      "recent",
+      "forty",
+      "edge",
+      "past-live",
+      "fifty",
+      "hour-edge",
+    ]);
+    expect(applyReportFilter(WASATCH, { ...OPEN, hours: LIVE_WINDOW_HOURS }, NOW)).toEqual([]);
+    expect(applyReportFilter(WASATCH, { ...OPEN, hours: 1 }, NOW)).toEqual([]);
+    expect(applyReportFilter(WASATCH, OPEN, NOW)).toHaveLength(WASATCH.length);
+  });
+
+  it("refreshes Live and 1 hour faster than the weekly window", () => {
+    expect(refreshIntervalMs(LIVE_WINDOW_HOURS)).toBe(30_000);
+    expect(refreshIntervalMs(1)).toBe(60_000);
+    expect(refreshIntervalMs(6)).toBe(5 * 60 * 1000);
+    expect(refreshIntervalMs(168)).toBe(5 * 60 * 1000);
+    expect(wantsFreshSync(LIVE_WINDOW_HOURS)).toBe(true);
+    expect(wantsFreshSync(1)).toBe(true);
+    expect(wantsFreshSync(24)).toBe(false);
+    expect(wantsFreshSync(168)).toBe(false);
+  });
+
+  it("says when a short window has no reports yet", () => {
+    expect(emptyWindowMessage(LIVE_WINDOW_HOURS)).toBe("No hail reports in the last 45 minutes yet.");
+    expect(emptyWindowMessage(1)).toBe("No hail reports in the last hour yet.");
+    expect(emptyWindowMessage(6)).toBe("No hail reports in this window.");
+    expect(emptyWindowMessage(168)).toBe("No hail reports in this window.");
+    expect(applyReportFilter(rows, { ...OPEN, hours: 6 }, NOW)).toHaveLength(rows.length);
   });
 });

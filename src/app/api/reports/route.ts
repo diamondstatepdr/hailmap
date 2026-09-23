@@ -7,9 +7,10 @@ import { upsertReports } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const payload = await getMapReports();
+    const fresh = new URL(request.url).searchParams.get("fresh") === "1";
+    const payload = await getMapReports({ fresh });
     return Response.json(payload, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[hailmap] reports", error instanceof Error ? error.message : error);

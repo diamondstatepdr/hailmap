@@ -9,6 +9,57 @@ export interface ReportFilter {
   state: string;
 }
 
+/** Last 45 minutes. Distinct from the 1 hour chip, and refreshed faster. */
+export const LIVE_WINDOW_HOURS = 0.75;
+
+export const DEFAULT_WINDOW_HOURS = 168;
+
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+export interface TimeWindow {
+  hours: number;
+  label: string;
+  /** Plain phrase for the sheet caption, without a "Last" prefix. */
+  detail: string;
+  refreshMs: number;
+  /** Ask the server to bypass the long sync cache. */
+  fresh: boolean;
+}
+
+export const TIME_WINDOWS: readonly TimeWindow[] = [
+  { hours: LIVE_WINDOW_HOURS, label: "Live", detail: "last 45 minutes", refreshMs: 30_000, fresh: true },
+  { hours: 1, label: "1 hour", detail: "last hour", refreshMs: 60_000, fresh: true },
+  { hours: 6, label: "6 hours", detail: "last 6 hours", refreshMs: FIVE_MINUTES_MS, fresh: false },
+  { hours: 24, label: "24 hours", detail: "last 24 hours", refreshMs: FIVE_MINUTES_MS, fresh: false },
+  { hours: 72, label: "3 days", detail: "last 3 days", refreshMs: FIVE_MINUTES_MS, fresh: false },
+  { hours: 168, label: "7 days", detail: "last 7 days", refreshMs: FIVE_MINUTES_MS, fresh: false },
+];
+
+export function timeWindowFor(hours: number): TimeWindow | undefined {
+  return TIME_WINDOWS.find((item) => item.hours === hours);
+}
+
+export function refreshIntervalMs(hours: number): number {
+  return timeWindowFor(hours)?.refreshMs ?? FIVE_MINUTES_MS;
+}
+
+export function wantsFreshSync(hours: number): boolean {
+  return timeWindowFor(hours)?.fresh ?? false;
+}
+
+export function windowPhrase(hours: number): string {
+  const item = timeWindowFor(hours);
+  if (!item) return "Selected time";
+  if (item.hours === LIVE_WINDOW_HOURS) return `Live · ${item.detail}`;
+  return `Last ${item.label.toLowerCase()}`;
+}
+
+export function emptyWindowMessage(hours: number): string {
+  const item = timeWindowFor(hours);
+  if (item?.fresh) return `No hail reports in the ${item.detail} yet.`;
+  return "No hail reports in this window.";
+}
+
 export function applyReportFilter(reports: HailReport[], filter: ReportFilter, now = Date.now()): HailReport[] {
   const cutoff = now - filter.hours * 3600 * 1000;
   const state = filter.state.trim().toUpperCase();

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const WINDOW_HOURS = new Set(TIME_WINDOWS.map((item) => item.hours));
 
-export function parsePlaceQuery(url: URL): { lat: number; lon: number; radiusKm: number; hours: number } | { error: string } {
+function parsePlaceQuery(url: URL): { lat: number; lon: number; radiusKm: number; hours: number } | { error: string } {
   const latText = url.searchParams.get("lat");
   const lonText = url.searchParams.get("lon");
   if (latText == null || lonText == null || latText === "" || lonText === "") {

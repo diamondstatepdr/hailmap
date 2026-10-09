@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  CONFIDENCE_OPTIONS,
-  type ReportFilter,
-} from "@/components/map-shared";
+import { CONFIDENCE_OPTIONS, type ReportFilter } from "@/components/map-shared";
 import { OUTLOOK_LEVELS, SIGNIFICANT_COLOR, THREAT_LEGEND, type ThreatsResponse } from "@/lib/threats";
 import type { Confidence } from "@/lib/confidence";
 import type { SourceStatus } from "@/lib/types";
@@ -34,14 +31,12 @@ interface Props {
 
 export default function MapFilters(props: Props) {
   return (
-    <div className="absolute inset-0 z-40 flex items-end bg-black/30" onClick={props.onClose}>
-      <div
-        className="max-h-[80dvh] w-full overflow-y-auto rounded-t-3xl bg-panel px-4 py-4 shadow-sheet"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Filters and layers</h2>
-          <button type="button" onClick={props.onClose} className="text-sm font-medium text-accent">
+    <div className="absolute inset-0 z-40 flex items-end bg-black/40 backdrop-blur-[2px]" onClick={props.onClose}>
+      <div className="sheet max-h-[80dvh] w-full overflow-y-auto px-4 pb-5 pt-1" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="mb-3 mt-2 flex items-center justify-between">
+          <h2 className="text-base font-semibold tracking-tight">Filters and layers</h2>
+          <button type="button" onClick={props.onClose} className="btn btn-primary press px-3 py-1.5 text-xs">
             Done
           </button>
         </div>
@@ -57,7 +52,7 @@ export default function MapFilters(props: Props) {
             step={0.25}
             value={props.filter.minSize}
             onChange={(event) => props.onFilter({ ...props.filter, minSize: Number(event.target.value) })}
-            className="mt-2 w-full accent-teal-700"
+            className="mt-3 w-full"
           />
         </label>
         <div className="mt-4">
@@ -74,7 +69,7 @@ export default function MapFilters(props: Props) {
                   type="button"
                   aria-pressed={on}
                   onClick={() => props.onToggleConfidence(option.id)}
-                  className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent text-accentink" : "border border-line text-muted"}`}
+                  className={`press rounded-full px-3 py-1.5 text-sm ${on ? "chip-on" : "chip shadow-none"}`}
                 >
                   {option.label}
                 </button>
@@ -136,11 +131,7 @@ export default function MapFilters(props: Props) {
           />
         </label>
         <div className="mt-4">
-          <button
-            type="button"
-            onClick={props.onCommunityPhoto}
-            className="w-full rounded-2xl border border-line px-3 py-2 text-sm font-semibold"
-          >
+          <button type="button" onClick={props.onCommunityPhoto} className="btn btn-secondary press w-full">
             Add a community hail photo
           </button>
           <p className="mt-1 text-xs text-muted">Public pin. It is not an official report, and it is separate from Field photos.</p>
@@ -178,7 +169,7 @@ function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: (
       role="switch"
       aria-checked={on}
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent text-accentink" : "border border-line text-muted"}`}
+      className={`press rounded-full px-3 py-1.5 text-sm ${on ? "chip-on" : "chip shadow-none"}`}
     >
       {label}
     </button>

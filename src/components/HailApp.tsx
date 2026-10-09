@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CloudHail, Moon, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
@@ -39,7 +40,16 @@ import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const HailMap = dynamic(() => import("@/components/HailMap"), {
   ssr: false,
-  loading: () => <div className="grid h-full place-items-center bg-app text-sm text-muted">Loading map…</div>,
+  loading: () => (
+    <div className="grid h-full place-items-center bg-app text-sm text-muted">
+      <div className="w-56 space-y-2" aria-busy="true">
+        <span className="sr-only">Loading map…</span>
+        <div className="skeleton mx-auto h-10 w-10 rounded-2xl" />
+        <div className="skeleton h-3" />
+        <div className="skeleton h-3 w-2/3" />
+      </div>
+    </div>
+  ),
 });
 
 interface WatchItem {
@@ -383,7 +393,7 @@ export default function HailApp() {
     document.documentElement.style.colorScheme = next;
     localStorage.setItem("hailmap-theme", next);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", next === "dark" ? "#0e141c" : "#f3f6fb");
+    if (meta) meta.setAttribute("content", next === "dark" ? "#0b111a" : "#eef3f8");
   }
 
   function frameFilter(next: typeof filter) {
@@ -609,52 +619,39 @@ export default function HailApp() {
             }}
             onViewChange={setViewBounds}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))]">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
               <AddressSearch onPick={chooseAddress} />
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(true)}
-                className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-semibold shadow-sheet"
-              >
-                Filters
+              <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
+                <SlidersHorizontal size={18} />
               </button>
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-medium shadow-sheet md:hidden"
+                className="icon-btn press md:hidden"
+                aria-label={theme === "dark" ? "Switch to light map" : "Switch to dark map"}
               >
-                {theme === "dark" ? "Light" : "Dark"}
+                {theme === "dark" ? <SunMedium size={18} /> : <Moon size={18} />}
               </button>
             </div>
-            <div className="pointer-events-auto flex gap-2" role="group" aria-label="Hazards">
+            <div className="pointer-events-auto seg" role="group" aria-label="Hazards and time window">
               {HAZARD_OPTIONS.map((option) => {
                 const on = hazards.includes(option.id);
+                const Icon = option.id === "wind" ? Wind : option.id === "tornado" ? Tornado : CloudHail;
                 return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleHazard(option.id)}
-                    className={`rounded-full px-3 py-1.5 text-sm font-semibold shadow-sheet ${
-                      on ? "bg-accent text-accentink" : "border border-line bg-panel text-muted"
-                    }`}
-                  >
+                  <button key={option.id} type="button" aria-pressed={on} onClick={() => toggleHazard(option.id)} className="inline-flex items-center gap-1">
+                    <Icon size={13} />
                     {option.label}
                   </button>
                 );
               })}
-            </div>
-            <div className="pointer-events-auto flex gap-1 overflow-x-auto" role="group" aria-label="Time window">
+              <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
               {TIME_WINDOWS.map((item) => (
                 <button
                   key={item.hours}
                   type="button"
                   aria-pressed={filter.hours === item.hours}
                   onClick={() => setHours(item.hours)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm shadow-sheet ${
-                    filter.hours === item.hours ? "bg-accent font-semibold text-accentink" : "border border-line bg-panel"
-                  }`}
                 >
                   {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
                 </button>
@@ -662,8 +659,8 @@ export default function HailApp() {
             </div>
           </div>
           {stateCounts.length ? (
-            <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3">
-              <div className="pointer-events-auto flex gap-2 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
+            <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
+              <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
                 {stateCounts.slice(0, 12).map(([code, count]) => {
                   const on = filter.state === code;
                   return (
@@ -672,9 +669,7 @@ export default function HailApp() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setStateFilter(on ? "" : code)}
-                      className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold shadow-sheet ${
-                        on ? "bg-accent text-accentink" : "border border-line bg-panel"
-                      }`}
+                      className={`press shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
                     >
                       {code} {count}
                     </button>
@@ -684,31 +679,49 @@ export default function HailApp() {
             </div>
           ) : null}
           {error ? (
-            <p className="map-banner absolute inset-x-3 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
+            <p className="map-banner glass absolute inset-x-3 z-20 rounded-xl px-3 py-2 text-sm text-muted">
               {error}
             </p>
           ) : null}
-          {showOutlook && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showOutlook || showPoints) && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
-              <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-line bg-panel px-3 py-2 text-xs shadow-sheet">
-                <span className="font-semibold">Day 1</span>
-                {OUTLOOK_LEVELS.map((level) => (
-                  <span key={level.category} className="inline-flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: level.fill }} />
-                    {level.label}
+              <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
+                {showPoints ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="hail-scale" />
+                    <span className="font-semibold">Hail</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#1d4ed8" }} />
+                      Wind
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#e11d48" }} />
+                      Tornado
+                    </span>
                   </span>
-                ))}
-                {hasSignificant ? (
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed" style={{ borderColor: SIGNIFICANT_COLOR }} />
-                    Significant
+                ) : null}
+                {showOutlook ? (
+                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold">Day 1</span>
+                    {OUTLOOK_LEVELS.map((level) => (
+                      <span key={level.category} className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: level.fill }} />
+                        {level.label}
+                      </span>
+                    ))}
+                    {hasSignificant ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed" style={{ borderColor: SIGNIFICANT_COLOR }} />
+                        Significant
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </div>
             </div>
           ) : null}
           {!loading && filtered.length === 0 && !reportOpen ? (
-            <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl bg-panel px-4 py-3 text-center text-sm text-muted shadow-sheet">
+            <p className="glass pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
               {hazards.length === 1 && hazards[0] === "hail" ? emptyWindowMessage(filter.hours) : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
@@ -729,15 +742,15 @@ export default function HailApp() {
           ) : null}
           {section === "map" && !(placeCardOpen && place) && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
-              <article className="rounded-3xl border border-line bg-panel p-4 shadow-sheet">
+              <article className="float-card p-4">
                 {selected ? (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
                       {hazardOf(selected.hazard)} · {selected.photoUrl ? "Community photo" : confidenceLabel(selected.confidence)}
                     </p>
-                    <p className="text-base font-semibold">{placeLabelOf(selected)}</p>
+                    <p className="mt-1 text-lg font-semibold tracking-tight">{placeLabelOf(selected)}</p>
                     <p className="text-sm text-muted">
-                      {magnitudeLabel(selected)} · {formatWhen(selected.occurredAt)}
+                      <span className="font-semibold text-ink">{magnitudeLabel(selected)}</span> · {formatWhen(selected.occurredAt)}
                     </p>
                     {selected.photoUrl ? (
                       <img src={selected.photoUrl} alt="Community hail photo" className="mt-2 max-h-40 w-full rounded-xl object-cover" />
@@ -838,7 +851,7 @@ export default function HailApp() {
             />
           ) : null}
           {loading ? (
-            <p className="pointer-events-none absolute left-3 top-36 z-10 rounded-full bg-panel px-3 py-1 text-xs text-muted shadow-sheet">
+            <p className="glass pointer-events-none absolute left-3 z-10 rounded-full px-3 py-1 text-xs text-muted" style={{ top: "calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset) + 2.4rem)" }}>
               Loading reports…
             </p>
           ) : null}

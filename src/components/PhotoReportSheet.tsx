@@ -162,8 +162,9 @@ export default function PhotoReportSheet({
 
   return (
     <section className="absolute inset-x-0 bottom-0 z-30" role="dialog" aria-labelledby="photo-report-title">
-      <div className="mx-auto w-full max-w-3xl rounded-t-3xl border border-line bg-panel shadow-sheet">
-        <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-3">
+      <div className="sheet mx-auto w-full max-w-3xl">
+        <div className="sheet-handle" />
+        <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-2">
           <div>
             <p id="photo-report-title" className="text-sm font-semibold">
               Report hail
@@ -172,10 +173,15 @@ export default function PhotoReportSheet({
               Step {stepIndex + 1} of {STEPS.length} · community photo
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full border border-line px-3 py-1 text-sm">
+          <button type="button" onClick={onClose} className="btn btn-secondary press px-3 py-1 text-xs">
             Close
           </button>
         </div>
+        <ol className="flex gap-1 px-4" aria-hidden>
+          {STEPS.map((item, index) => (
+            <li key={item} className={`h-1 flex-1 rounded-full ${index <= stepIndex ? "bg-accent" : "bg-app"}`} />
+          ))}
+        </ol>
         <div
           className={`space-y-3 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${
             step === "pin" ? "max-h-[34dvh]" : "max-h-[62dvh]"

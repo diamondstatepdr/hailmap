@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
 export const metadata: Metadata = {
   title: "Privacy · HailMap",
@@ -9,11 +10,15 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto min-h-[100dvh] max-w-2xl px-5 py-8">
-      <p className="mb-6">
-        <Link href="/" className="text-sm font-medium text-accent">
-          ← Back to the map
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-3">
+          <LogoMark size={36} />
+          <Wordmark subtitle={null} />
+        </span>
+        <Link href="/" className="text-sm font-semibold text-accent">
+          Back to the map
         </Link>
-      </p>
+      </div>
       <article className="prose-hail space-y-3">
         <h1>Privacy policy</h1>
         <p>Effective October 9, 2026. HailMap is operated by Diamond State Hail Solutions.</p>

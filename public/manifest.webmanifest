@@ -1,24 +1,30 @@
 {
   "name": "HailMap",
   "short_name": "HailMap",
-  "description": "Live US hail, wind, and tornado reports for people working storms.",
+  "description": "Live US hail, wind, and tornado reports, property storm history, and field notes.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f3f6fb",
-  "theme_color": "#f3f6fb",
+  "background_color": "#062833",
+  "theme_color": "#eef3f8",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

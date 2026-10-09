@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Search } from "lucide-react";
 
 export interface AddressHit {
   label: string;
@@ -50,26 +51,27 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
       <label className="sr-only" htmlFor="address-search">
         Search an address
       </label>
-      <input
-        id="address-search"
-        value={query}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        onChange={(event) => setQuery(event.target.value)}
-        className="w-full rounded-2xl border border-line bg-panel px-3 py-2 text-sm shadow-sheet outline-none"
-      />
+      <div className="relative">
+        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+        <input
+          id="address-search"
+          value={query}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          onChange={(event) => setQuery(event.target.value)}
+          className="glass w-full rounded-2xl py-2.5 pl-9 pr-3 text-sm outline-none"
+        />
+      </div>
       {status === "loading" ? <p className="px-1 pt-1 text-xs text-muted">Searching…</p> : null}
-      {status === "error" ? (
-        <p className="px-1 pt-1 text-xs text-muted">Address search is unavailable right now.</p>
-      ) : null}
+      {status === "error" ? <p className="px-1 pt-1 text-xs text-muted">Address search is unavailable right now.</p> : null}
       {status === "empty" ? <p className="px-1 pt-1 text-xs text-muted">No matching US address.</p> : null}
       {hits.length ? (
-        <ul className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-2xl border border-line bg-panel shadow-sheet">
+        <ul className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-2xl border border-line bg-panel shadow-float">
           {hits.map((hit) => (
             <li key={`${hit.lat},${hit.lon},${hit.label}`}>
               <button
                 type="button"
-                className="block w-full px-3 py-2 text-left text-sm hover:bg-app"
+                className="block w-full px-3 py-2.5 text-left text-sm hover:bg-app"
                 onClick={() => {
                   setQuery(hit.label);
                   setHits([]);

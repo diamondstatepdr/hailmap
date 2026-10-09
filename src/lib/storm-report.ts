@@ -104,18 +104,32 @@ export function sketchMap(
   const dots = points
     .slice(0, 400)
     .map((point) => {
-      const color = point.hazard === "wind" ? "#1d4ed8" : point.hazard === "tornado" ? "#be123c" : "#c2410c";
-      return `<circle cx="${xOf(point.lon).toFixed(1)}" cy="${yOf(point.lat).toFixed(1)}" r="5" fill="${color}" fill-opacity="0.9" stroke="#ffffff" stroke-width="1"/>`;
+      const color = point.hazard === "wind" ? "#1d4ed8" : point.hazard === "tornado" ? "#e11d48" : "#ea580c";
+      return `<circle cx="${xOf(point.lon).toFixed(1)}" cy="${yOf(point.lat).toFixed(1)}" r="5.5" fill="${color}" fill-opacity="0.92" stroke="#ffffff" stroke-width="1.4"/>`;
     })
     .join("");
   const cx = xOf(center.lon);
   const cy = yOf(center.lat);
+  const grid = [0.25, 0.5, 0.75]
+    .map((step) => {
+      const x = (width * step).toFixed(1);
+      const y = (height * step).toFixed(1);
+      return `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#d5e2ee" stroke-width="1"/><line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#d5e2ee" stroke-width="1"/>`;
+    })
+    .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Report locations">
-    <rect width="${width}" height="${height}" fill="#f4f7fb"/>
-    <text x="16" y="28" fill="#5c6b80" font-family="Segoe UI, sans-serif" font-size="13">Hail orange · Wind blue · Tornado red · Center mark</text>
+    <rect width="${width}" height="${height}" fill="#eef4f8"/>
+    ${grid}
+    <rect x="14" y="12" width="292" height="22" rx="11" fill="#ffffff" fill-opacity="0.92"/>
+    <circle cx="28" cy="23" r="4" fill="#ea580c"/>
+    <circle cx="92" cy="23" r="4" fill="#1d4ed8"/>
+    <circle cx="168" cy="23" r="4" fill="#e11d48"/>
+    <text x="38" y="27" fill="#5c6d82" font-family="Inter, Segoe UI, sans-serif" font-size="11">Hail</text>
+    <text x="102" y="27" fill="#5c6d82" font-family="Inter, Segoe UI, sans-serif" font-size="11">Wind</text>
+    <text x="178" y="27" fill="#5c6d82" font-family="Inter, Segoe UI, sans-serif" font-size="11">Tornado</text>
     ${dots}
-    <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="none" stroke="#0f6e6a" stroke-width="2"/>
-    <path d="M ${cx - 10} ${cy} H ${cx + 10} M ${cx} ${cy - 10} V ${cy + 10}" stroke="#0f6e6a" stroke-width="1.5"/>
+    <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="8" fill="none" stroke="#0c6278" stroke-width="2"/>
+    <path d="M ${cx - 11} ${cy} H ${cx + 11} M ${cx} ${cy - 11} V ${cy + 11}" stroke="#0c6278" stroke-width="1.5"/>
   </svg>`;
 }
 

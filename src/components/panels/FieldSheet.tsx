@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Navigation } from "lucide-react";
 import { FIELD_DAMAGE_TYPES, PIN_STATUSES, pinStatusLabel, type PinStatus } from "@/lib/field";
+import type { PlaceHistory } from "@/lib/place";
 
 interface FieldPinView {
   id: string;
@@ -9,7 +11,6 @@ interface FieldPinView {
   note: string | null;
   photos: Array<{ id: string }>;
 }
-import type { PlaceHistory } from "@/lib/place";
 
 interface Props {
   gpsError: string | null;
@@ -25,6 +26,13 @@ interface Props {
   onSelectPin: (id: string) => void;
   onUpload: (pinId: string, file: File, damageType: string, note: string) => Promise<void>;
 }
+
+const STATUS_TONE: Record<PinStatus, string> = {
+  damage: "hazard-tornado",
+  talked: "hazard-wind",
+  away: "bg-app text-muted",
+  lead: "hazard-hail",
+};
 
 export default function FieldSheet({
   gpsError,
@@ -62,29 +70,39 @@ export default function FieldSheet({
   }
 
   return (
-    <div className="max-h-[46dvh] overflow-y-auto rounded-t-3xl border border-line bg-panel px-4 py-3 shadow-sheet">
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Field</p>
-      {gpsError ? <p className="mt-1 text-sm text-muted">{gpsError}</p> : null}
-      <p className="mt-1 text-sm">
-        {streetStatus === "loading"
-          ? "Looking up the street…"
-          : street
-            ? street
-            : streetStatus === "unavailable"
-              ? "Street name is unavailable from the geocoder."
-              : "Waiting for GPS…"}
-      </p>
+    <div className="sheet max-h-[46dvh] overflow-y-auto px-4 pb-3 pt-1">
+      <div className="sheet-handle" />
+      <div className="mt-2 flex items-center gap-2">
+        <span className="hazard-badge h-8 w-8 hazard-wind">
+          <Navigation size={15} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Field</p>
+          <p className="truncate text-sm font-semibold">
+            {streetStatus === "loading"
+              ? "Looking up the street…"
+              : street
+                ? street
+                : streetStatus === "unavailable"
+                  ? "Street name is unavailable from the geocoder."
+                  : "Waiting for GPS…"}
+          </p>
+        </div>
+      </div>
+      {gpsError ? <p className="mt-2 text-sm text-muted">{gpsError}</p> : null}
       {history ? (
-        <p className="mt-1 text-sm font-semibold">
-          Damage probability {history.score.level} · {history.score.score}/100
+        <p className="mt-2 text-sm">
+          <span className="font-semibold">
+            Damage probability {history.score.level} · {history.score.score}/100
+          </span>
           <span className="mt-0.5 block text-xs font-normal text-muted">{history.score.summary}</span>
         </p>
       ) : historyError ? (
-        <p className="mt-1 text-sm text-muted">{historyError}</p>
+        <p className="mt-2 text-sm text-muted">{historyError}</p>
       ) : (
-        <p className="mt-1 text-sm text-muted">Score appears when your location is known.</p>
+        <p className="mt-2 text-sm text-muted">Score appears when your location is known.</p>
       )}
-      <div className="mt-2">
+      <div className="mt-3">
         <p className="text-xs font-semibold text-muted">Nearby reported places</p>
         {places.length ? (
           <ul className="mt-1 flex flex-wrap gap-1">
@@ -111,12 +129,7 @@ export default function FieldSheet({
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {PIN_STATUSES.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => onMark(status, note)}
-                className="rounded-2xl border border-line px-2 py-2 text-sm font-semibold"
-              >
+              <button key={status} type="button" onClick={() => onMark(status, note)} className={`field-action press ${STATUS_TONE[status]}`}>
                 {pinStatusLabel(status)}
               </button>
             ))}
@@ -130,7 +143,7 @@ export default function FieldSheet({
                   <button
                     type="button"
                     onClick={() => onSelectPin(pin.id)}
-                    className={`flex w-full justify-between py-1 text-left ${selectedPinId === pin.id ? "font-semibold" : ""}`}
+                    className={`flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left ${selectedPinId === pin.id ? "bg-app font-semibold" : ""}`}
                   >
                     <span>
                       {pinStatusLabel(pin.status)}
@@ -153,8 +166,8 @@ export default function FieldSheet({
                     type="button"
                     aria-pressed={damageType === type}
                     onClick={() => setDamageType(type)}
-                    className={`rounded-full px-2 py-1 text-xs capitalize ${
-                      damageType === type ? "bg-accent text-accentink" : "border border-line"
+                    className={`rounded-full px-2.5 py-1 text-xs capitalize ${
+                      damageType === type ? "chip-on" : "chip shadow-none"
                     }`}
                   >
                     {type}
@@ -185,7 +198,7 @@ export default function FieldSheet({
           ) : null}
         </>
       ) : (
-        <button type="button" onClick={onSignIn} className="mt-3 w-full rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-accentink">
+        <button type="button" onClick={onSignIn} className="btn btn-primary press mt-3 w-full">
           Sign in to mark houses
         </button>
       )}

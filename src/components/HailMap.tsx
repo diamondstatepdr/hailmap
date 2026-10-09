@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
+  AttributionControl,
   Layer,
   Marker,
   NavigationControl,
@@ -17,8 +18,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 const states = stateOverlay as FeatureCollection;
 
-const LIGHT_STYLE = "https://tiles.openfreemap.org/styles/positron";
-const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
+const LIGHT_STYLE = "/map/light.json";
+const DARK_STYLE = "/map/night.json";
 
 const hailSizeColor = [
   "interpolate",
@@ -249,6 +250,17 @@ export default function HailMap({
     applyFrame(frame);
   }, [frame]);
 
+  function installIcons() {
+    const map = mapRef.current?.getMap();
+    if (!map?.isStyleLoaded()) return;
+    try {
+      if (!map.hasImage("mark-wind")) map.addImage("mark-wind", windGlyph(), { pixelRatio: 2 });
+      if (!map.hasImage("mark-tornado")) map.addImage("mark-tornado", tornadoGlyph(), { pixelRatio: 2 });
+    } catch {
+      /* Style swaps drop images; the next style event adds them again. */
+    }
+  }
+
   function quietBaseStateLayers() {
     const map = mapRef.current?.getMap();
     if (!map?.isStyleLoaded()) return;
@@ -321,7 +333,9 @@ export default function HailMap({
       ref={mapRef}
       initialViewState={{ longitude: -97.5, latitude: 39.2, zoom: 3.7 }}
       mapStyle={theme === "dark" ? DARK_STYLE : LIGHT_STYLE}
+      attributionControl={false}
       onLoad={() => {
+        installIcons();
         quietBaseStateLayers();
         applyFrame();
         const box = mapRef.current?.getBounds();
@@ -334,7 +348,10 @@ export default function HailMap({
           });
         }
       }}
-      onStyleData={() => quietBaseStateLayers()}
+      onStyleData={() => {
+        installIcons();
+        quietBaseStateLayers();
+      }}
       interactiveLayerIds={interactiveLayerIds}
       onClick={onClick}
       onMoveEnd={(event) => {
@@ -353,6 +370,7 @@ export default function HailMap({
       style={{ width: "100%", height: "100%" }}
     >
       <NavigationControl position="top-right" showCompass={false} />
+      <AttributionControl compact position="bottom-right" />
       {showIncome && income ? (
         <Source id="income" type="geojson" data={income}>
           <Layer
@@ -454,7 +472,17 @@ export default function HailMap({
             type="fill"
             paint={{
               "fill-color": swathColor as never,
-              "fill-opacity": 0.28,
+              "fill-opacity": theme === "dark" ? 0.34 : 0.3,
+            }}
+          />
+          <Layer
+            id="swath-glow"
+            type="line"
+            paint={{
+              "line-color": swathColor as never,
+              "line-width": 6,
+              "line-opacity": 0.28,
+              "line-blur": 1.2,
             }}
           />
           <Layer
@@ -462,8 +490,8 @@ export default function HailMap({
             type="line"
             paint={{
               "line-color": swathColor as never,
-              "line-width": 1.5,
-              "line-opacity": 0.85,
+              "line-width": 1.8,
+              "line-opacity": 0.92,
             }}
           />
         </Source>
@@ -563,7 +591,7 @@ export default function HailMap({
           filter={["==", ["get", "kind"], "boundary"]}
           layout={{ "line-join": "round", "line-cap": "round" }}
           paint={{
-            "line-color": theme === "dark" ? "#f8fafc" : "#1e293b",
+            "line-color": theme === "dark" ? "#f4fbff" : "#16324a",
             "line-width": stateCoreWidth as never,
             "line-opacity": 0.95,
           }}
@@ -578,16 +606,16 @@ export default function HailMap({
             "text-field": ["get", "name"],
             "text-font": ["Noto Sans Bold"],
             "text-size": stateTextSize as never,
-            "text-max-width": 8,
+            "text-max-width": 12,
             "text-padding": 2,
-            "text-letter-spacing": 0.04,
+            "text-letter-spacing": 0.02,
             "text-allow-overlap": false,
             "symbol-sort-key": ["get", "area"],
           }}
           paint={{
-            "text-color": theme === "dark" ? "#f8fafc" : "#122033",
-            "text-halo-color": theme === "dark" ? "#0b1220" : "#ffffff",
-            "text-halo-width": 1.8,
+            "text-color": theme === "dark" ? "#f8fbff" : "#102033",
+            "text-halo-color": theme === "dark" ? "#071018" : "#f7fbff",
+            "text-halo-width": 2.1,
             "text-halo-blur": 0.3,
           }}
         />
@@ -595,15 +623,25 @@ export default function HailMap({
       {showPoints ? (
         <Source id="reports" type="geojson" data={points} cluster clusterRadius={52} clusterMaxZoom={5}>
           <Layer
+            id="hail-cluster-halo"
+            type="circle"
+            filter={["has", "point_count"]}
+            paint={{
+              "circle-color": theme === "dark" ? "#67e8f9" : "#0c6278",
+              "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 22, 8, 30, 20, 40, 40, 48],
+              "circle-opacity": 0.22,
+            }}
+          />
+          <Layer
             id="hail-clusters"
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": "#0f766e",
-              "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 16, 8, 22, 20, 30, 40, 36],
-              "circle-stroke-color": theme === "dark" ? "#042f2e" : "#ffffff",
+              "circle-color": theme === "dark" ? "#14687c" : "#0c6278",
+              "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 15, 8, 21, 20, 28, 40, 34],
+              "circle-stroke-color": theme === "dark" ? "#e8fbff" : "#ffffff",
               "circle-stroke-width": 2.5,
-              "circle-opacity": 0.94,
+              "circle-opacity": 0.96,
             }}
           />
           <Layer
@@ -612,11 +650,21 @@ export default function HailMap({
             filter={["has", "point_count"]}
             layout={{
               "text-field": ["get", "point_count_abbreviated"],
-              "text-size": 13,
-              "text-font": ["Noto Sans Regular"],
+              "text-size": 12,
+              "text-font": ["Noto Sans Bold"],
               "text-allow-overlap": true,
             }}
             paint={{ "text-color": "#ffffff" }}
+          />
+          <Layer
+            id="hail-point-halo"
+            type="circle"
+            filter={["!", ["has", "point_count"]]}
+            paint={{
+              "circle-color": pointColor as never,
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 11, 6, 14, 10, 18],
+              "circle-opacity": 0.18,
+            }}
           />
           <Layer
             id="hail-points"
@@ -624,24 +672,35 @@ export default function HailMap({
             filter={["!", ["has", "point_count"]]}
             paint={{
               "circle-color": pointColor as never,
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 8, 6, 11, 10, 15],
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 7, 6, 10, 10, 13],
               "circle-stroke-color": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
-                theme === "dark" ? "#2dd4bf" : "#0f766e",
+                theme === "dark" ? "#67e8f9" : "#0c6278",
                 ["==", ["get", "hasPhoto"], 1],
-                theme === "dark" ? "#2dd4bf" : "#0f766e",
-                theme === "dark" ? "#0e141c" : "#ffffff",
+                theme === "dark" ? "#67e8f9" : "#0c6278",
+                "#ffffff",
               ] as never,
               "circle-stroke-width": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
-                4,
+                3.5,
                 ["==", ["get", "hasPhoto"], 1],
-                3,
-                2,
+                2.5,
+                1.6,
               ] as never,
-              "circle-opacity": 0.96,
+              "circle-opacity": 0.98,
+            }}
+          />
+          <Layer
+            id="hail-point-shine"
+            type="circle"
+            filter={["!", ["has", "point_count"]]}
+            paint={{
+              "circle-color": "#ffffff",
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 8, 3],
+              "circle-opacity": 0.45,
+              "circle-translate": [-1.5, -2],
             }}
           />
           <Layer
@@ -653,12 +712,11 @@ export default function HailMap({
               ["any", ["==", ["get", "hazard"], "wind"], ["==", ["get", "hazard"], "tornado"]],
             ]}
             layout={{
-              "text-field": ["match", ["get", "hazard"], "wind", "W", "tornado", "T", ""],
-              "text-size": 11,
-              "text-font": ["Noto Sans Bold"],
-              "text-allow-overlap": true,
+              "icon-image": ["match", ["get", "hazard"], "wind", "mark-wind", "tornado", "mark-tornado", "mark-wind"],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.34, 7, 0.46, 11, 0.58],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
             }}
-            paint={{ "text-color": "#ffffff" }}
           />
         </Source>
       ) : null}
@@ -699,11 +757,53 @@ export default function HailMap({
           draggable={pickMode}
           onDragEnd={(event) => onPickLocation(event.lngLat.lng, event.lngLat.lat)}
         >
-          <span className="block h-7 w-7 rounded-full border-[3px] border-white bg-accent shadow-sheet" />
+          <span className="draft-pin" />
         </Marker>
       ) : null}
     </Map>
   );
+}
+
+function glyphCanvas(draw: (ctx: CanvasRenderingContext2D) => void): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new ImageData(64, 64);
+  draw(ctx);
+  return ctx.getImageData(0, 0, 64, 64);
+}
+
+function windGlyph(): ImageData {
+  return glyphCanvas((ctx) => {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 4.5;
+    ctx.lineCap = "round";
+    for (const y of [20, 32, 44]) {
+      ctx.beginPath();
+      ctx.moveTo(12, y + 3);
+      ctx.quadraticCurveTo(32, y - 8, 52, y + 3);
+      ctx.stroke();
+    }
+  });
+}
+
+function tornadoGlyph(): ImageData {
+  return glyphCanvas((ctx) => {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 4.2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(32, 22, 12, 0.2, Math.PI * 1.65);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(33, 36, 7.5, Math.PI * 0.85, Math.PI * 2.35);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(32, 43);
+    ctx.lineTo(32, 54);
+    ctx.stroke();
+  });
 }
 
 function subsetThreats(collection: GeoJSON.FeatureCollection | null, kinds: string[]): GeoJSON.FeatureCollection {

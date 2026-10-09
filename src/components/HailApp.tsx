@@ -111,6 +111,7 @@ export default function HailApp() {
   const [placeLabel, setPlaceLabel] = useState<string | null>(null);
   const [placePoint, setPlacePoint] = useState<{ lat: number; lon: number } | null>(null);
   const [place, setPlace] = useState<PlaceHistory | null>(null);
+  const [placeCardOpen, setPlaceCardOpen] = useState(false);
   const [placeLoading, setPlaceLoading] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [watch, setWatch] = useState<WatchItem[]>([]);
@@ -266,7 +267,10 @@ export default function HailApp() {
       .then(async (response) => {
         const payload = (await response.json()) as PlaceHistory & { error?: string };
         if (!response.ok) throw new Error(payload.error ?? "Could not load this address");
-        if (!cancelled) setPlace(payload);
+        if (!cancelled) {
+          setPlace(payload);
+          setPlaceCardOpen(true);
+        }
       })
       .catch((reason: unknown) => {
         if (!cancelled) setPlaceError(reason instanceof Error ? reason.message : "Could not load this address");
@@ -421,6 +425,8 @@ export default function HailApp() {
   function chooseAddress(hit: AddressHit) {
     setPlaceLabel(hit.label);
     setPlacePoint({ lat: hit.lat, lon: hit.lon });
+    setPlace(null);
+    setPlaceCardOpen(true);
     setFocus({ lon: hit.lon, lat: hit.lat, nonce: Date.now(), zoom: 12 });
     setSelectedId(null);
   }
@@ -706,16 +712,13 @@ export default function HailApp() {
               {hazards.length === 1 && hazards[0] === "hail" ? emptyWindowMessage(filter.hours) : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
-          {section === "map" && place && placeLabel ? (
+          {section === "map" && placeCardOpen && place && placeLabel ? (
             <div className="absolute inset-x-3 bottom-3 z-30 max-h-[48%] overflow-y-auto">
               <PropertyCard
                 label={placeLabel}
                 history={place}
                 mesh={status?.mesh}
-                onClose={() => {
-                  setPlace(null);
-                  setPlacePoint(null);
-                }}
+                onClose={() => setPlaceCardOpen(false)}
                 onSave={() => void saveWatch()}
                 onReport={() => {
                   setSection("reports");
@@ -724,7 +727,7 @@ export default function HailApp() {
               />
             </div>
           ) : null}
-          {section === "map" && !place && (selected || threat || county) ? (
+          {section === "map" && !(placeCardOpen && place) && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
               <article className="rounded-3xl border border-line bg-panel p-4 shadow-sheet">
                 {selected ? (

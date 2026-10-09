@@ -48,8 +48,9 @@ export default function ReportsPanel({
           onClick={onAddress}
           className="rounded-2xl bg-accent px-4 py-3 text-left text-sm font-semibold text-accentink disabled:opacity-50"
         >
-          Report {placeLabel ?? "the searched address"}
+          {busy ? "Building the report…" : `Report ${placeLabel ?? "the searched address"}`}
         </button>
+        {!hasPlace ? <p className="text-sm text-muted">Search an address on the map or Addresses tab first.</p> : null}
         <button
           type="button"
           disabled={!canUseView || busy}

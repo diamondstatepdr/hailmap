@@ -1,13 +1,20 @@
 import type { Confidence } from "@/lib/confidence";
+import type { Hazard } from "@/lib/hazard";
 
 export interface HailReport {
   id: string;
   source: string;
   confidence: Confidence;
+  /** Hail, wind, or tornado. Older rows are hail. */
+  hazard: Hazard;
   lat: number;
   lon: number;
   sizeIn: number | null;
   sizeRaw: string | null;
+  /** Thunderstorm or non-thunderstorm wind gust, miles per hour. */
+  windMph: number | null;
+  /** EF0–EF5, EFU, or UNK when the source published a rating. */
+  efRating: string | null;
   occurredAt: string;
   location: string | null;
   county: string | null;
@@ -24,10 +31,13 @@ export interface IncomingReport {
   source: string;
   externalId: string;
   confidence: Confidence;
+  hazard?: Hazard;
   lat: number;
   lon: number;
   sizeIn: number | null;
   sizeRaw: string | null;
+  windMph?: number | null;
+  efRating?: string | null;
   occurredAt: string;
   location: string | null;
   county: string | null;

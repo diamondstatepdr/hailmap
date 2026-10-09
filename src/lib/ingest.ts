@@ -14,6 +14,8 @@ import {
   parseMeshGeoJson,
   parseNwsAlerts,
   parseSpcHailCsv,
+  parseSpcTornadoCsv,
+  parseSpcWindCsv,
   spcFileStamp,
 } from "@/lib/parsers";
 import type { IncomingReport, ReportsResponse, SourceStatus } from "@/lib/types";
@@ -56,24 +58,40 @@ async function fetchJson(url: string, accept: string): Promise<unknown> {
   return response.json();
 }
 
+async function fetchTextOptional(url: string): Promise<string | null> {
+  try {
+    return await fetchText(url);
+  } catch (error) {
+    console.error("[hailmap] spc", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 async function fetchSpc(): Promise<IncomingReport[]> {
   const today = convectiveDay();
   const days = Array.from({ length: 7 }, (_, index) => addUtcDays(today, -index));
   let failures = 0;
   const batches = await Promise.all(
     days.map(async (day) => {
-      try {
-        const stamp = spcFileStamp(day);
-        const csv = await fetchText(`https://www.spc.noaa.gov/climo/reports/${stamp}_rpts_hail.csv`);
-        return parseSpcHailCsv(csv, day);
-      } catch (error) {
+      const stamp = spcFileStamp(day);
+      const base = `https://www.spc.noaa.gov/climo/reports/${stamp}_rpts`;
+      const [hail, wind, tornado] = await Promise.all([
+        fetchTextOptional(`${base}_hail.csv`),
+        fetchTextOptional(`${base}_wind.csv`),
+        fetchTextOptional(`${base}_torn.csv`),
+      ]);
+      if (hail == null && wind == null && tornado == null) {
         failures += 1;
-        console.error("[hailmap] spc", day, error instanceof Error ? error.message : error);
         return [];
       }
+      return [
+        hail ? parseSpcHailCsv(hail, day) : [],
+        wind ? parseSpcWindCsv(wind, day) : [],
+        tornado ? parseSpcTornadoCsv(tornado, day) : [],
+      ].flat();
     }),
   );
-  if (failures === days.length) throw new Error("SPC hail reports unavailable");
+  if (failures === days.length) throw new Error("SPC reports unavailable");
   return batches.flat();
 }
 
@@ -182,5 +200,5 @@ export async function getMapReports(options?: { fresh?: boolean }): Promise<Repo
 export async function getSwathCollection() {
   const { reports } = await getMapReports();
   const { reportsToSwaths } = await import("@/lib/swath");
-  return reportsToSwaths(reports);
+  return reportsToSwaths(reports.filter((report) => report.hazard === "hail"));
 }

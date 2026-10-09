@@ -27,7 +27,7 @@ HailMap is a nationwide map of recent United States hail.
 - Import your own CSV or GeoJSON. Spotter feeds are webhook-only
 - Report hail with a photo, a confirmed map pin, and a size. Those reports are community observations
 
-HailMap does not scrape social networks. It does not require an account. Location and camera access are requested only when you submit a photo report. The Android app is a secure WebView of the HTTPS site.
+HailMap does not scrape social networks. The public map does not require an account. Field notes use an optional team sign-in. Location is requested in Field mode and when you submit a photo report. The Android app is a secure WebView of the HTTPS site.
 
 Privacy policy: https://YOUR-RAILWAY-DOMAIN/privacy
 

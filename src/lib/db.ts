@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { asConfidence } from "@/lib/confidence";
 import { extractDamageTags } from "@/lib/damage";
 import { validLatLon } from "@/lib/geo";
+import { hazardOf } from "@/lib/hazard";
 import type { HailReport, IncomingReport } from "@/lib/types";
 
 interface ReportRow {
@@ -15,6 +16,9 @@ interface ReportRow {
   lon: number;
   size_in: number | null;
   size_raw: string | null;
+  wind_mph: number | null;
+  ef_rating: string | null;
+  hazard: string | null;
   occurred_at: string;
   location: string | null;
   county: string | null;
@@ -46,6 +50,9 @@ function mapRow(row: ReportRow): HailReport {
     lon: row.lon,
     sizeIn: row.size_in,
     sizeRaw: row.size_raw,
+    windMph: row.wind_mph,
+    efRating: row.ef_rating,
+    hazard: hazardOf(row.hazard),
     occurredAt: row.occurred_at,
     location: row.location,
     county: row.county,
@@ -93,6 +100,74 @@ function migrate(db: Database.Database) {
   if (!columns.some((column) => column.name === "photo_id")) {
     db.exec("ALTER TABLE reports ADD COLUMN photo_id TEXT");
   }
+  if (!columns.some((column) => column.name === "hazard")) {
+    db.exec("ALTER TABLE reports ADD COLUMN hazard TEXT NOT NULL DEFAULT 'hail'");
+  }
+  if (!columns.some((column) => column.name === "wind_mph")) {
+    db.exec("ALTER TABLE reports ADD COLUMN wind_mph REAL");
+  }
+  if (!columns.some((column) => column.name === "ef_rating")) {
+    db.exec("ALTER TABLE reports ADD COLUMN ef_rating TEXT");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS watch_places (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      query TEXT NOT NULL,
+      lat REAL NOT NULL,
+      lon REAL NOT NULL,
+      radius_km REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_watch_user ON watch_places(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS field_pins (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      lat REAL NOT NULL,
+      lon REAL NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_field_pins_user ON field_pins(user_id, updated_at);
+    CREATE TABLE IF NOT EXISTS field_photos (
+      id TEXT PRIMARY KEY,
+      pin_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      photo_id TEXT NOT NULL,
+      damage_type TEXT NOT NULL,
+      note TEXT,
+      taken_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_field_photos_pin ON field_photos(pin_id, created_at);
+    CREATE TABLE IF NOT EXISTS storm_reports (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      title TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_storm_reports_user ON storm_reports(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS geocode_cache (
+      query TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      fetched_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS action_limits (
+      ip_hash TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_limits ON action_limits(kind, ip_hash, created_at);
+  `);
 }
 
 function hoursAgo(hours: number): string {
@@ -173,6 +248,38 @@ function seed(db: Database.Database) {
       state: "CO",
       remark: "MESH stub sample near Denver.",
     },
+    {
+      source: "seed",
+      externalId: "seed-okc-wind",
+      confidence: "nws",
+      hazard: "wind",
+      lat: 35.47,
+      lon: -97.52,
+      sizeIn: null,
+      sizeRaw: null,
+      windMph: 72,
+      occurredAt: hoursAgo(2.1),
+      location: "Oklahoma City",
+      county: "Oklahoma",
+      state: "OK",
+      remark: "Sample thunderstorm wind gust. Replaced when a live feed responds.",
+    },
+    {
+      source: "seed",
+      externalId: "seed-moore-tornado",
+      confidence: "spotter",
+      hazard: "tornado",
+      lat: 35.33,
+      lon: -97.51,
+      sizeIn: null,
+      sizeRaw: null,
+      efRating: "EF1",
+      occurredAt: hoursAgo(2.2),
+      location: "Moore",
+      county: "Cleveland",
+      state: "OK",
+      remark: "Sample tornado local storm report. Replaced when a live feed responds.",
+    },
   ];
   insertAll(db, samples);
 }
@@ -180,18 +287,21 @@ function seed(db: Database.Database) {
 function insertAll(db: Database.Database, rows: IncomingReport[]): number {
   const stmt = db.prepare(`
     INSERT INTO reports (
-      id, source, external_id, confidence, lat, lon, size_in, size_raw,
-      occurred_at, location, county, state, remark, damage_tags, photo_id, created_at, updated_at
+      id, source, external_id, confidence, hazard, lat, lon, size_in, size_raw,
+      wind_mph, ef_rating, occurred_at, location, county, state, remark, damage_tags, photo_id, created_at, updated_at
     ) VALUES (
-      @id, @source, @external_id, @confidence, @lat, @lon, @size_in, @size_raw,
-      @occurred_at, @location, @county, @state, @remark, @damage_tags, @photo_id, @created_at, @updated_at
+      @id, @source, @external_id, @confidence, @hazard, @lat, @lon, @size_in, @size_raw,
+      @wind_mph, @ef_rating, @occurred_at, @location, @county, @state, @remark, @damage_tags, @photo_id, @created_at, @updated_at
     )
     ON CONFLICT(source, external_id) DO UPDATE SET
       confidence = excluded.confidence,
+      hazard = excluded.hazard,
       lat = excluded.lat,
       lon = excluded.lon,
       size_in = excluded.size_in,
       size_raw = excluded.size_raw,
+      wind_mph = excluded.wind_mph,
+      ef_rating = excluded.ef_rating,
       occurred_at = excluded.occurred_at,
       location = excluded.location,
       county = excluded.county,
@@ -213,10 +323,13 @@ function insertAll(db: Database.Database, rows: IncomingReport[]): number {
         source: item.source,
         external_id: item.externalId,
         confidence: item.confidence,
+        hazard: hazardOf(item.hazard),
         lat: item.lat,
         lon: item.lon,
         size_in: item.sizeIn,
         size_raw: item.sizeRaw,
+        wind_mph: item.windMph ?? null,
+        ef_rating: item.efRating ?? null,
         occurred_at: occurred.toISOString(),
         location: item.location,
         county: item.county,
@@ -256,7 +369,7 @@ export function listRecentReports(days = 7): HailReport[] {
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const rows = getDb()
     .prepare(
-      `SELECT * FROM reports WHERE occurred_at >= ? ORDER BY occurred_at DESC LIMIT 5000`,
+      `SELECT * FROM reports WHERE occurred_at >= ? ORDER BY occurred_at DESC LIMIT 8000`,
     )
     .all(since) as ReportRow[];
   return rows.map(mapRow);

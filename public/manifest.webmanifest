@@ -1,7 +1,7 @@
 {
   "name": "HailMap",
   "short_name": "HailMap",
-  "description": "Nationwide live US hail reports, swaths, and county income.",
+  "description": "Live US hail, wind, and tornado reports for people working storms.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

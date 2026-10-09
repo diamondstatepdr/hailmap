@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HailMap",
-  description: "Nationwide live US hail reports, swaths, and county income context.",
+  description: "Live US hail, wind, and tornado reports, property storm history, and field notes.",
   applicationName: "HailMap",
   manifest: "/manifest.webmanifest",
   icons: {

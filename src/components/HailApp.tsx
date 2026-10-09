@@ -1,14 +1,22 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AddressHit } from "@/components/AddressSearch";
+import AddressSearch from "@/components/AddressSearch";
+import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
+import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
-import { boundsOf } from "@/lib/geo";
+import PropertyCard from "@/components/PropertyCard";
+import FieldSheet from "@/components/panels/FieldSheet";
+import PropertiesPanel from "@/components/panels/PropertiesPanel";
+import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
+import StormsPanel from "@/components/panels/StormsPanel";
+import AppShell, { type AppSection } from "@/components/shell/AppShell";
+import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
 import {
   applyReportFilter,
-  DEFAULT_WINDOW_HOURS,
   emptyWindowMessage,
   formatWhen,
   LIVE_WINDOW_HOURS,
@@ -18,48 +26,45 @@ import {
   TIME_WINDOWS,
   wantsFreshSync,
   windowPhrase,
-  type ReportFilter,
 } from "@/lib/filters";
+import { damageHeatGrid } from "@/lib/heat";
+import { hazardOf, magnitudeLabel } from "@/lib/hazard";
+import type { PlaceHistory } from "@/lib/place";
+import { haversineKm, boundsOf } from "@/lib/geo";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
-import {
-  OUTLOOK_LEVELS,
-  SIGNIFICANT_COLOR,
-  THREAT_LEGEND,
-  type ThreatInfo,
-  type ThreatsResponse,
-} from "@/lib/threats";
+import { OUTLOOK_LEVELS, SIGNIFICANT_COLOR, type ThreatInfo, type ThreatsResponse } from "@/lib/threats";
+import type { PinStatus } from "@/lib/field";
 import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const HailMap = dynamic(() => import("@/components/HailMap"), {
   ssr: false,
-  loading: () => (
-    <div className="grid h-full place-items-center bg-app text-sm text-muted">Loading map…</div>
-  ),
+  loading: () => <div className="grid h-full place-items-center bg-app text-sm text-muted">Loading map…</div>,
 });
 
-const CONFIDENCE_OPTIONS: Array<{ id: Confidence; label: string }> = [
-  { id: "nws", label: "Official (NWS)" },
-  { id: "spotter", label: "Spotter" },
-  { id: "mesh", label: "Radar (MESH)" },
-  { id: "community", label: "Community" },
-];
-
-function sizePhrase(minSize: number): string {
-  if (minSize <= 0) return "Any size";
-  return `${minSize.toFixed(2)} in and larger`;
+interface WatchItem {
+  id: string;
+  label: string;
+  query: string;
+  lat: number;
+  lon: number;
+  radiusKm: number;
 }
 
-function confidenceLabel(id: Confidence): string {
-  return CONFIDENCE_OPTIONS.find((option) => option.id === id)?.label ?? id;
+interface FieldPin {
+  id: string;
+  lat: number;
+  lon: number;
+  status: PinStatus;
+  note: string | null;
+  photos: Array<{ id: string }>;
 }
 
-function feedPhrase(status?: string): string {
-  if (status === "ok") return "up to date";
-  if (status === "empty") return "no reports";
-  if (status === "error") return "unavailable";
-  if (status === "skipped") return "off";
-  return "checking";
+interface ViewBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
 }
 
 function readTheme(): "light" | "dark" {
@@ -68,6 +73,7 @@ function readTheme(): "light" | "dark" {
 }
 
 export default function HailApp() {
+  const [section, setSection] = useState<AppSection>("map");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [reports, setReports] = useState<HailReport[]>([]);
   const [rawCount, setRawCount] = useState(0);
@@ -75,13 +81,13 @@ export default function HailApp() {
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
   const [showSwaths, setShowSwaths] = useState(true);
   const [showIncome, setShowIncome] = useState(false);
   const [showThreats, setShowThreats] = useState(true);
   const [showOutlook, setShowOutlook] = useState(true);
+  const [showHeat, setShowHeat] = useState(false);
   const [income, setIncome] = useState<GeoJSON.FeatureCollection | null>(null);
   const [incomeError, setIncomeError] = useState(false);
   const [threats, setThreats] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -97,18 +103,66 @@ export default function HailApp() {
   const [reportOpen, setReportOpen] = useState(false);
   const [draftPin, setDraftPin] = useState<{ lat: number; lon: number } | null>(null);
   const [picking, setPicking] = useState(false);
-  const [filter, setFilter] = useState<ReportFilter>({
-    minSize: 0,
-    hours: DEFAULT_WINDOW_HOURS,
-    confidences: ["nws", "spotter", "mesh", "community"],
-    state: "",
-  });
+  const [filter, setFilter] = useState(defaultFilter);
+  const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [authConfigured, setAuthConfigured] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [radiusKm, setRadiusKm] = useState(15);
+  const [placeLabel, setPlaceLabel] = useState<string | null>(null);
+  const [placePoint, setPlacePoint] = useState<{ lat: number; lon: number } | null>(null);
+  const [place, setPlace] = useState<PlaceHistory | null>(null);
+  const [placeCardOpen, setPlaceCardOpen] = useState(false);
+  const [placeLoading, setPlaceLoading] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+  const [watch, setWatch] = useState<WatchItem[]>([]);
+  const [pins, setPins] = useState<FieldPin[]>([]);
+  const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [street, setStreet] = useState<string | null>(null);
+  const [streetStatus, setStreetStatus] = useState<"idle" | "loading" | "unavailable" | "ok">("idle");
+  const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const lastStreetFix = useRef<{ lat: number; lon: number } | null>(null);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
 
   useEffect(() => {
     setTheme(readTheme());
+    fetch("/api/auth/session")
+      .then((response) => response.json())
+      .then((payload: { user?: { id: string; name: string } | null; configured?: boolean }) => {
+        setUser(payload.user ?? null);
+        setAuthConfigured(Boolean(payload.configured));
+      })
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setWatch([]);
+      setPins([]);
+      setSavedReports([]);
+      return;
+    }
+    fetch("/api/watch")
+      .then((response) => response.json())
+      .then((payload: { places?: WatchItem[] }) => setWatch(payload.places ?? []))
+      .catch(() => undefined);
+    fetch("/api/field/pins")
+      .then((response) => response.json())
+      .then((payload: { pins?: FieldPin[] }) => setPins(payload.pins ?? []))
+      .catch(() => undefined);
+    fetch("/api/storm-reports")
+      .then((response) => response.json())
+      .then((payload: { reports?: SavedReport[] }) => setSavedReports(payload.reports ?? []))
+      .catch(() => undefined);
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +235,102 @@ export default function HailApp() {
     };
   }, [showIncome, income, incomeError]);
 
+  useEffect(() => {
+    if (section !== "field" || !navigator.geolocation) {
+      if (section === "field" && !navigator.geolocation) setGpsError("This browser cannot share location.");
+      return;
+    }
+    setGpsError(null);
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lon: position.coords.longitude });
+        setGpsError(null);
+      },
+      () => setGpsError("Location is blocked. Allow location access to drive Field mode."),
+      { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [section]);
+
+  useEffect(() => {
+    if (!placePoint) return;
+    let cancelled = false;
+    setPlaceLoading(true);
+    setPlaceError(null);
+    const params = new URLSearchParams({
+      lat: String(placePoint.lat),
+      lon: String(placePoint.lon),
+      radiusKm: String(radiusKm),
+      hours: String(filter.hours),
+    });
+    fetch(`/api/place?${params}`)
+      .then(async (response) => {
+        const payload = (await response.json()) as PlaceHistory & { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Could not load this address");
+        if (!cancelled) {
+          setPlace(payload);
+          setPlaceCardOpen(true);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setPlaceError(reason instanceof Error ? reason.message : "Could not load this address");
+      })
+      .finally(() => {
+        if (!cancelled) setPlaceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [placePoint, radiusKm, filter.hours, reloadKey]);
+
+  const fieldHours = useRef(filter.hours);
+  useEffect(() => {
+    if (section !== "field") {
+      lastStreetFix.current = null;
+      return;
+    }
+    if (!userLocation) return;
+    const previous = lastStreetFix.current;
+    const sameSpot = previous != null && haversineKm(previous.lat, previous.lon, userLocation.lat, userLocation.lon) < 0.2;
+    if (sameSpot && fieldHours.current === filter.hours && fieldPlace) return;
+    fieldHours.current = filter.hours;
+    lastStreetFix.current = userLocation;
+    if (!previous) setFocus({ lon: userLocation.lon, lat: userLocation.lat, nonce: Date.now(), zoom: 13 });
+    let cancelled = false;
+    setStreetStatus("loading");
+    const params = new URLSearchParams({
+      lat: String(userLocation.lat),
+      lon: String(userLocation.lon),
+      radiusKm: "8",
+      hours: String(filter.hours),
+    });
+    fetch(`/api/place?${params}`)
+      .then(async (response) => {
+        const payload = (await response.json()) as PlaceHistory & { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Score unavailable");
+        if (!cancelled) {
+          setFieldPlace(payload);
+          setFieldError(null);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setFieldError(reason instanceof Error ? reason.message : "Score unavailable");
+      });
+    fetch(`/api/geocode?lat=${userLocation.lat}&lon=${userLocation.lon}`)
+      .then((response) => response.json())
+      .then((payload: { street?: string | null }) => {
+        if (cancelled) return;
+        setStreet(payload.street ?? null);
+        setStreetStatus(payload.street ? "ok" : "unavailable");
+      })
+      .catch(() => {
+        if (!cancelled) setStreetStatus("unavailable");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [section, userLocation, filter.hours, fieldPlace]);
+
   const filtered = useMemo(() => applyReportFilter(reports, filter), [reports, filter]);
   const selected = filtered.find((report) => report.id === selectedId) ?? null;
   const points = useMemo(() => reportsToPointCollection(filtered), [filtered]);
@@ -197,16 +347,33 @@ export default function HailApp() {
   const swaths = useMemo(
     () =>
       reportsToSwaths(
-        filtered.map((report) => ({
-          id: report.id,
-          lat: report.lat,
-          lon: report.lon,
-          occurredAt: report.occurredAt,
-          sizeIn: report.sizeIn,
-          confidence: report.confidence,
-        })),
+        filtered
+          .filter((report) => hazardOf(report.hazard) === "hail")
+          .map((report) => ({
+            id: report.id,
+            lat: report.lat,
+            lon: report.lon,
+            occurredAt: report.occurredAt,
+            sizeIn: report.sizeIn,
+            confidence: report.confidence,
+          })),
       ),
     [filtered],
+  );
+  const heat = useMemo(
+    () => (showHeat ? damageHeatGrid(filtered, { swaths }) : null),
+    [showHeat, filtered, swaths],
+  );
+  const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: pins.map((pin) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [pin.lon, pin.lat] },
+        properties: { id: pin.id, status: pin.status },
+      })),
+    }),
+    [pins],
   );
 
   function toggleTheme() {
@@ -219,7 +386,7 @@ export default function HailApp() {
     if (meta) meta.setAttribute("content", next === "dark" ? "#0e141c" : "#f3f6fb");
   }
 
-  function frameFilter(next: ReportFilter) {
+  function frameFilter(next: typeof filter) {
     const bounds = boundsOf(applyReportFilter(reports, next));
     if (!bounds) return;
     setFrame({ ...bounds, nonce: Date.now() });
@@ -238,14 +405,110 @@ export default function HailApp() {
     frameFilter(next);
   }
 
+  function toggleHazard(id: (typeof HAZARD_OPTIONS)[number]["id"]) {
+    setFilter((current) => {
+      const hazards = current.hazards ?? ["hail", "wind", "tornado"];
+      const has = hazards.includes(id);
+      const next = has ? hazards.filter((item) => item !== id) : [...hazards, id];
+      return { ...current, hazards: next.length ? next : hazards };
+    });
+  }
+
   function toggleConfidence(id: Confidence) {
     setFilter((current) => {
       const has = current.confidences.includes(id);
-      const confidences = has
-        ? current.confidences.filter((item) => item !== id)
-        : [...current.confidences, id];
+      const confidences = has ? current.confidences.filter((item) => item !== id) : [...current.confidences, id];
       return { ...current, confidences: confidences.length ? confidences : current.confidences };
     });
+  }
+
+  function chooseAddress(hit: AddressHit) {
+    setPlaceLabel(hit.label);
+    setPlacePoint({ lat: hit.lat, lon: hit.lon });
+    setPlace(null);
+    setPlaceCardOpen(true);
+    setFocus({ lon: hit.lon, lat: hit.lat, nonce: Date.now(), zoom: 12 });
+    setSelectedId(null);
+  }
+
+  async function saveWatch() {
+    if (!user || !placePoint || !placeLabel) {
+      setAuthOpen(true);
+      return;
+    }
+    const response = await fetch("/api/watch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: placeLabel, query: placeLabel, lat: placePoint.lat, lon: placePoint.lon, radiusKm }),
+    });
+    const payload = (await response.json()) as { place?: WatchItem; error?: string };
+    if (response.ok && payload.place) setWatch((current) => [payload.place as WatchItem, ...current]);
+  }
+
+  async function removeWatch(id: string) {
+    const response = await fetch(`/api/watch/${id}`, { method: "DELETE" });
+    if (response.ok) setWatch((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function markPin(statusPin: PinStatus, note: string) {
+    const point = userLocation ?? placePoint;
+    if (!point) return;
+    const response = await fetch("/api/field/pins", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lat: point.lat, lon: point.lon, status: statusPin, note }),
+    });
+    const payload = (await response.json()) as { pin?: FieldPin; error?: string };
+    if (!response.ok || !payload.pin) return;
+    setPins((current) => [payload.pin as FieldPin, ...current]);
+    setSelectedPinId(payload.pin.id);
+    setFocus({ lon: payload.pin.lon, lat: payload.pin.lat, nonce: Date.now(), zoom: 15 });
+  }
+
+  async function uploadFieldPhoto(pinId: string, file: File, damageType: string, note: string) {
+    const body = new FormData();
+    body.set("photo", file);
+    body.set("damageType", damageType);
+    body.set("note", note);
+    body.set("takenAt", new Date().toISOString());
+    const response = await fetch(`/api/field/pins/${pinId}/photos`, { method: "POST", body });
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(payload.error ?? "Could not save that photo");
+    const refreshed = await fetch("/api/field/pins");
+    const list = (await refreshed.json()) as { pins?: FieldPin[] };
+    setPins(list.pins ?? []);
+  }
+
+  async function generateReport(kind: "address" | "view") {
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      const body =
+        kind === "address" && placePoint && placeLabel
+          ? { label: placeLabel, lat: placePoint.lat, lon: placePoint.lon, radiusKm, hours: filter.hours }
+          : viewBounds
+            ? { label: "Map view", bounds: viewBounds, hours: filter.hours }
+            : null;
+      if (!body) throw new Error(kind === "address" ? "Search an address first." : "Open the map so a view can be saved.");
+      const response = await fetch("/api/storm-reports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json()) as { url?: string; error?: string; report?: { title: string; id: string; createdAt: string } };
+      if (!response.ok || !payload.url) throw new Error(payload.error ?? "Could not build that report");
+      setReportUrl(payload.url);
+      if (payload.report && user) {
+        setSavedReports((current) => [
+          { id: payload.report?.id ?? "", title: payload.report?.title ?? "Storm report", createdAt: payload.report?.createdAt ?? new Date().toISOString() },
+          ...current,
+        ]);
+      }
+    } catch (reason) {
+      setReportError(reason instanceof Error ? reason.message : "Could not build that report");
+    } finally {
+      setReportBusy(false);
+    }
   }
 
   async function onImport(file: File) {
@@ -262,12 +525,6 @@ export default function HailApp() {
     setReloadKey((value) => value + 1);
   }
 
-  function closeReport() {
-    setReportOpen(false);
-    setPicking(false);
-    setDraftPin(null);
-  }
-
   function onPhotoSubmitted(report: HailReport) {
     setReports((current) => [report, ...current.filter((item) => item.id !== report.id)]);
     setRawCount((count) => count + 1);
@@ -275,571 +532,391 @@ export default function HailApp() {
       ...current,
       minSize: report.sizeIn != null && report.sizeIn < current.minSize ? 0 : current.minSize,
       state: current.state && (report.state ?? "").toUpperCase() !== current.state ? "" : current.state,
-      confidences: current.confidences.includes("community")
-        ? current.confidences
-        : [...current.confidences, "community"],
+      confidences: current.confidences.includes("community") ? current.confidences : [...current.confidences, "community"],
     }));
     setSelectedId(report.id);
-    setCounty(null);
-    setThreat(null);
     setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 11 });
-    setSheetOpen(true);
-    closeReport();
+    setSection("map");
+    setReportOpen(false);
+    setPicking(false);
+    setDraftPin(null);
     setReloadKey((value) => value + 1);
   }
 
+  async function signOut() {
+    await fetch("/api/auth/session", { method: "DELETE" });
+    setUser(null);
+  }
+
   const folded = Math.max(0, rawCount - reports.length);
-  const advancedOn =
-    filter.confidences.length !== CONFIDENCE_OPTIONS.length ||
-    showIncome ||
-    !showPoints ||
-    !showSwaths ||
-    !showThreats ||
-    !showOutlook;
-  const hasSignificant = Boolean(
-    threats?.features.some((feature) => feature.properties?.kind === "significant"),
-  );
+  const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
+  const showMap = section === "map" || section === "field";
+  const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
 
   return (
-    <div className="map-shell relative h-[100dvh] overflow-hidden bg-app text-ink">
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-line bg-panel px-3 py-2 shadow-sheet">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-sm font-bold text-accentink" aria-hidden>
-            H
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold leading-tight">HailMap</p>
-            <p className="truncate text-xs text-muted">
-              {loading ? "Loading reports…" : `${filtered.length} ${filtered.length === 1 ? "report" : "reports"}`}
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-pressed={theme === "dark"}
-          aria-label={theme === "dark" ? "Switch to light map" : "Switch to dark map"}
-          className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-medium shadow-sheet"
-        >
-          {theme === "dark" ? "Light" : "Dark"}
-        </button>
-        <Link
-          href="/privacy"
-          className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-medium shadow-sheet"
-        >
-          Privacy
-        </Link>
-      </header>
-
-      <div className="absolute inset-0">
-        <HailMap
-          theme={theme}
-          points={points}
-          swaths={swaths}
-          income={income}
-          threats={threats}
-          showPoints={showPoints}
-          showSwaths={showSwaths}
-          showIncome={showIncome}
-          showThreats={showThreats}
-          showOutlook={showOutlook}
-          selectedId={selectedId}
-          focus={focus}
-          frame={frame}
-          draftPin={draftPin}
-          pickMode={picking}
-          blockSelection={reportOpen}
-          onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
-          onSelectReport={(id) => {
-            setSelectedId(id);
-            setCounty(null);
-            setThreat(null);
-            setSheetOpen(true);
-          }}
-          onSelectCounty={(info) => {
-            setCounty(info);
-            setSelectedId(null);
-            setThreat(null);
-            setSheetOpen(true);
-          }}
-          onSelectThreat={(info) => {
-            setThreat(info);
-            setSelectedId(null);
-            setCounty(null);
-            setSheetOpen(true);
-          }}
-        />
-      </div>
-
-      {stateCounts.length ? (
-        <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
-          <div
-            className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-1"
-            role="toolbar"
-            aria-label="Jump to a state"
-          >
-            <span className="shrink-0 rounded-full border border-line bg-panel px-2.5 py-1.5 text-xs font-semibold shadow-sheet">
-              Go to
-            </span>
-            {filter.state ? (
+    <AppShell
+      section={section}
+      onSection={setSection}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      userName={user?.name ?? null}
+      authConfigured={authConfigured}
+      onSignIn={() => setAuthOpen(true)}
+      onSignOut={() => void signOut()}
+    >
+      {showMap ? (
+        <div className="absolute inset-0">
+          <HailMap
+            theme={theme}
+            points={points}
+            swaths={swaths}
+            income={income}
+            threats={threats}
+            showPoints={showPoints}
+            showSwaths={showSwaths}
+            showIncome={showIncome}
+            showThreats={showThreats}
+            showOutlook={showOutlook}
+            showHeat={showHeat}
+            heat={heat}
+            userLocation={section === "field" ? userLocation : null}
+            fieldPins={user ? fieldCollection : null}
+            selectedId={selectedId}
+            focus={focus}
+            frame={frame}
+            draftPin={draftPin}
+            pickMode={picking}
+            blockSelection={reportOpen}
+            onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
+            onSelectReport={(id) => {
+              setSelectedId(id);
+              setCounty(null);
+              setThreat(null);
+            }}
+            onSelectFieldPin={(id) => {
+              setSelectedPinId(id);
+              setSection("field");
+            }}
+            onSelectCounty={(info) => {
+              setCounty(info);
+              setSelectedId(null);
+              setThreat(null);
+            }}
+            onSelectThreat={(info) => {
+              setThreat(info);
+              setSelectedId(null);
+              setCounty(null);
+            }}
+            onViewChange={setViewBounds}
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))]">
+            <div className="pointer-events-auto flex items-start gap-2">
+              <AddressSearch onPick={chooseAddress} />
               <button
                 type="button"
-                onClick={() => setStateFilter("")}
-                className="shrink-0 rounded-full border border-line bg-panel px-3 py-1.5 text-sm font-medium shadow-sheet"
+                onClick={() => setFiltersOpen(true)}
+                className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-semibold shadow-sheet"
               >
-                All states
+                Filters
               </button>
-            ) : null}
-            {stateCounts.map(([code, count]) => {
-              const on = filter.state === code;
-              return (
-                <button
-                  key={code}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setStateFilter(on ? "" : code)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sheet ${
-                    on ? "bg-accent text-accentink" : "border border-line bg-panel"
-                  }`}
-                >
-                  {code} {count}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {error ? (
-        <p className="map-banner absolute inset-x-3 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
-          {error}
-        </p>
-      ) : null}
-
-      {showOutlook && !reportOpen ? (
-        <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
-          <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-line bg-panel px-3 py-2 text-xs shadow-sheet">
-            <span className="font-semibold">Day 1</span>
-            {OUTLOOK_LEVELS.map((level) => (
-              <LegendSwatch key={level.category} label={level.label} fill={level.fill} />
-            ))}
-            {hasSignificant ? <LegendSwatch label="Significant" fill={SIGNIFICANT_COLOR} dashed /> : null}
-          </div>
-        </div>
-      ) : null}
-
-      {picking ? (
-        <p className="pointer-events-none absolute left-1/2 top-[36%] z-20 -translate-x-1/2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accentink shadow-sheet">
-          Tap the map to place the pin
-        </p>
-      ) : null}
-
-      {!loading && filtered.length === 0 && !reportOpen ? (
-        <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(20rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl bg-panel px-4 py-3 text-center text-sm text-muted shadow-sheet">
-          {emptyWindowMessage(filter.hours)}
-        </p>
-      ) : null}
-
-      {reportOpen ? (
-        <PhotoReportSheet
-          pin={draftPin}
-          onPinChange={setDraftPin}
-          onPickingChange={setPicking}
-          onFocus={setFocus}
-          onClose={closeReport}
-          onSubmitted={onPhotoSubmitted}
-        />
-      ) : null}
-
-      <section className={`absolute inset-x-0 bottom-0 z-30 ${reportOpen ? "hidden" : ""}`}>
-        <div className="mx-auto w-full max-w-3xl rounded-t-3xl border border-line bg-panel shadow-sheet">
-          <div className={`px-4 pt-2 ${sheetOpen ? "pb-2" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}>
-            <button
-              type="button"
-              className="flex w-full flex-col items-center gap-1"
-              aria-expanded={sheetOpen}
-              onClick={() => setSheetOpen((open) => !open)}
-            >
-              <span className="h-1.5 w-10 rounded-full bg-line" />
-              <span className="flex w-full items-baseline justify-between gap-3">
-                <span className="text-sm font-semibold">
-                  {loading ? "Loading reports…" : `${filtered.length} hail ${filtered.length === 1 ? "report" : "reports"}`}
-                </span>
-                <span className="text-sm font-medium text-accent">{sheetOpen ? "Hide list" : "Show list"}</span>
-              </span>
-              <span className="w-full text-left text-xs text-muted">
-                {windowPhrase(filter.hours)}
-                {filter.state ? ` · ${filter.state}` : ""}
-                {" · "}
-                {sizePhrase(filter.minSize)}
-              </span>
-            </button>
-            <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="Time window">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm font-medium shadow-sheet md:hidden"
+              >
+                {theme === "dark" ? "Light" : "Dark"}
+              </button>
+            </div>
+            <div className="pointer-events-auto flex gap-2" role="group" aria-label="Hazards">
+              {HAZARD_OPTIONS.map((option) => {
+                const on = hazards.includes(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleHazard(option.id)}
+                    className={`rounded-full px-3 py-1.5 text-sm font-semibold shadow-sheet ${
+                      on ? "bg-accent text-accentink" : "border border-line bg-panel text-muted"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="pointer-events-auto flex gap-1 overflow-x-auto" role="group" aria-label="Time window">
               {TIME_WINDOWS.map((item) => (
                 <button
                   key={item.hours}
                   type="button"
                   aria-pressed={filter.hours === item.hours}
-                  aria-label={item.hours === LIVE_WINDOW_HOURS ? `Live, ${item.detail}` : item.label}
                   onClick={() => setHours(item.hours)}
-                  className={`rounded-full px-1 py-1.5 text-sm ${
-                    filter.hours === item.hours ? "bg-accent font-semibold text-accentink" : "border border-line"
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm shadow-sheet ${
+                    filter.hours === item.hours ? "bg-accent font-semibold text-accentink" : "border border-line bg-panel"
                   }`}
                 >
-                  {item.hours === LIVE_WINDOW_HOURS ? "Live · 45m" : item.label}
+                  {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setDraftPin(null);
-                setPicking(false);
-                setReportOpen(true);
-              }}
-              className="mt-2 w-full rounded-2xl bg-accent px-3 py-2.5 text-sm font-semibold text-accentink"
-            >
-              Report hail
-            </button>
           </div>
-          {sheetOpen ? (
-            <div className="max-h-[58dvh] space-y-4 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {selected ? (
-                <article className="rounded-2xl border border-line bg-app p-3">
-                  <p className="text-sm font-semibold">
-                    {selected.location || selected.county || selected.state
-                      ? placeLabel(selected)
-                      : `${selected.lat.toFixed(3)}, ${selected.lon.toFixed(3)}`}
-                  </p>
-                  {selected.photoUrl ? <p className="text-xs font-medium text-accent">Community photo</p> : null}
-                  <p className="text-sm text-muted">
-                    {selected.sizeIn != null ? `${selected.sizeIn.toFixed(2)} in` : "Size unknown"} ·{" "}
-                    {confidenceLabel(selected.confidence)} · {formatWhen(selected.occurredAt)}
-                  </p>
-                  {selected.photoUrl ? (
-                    <a href={selected.photoUrl} target="_blank" rel="noreferrer" className="mt-2 block">
-                      <img
-                        src={selected.photoUrl}
-                        alt={`Hail photo, ${placeLabel(selected)}`}
-                        className="max-h-64 w-full rounded-xl bg-panel object-cover"
-                      />
-                    </a>
-                  ) : null}
-                  {selected.remark ? <p className="mt-1 text-sm">{selected.remark}</p> : null}
-                  {selected.damageTags.length ? (
-                    <p className="mt-2 flex flex-wrap gap-1">
-                      {selected.damageTags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-panel px-2 py-0.5 text-xs text-muted">
-                          {tag}
-                        </span>
-                      ))}
-                    </p>
-                  ) : null}
-                </article>
-              ) : null}
-              {threat ? (
-                <article className="rounded-2xl border border-line bg-app p-3 text-sm">
-                  <p className="text-xs font-medium text-accent">
-                    {threat.kind === "outlook" || threat.kind === "significant"
-                      ? "Day 1 outlook"
-                      : "National Weather Service"}
-                  </p>
-                  <p className="font-semibold">{threat.event}</p>
-                  <p className="text-muted">{threatWhen(threat)}</p>
-                  {threat.hazard ? <p className="mt-1">{threat.hazard}</p> : null}
-                  {threat.area ? <p className="mt-1 line-clamp-3 text-muted">{threat.area}</p> : null}
-                </article>
-              ) : null}
-              {county ? (
-                <article className="rounded-2xl border border-line bg-app p-3 text-sm">
-                  <p className="font-semibold">County {county.fips ?? ""}</p>
-                  <p className="text-muted">
-                    Median household income:{" "}
-                    {county.income != null
-                      ? county.income.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
-                      : "not in the ACS cache"}
-                  </p>
-                </article>
-              ) : null}
-
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Smallest hail to show</span>
-                <span className="mb-1 block text-muted">{sizePhrase(filter.minSize)}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={4}
-                  step={0.25}
-                  value={filter.minSize}
-                  onChange={(event) =>
-                    setFilter((current) => ({ ...current, minSize: Number(event.target.value) }))
-                  }
-                  className="w-full accent-teal-700"
-                />
-              </label>
-
-              <div>
-                <p className="mb-1 text-sm font-medium">Hail size</p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {[
-                    ["#16a34a", "< 1 in"],
-                    ["#ca8a04", "1 in"],
-                    ["#ea580c", "Golf ball"],
-                    ["#dc2626", "Tennis ball"],
-                    ["#7c3aed", "Softball"],
-                  ].map(([color, label]) => (
-                    <span key={label} className="inline-flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-2xl border border-line px-3 py-2 text-sm font-medium"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((open) => !open)}
-              >
-                <span>More filters</span>
-                <span className="text-muted">{moreOpen ? "Hide" : advancedOn ? "On" : "Show"}</span>
-              </button>
-
-              {moreOpen ? (
-                <div className="space-y-4">
-                  <div>
-                    <p className="mb-1 text-sm font-medium">Report sources</p>
-                    <p className="mb-2 text-xs text-muted">
-                      Official reports come from the weather service. Radar is an estimate. Community is a file, a private feed, or a photo you add with Report hail.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {CONFIDENCE_OPTIONS.map((option) => {
-                        const on = filter.confidences.includes(option.id);
-                        return (
-                          <button
-                            key={option.id}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() => toggleConfidence(option.id)}
-                            className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent text-accentink" : "border border-line text-muted"}`}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Map layers</p>
-                    <div className="flex flex-wrap gap-2">
-                      <LayerButton on={showPoints} label="Hail reports" onClick={() => setShowPoints((value) => !value)} />
-                      <LayerButton on={showSwaths} label="Hail areas" onClick={() => setShowSwaths((value) => !value)} />
-                      <LayerButton on={showThreats} label="Threats" onClick={() => setShowThreats((value) => !value)} />
-                      <LayerButton on={showOutlook} label="Outlook" onClick={() => setShowOutlook((value) => !value)} />
-                      <LayerButton on={showIncome} label="County income" onClick={() => setShowIncome((value) => !value)} />
-                    </div>
-                    {showIncome ? (
-                      <p className="mt-2 text-xs text-muted">
-                        County shading is median household income. Lighter blue is lower.
-                        {incomeError ? " Income data is unavailable right now." : ""}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-xs text-muted">Hail areas group nearby reports from the same storm.</p>
-                    )}
-                    {showThreats || showOutlook ? (
-                      <div className="mt-2 space-y-2">
-                        <p className="text-xs text-muted">
-                          {showThreats
-                            ? "Threats are active tornado and severe thunderstorm watches and warnings, plus hail statements. "
-                            : ""}
-                          {showOutlook ? "Outlook is the Storm Prediction Center Day 1 severe risk." : ""}
-                          {showThreats && threatStatus?.nws === "empty" ? " No severe watches or warnings are active." : ""}
-                          {showThreats && (threatError || threatStatus?.nws === "error")
-                            ? " Watches and warnings are unavailable right now."
-                            : ""}
-                          {showOutlook && threatStatus?.spc === "empty" ? " No Day 1 severe risk is outlined." : ""}
-                          {showOutlook && (threatError || threatStatus?.spc === "error")
-                            ? " The Day 1 outlook is unavailable right now."
-                            : ""}
-                        </p>
-                        {showOutlook ? (
-                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                            {OUTLOOK_LEVELS.map((level) => (
-                              <LegendSwatch key={level.category} label={level.label} fill={level.fill} />
-                            ))}
-                            <LegendSwatch label="Significant severe" fill={SIGNIFICANT_COLOR} dashed />
-                          </div>
-                        ) : null}
-                        {showThreats ? (
-                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                            {THREAT_LEGEND.map((item) => (
-                              <LegendSwatch key={item.event} label={item.label} fill={item.fill} dashed={item.dashed} />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium">State code</span>
-                    <input
-                      value={filter.state}
-                      maxLength={2}
-                      placeholder="Any"
-                      aria-label="State code"
-                      onChange={(event) => {
-                        const state = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
-                        if (state.length === 2 || state.length === 0) setStateFilter(state);
-                        else setFilter((current) => ({ ...current, state }));
-                      }}
-                      className="w-24 rounded-xl border border-line bg-app px-3 py-2 uppercase"
-                    />
-                  </label>
-
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium">Add reports from a file</span>
-                    <span className="mb-1 block text-xs text-muted">CSV or GeoJSON. This does not read social media.</span>
-                    <input
-                      type="file"
-                      accept=".csv,.json,.geojson,text/csv,application/json,application/geo+json"
-                      className="block w-full text-sm text-muted"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void onImport(file);
-                        event.target.value = "";
-                      }}
-                    />
-                    {importNote ? <span className="mt-1 block text-xs text-muted">{importNote}</span> : null}
-                  </label>
-
-                  <div>
-                    <p className="mb-1 text-sm font-medium">Live feeds</p>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted">
-                      <FeedPill label="Storm Prediction Center" status={status?.spc} />
-                      <FeedPill label="Local storm reports" status={status?.iem} />
-                      <FeedPill label="Weather service" status={status?.nws} />
-                      <FeedPill label="Watches and warnings" status={threatError ? "error" : threatStatus?.nws} />
-                      <FeedPill label="Day 1 outlook" status={threatError ? "error" : threatStatus?.spc} />
-                      <FeedPill label="Radar" status={status?.mesh} />
-                      {syncedAt ? <span>Updated {formatWhen(syncedAt)}</span> : null}
-                    </div>
-                    {folded > 0 ? (
-                      <p className="mt-2 text-xs text-muted">{folded} duplicate reports were combined.</p>
-                    ) : null}
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
-                      Published local storm reports stay Official or Spotter, even when they mention the public or mPING.
-                      Photo reports stay on their own pins. HailMap does not scrape social networks.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-
-              <div>
-                <h2 className="mb-1 text-sm font-medium">Reports</h2>
-                <ul className="divide-y divide-line">
-                {filtered.slice(0, 200).map((report) => (
-                  <li key={report.id}>
+          {stateCounts.length ? (
+            <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3">
+              <div className="pointer-events-auto flex gap-2 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
+                {stateCounts.slice(0, 12).map(([code, count]) => {
+                  const on = filter.state === code;
+                  return (
                     <button
+                      key={code}
                       type="button"
-                      className="flex w-full items-start justify-between gap-3 py-2 text-left"
-                      onClick={() => {
-                        setSelectedId(report.id);
-                        setCounty(null);
-                        setThreat(null);
-                        setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now() });
-                      }}
+                      aria-pressed={on}
+                      onClick={() => setStateFilter(on ? "" : code)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold shadow-sheet ${
+                        on ? "bg-accent text-accentink" : "border border-line bg-panel"
+                      }`}
                     >
-                      <span className="flex min-w-0 items-start gap-2">
-                        {report.photoUrl ? (
-                          <img src={report.photoUrl} alt="" className="mt-0.5 h-10 w-10 shrink-0 rounded-lg object-cover" />
-                        ) : null}
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium">
-                            {report.location || report.county || report.state
-                              ? placeLabel(report)
-                              : `${report.lat.toFixed(3)}, ${report.lon.toFixed(3)}`}
-                          </span>
-                          <span className="block text-xs text-muted">
-                            {formatWhen(report.occurredAt)} · {confidenceLabel(report.confidence)}
-                            {report.photoUrl ? " · photo" : ""}
-                          </span>
-                        </span>
-                      </span>
-                      <span className="text-sm font-semibold">
-                        {report.sizeIn != null ? `${report.sizeIn.toFixed(2)}″` : "—"}
-                      </span>
+                      {code} {count}
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  );
+                })}
               </div>
             </div>
           ) : null}
+          {error ? (
+            <p className="map-banner absolute inset-x-3 z-20 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-muted shadow-sheet">
+              {error}
+            </p>
+          ) : null}
+          {showOutlook && !reportOpen && section === "map" && !place && !selected && !threat ? (
+            <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
+              <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-line bg-panel px-3 py-2 text-xs shadow-sheet">
+                <span className="font-semibold">Day 1</span>
+                {OUTLOOK_LEVELS.map((level) => (
+                  <span key={level.category} className="inline-flex items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: level.fill }} />
+                    {level.label}
+                  </span>
+                ))}
+                {hasSignificant ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed" style={{ borderColor: SIGNIFICANT_COLOR }} />
+                    Significant
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {!loading && filtered.length === 0 && !reportOpen ? (
+            <p className="pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl bg-panel px-4 py-3 text-center text-sm text-muted shadow-sheet">
+              {hazards.length === 1 && hazards[0] === "hail" ? emptyWindowMessage(filter.hours) : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
+            </p>
+          ) : null}
+          {section === "map" && placeCardOpen && place && placeLabel ? (
+            <div className="absolute inset-x-3 bottom-3 z-30 max-h-[48%] overflow-y-auto">
+              <PropertyCard
+                label={placeLabel}
+                history={place}
+                mesh={status?.mesh}
+                onClose={() => setPlaceCardOpen(false)}
+                onSave={() => void saveWatch()}
+                onReport={() => {
+                  setSection("reports");
+                  void generateReport("address");
+                }}
+              />
+            </div>
+          ) : null}
+          {section === "map" && !(placeCardOpen && place) && (selected || threat || county) ? (
+            <div className="absolute inset-x-3 bottom-3 z-30">
+              <article className="rounded-3xl border border-line bg-panel p-4 shadow-sheet">
+                {selected ? (
+                  <>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+                      {hazardOf(selected.hazard)} · {selected.photoUrl ? "Community photo" : confidenceLabel(selected.confidence)}
+                    </p>
+                    <p className="text-base font-semibold">{placeLabelOf(selected)}</p>
+                    <p className="text-sm text-muted">
+                      {magnitudeLabel(selected)} · {formatWhen(selected.occurredAt)}
+                    </p>
+                    {selected.photoUrl ? (
+                      <img src={selected.photoUrl} alt="Community hail photo" className="mt-2 max-h-40 w-full rounded-xl object-cover" />
+                    ) : null}
+                    {selected.remark ? <p className="mt-2 text-sm">{selected.remark}</p> : null}
+                  </>
+                ) : null}
+                {threat ? (
+                  <>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-accent">{threat.event}</p>
+                    {threat.hazard ? <p className="mt-1 text-sm">{threat.hazard}</p> : null}
+                  </>
+                ) : null}
+                {county ? (
+                  <p className="text-sm">
+                    Median household income{" "}
+                    {county.income != null
+                      ? county.income.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+                      : "is not in the ACS cache"}
+                  </p>
+                ) : null}
+              </article>
+            </div>
+          ) : null}
+          {section === "field" ? (
+            <div className="absolute inset-x-0 bottom-0 z-30">
+              <FieldSheet
+                gpsError={gpsError}
+                street={street}
+                streetStatus={streetStatus}
+                history={fieldPlace}
+                historyError={fieldError}
+                signedIn={Boolean(user)}
+                pins={pins}
+                selectedPinId={selectedPinId}
+                onSignIn={() => setAuthOpen(true)}
+                onMark={(statusPin, note) => void markPin(statusPin, note)}
+                onSelectPin={(id) => {
+                  setSelectedPinId(id);
+                  const pin = pins.find((item) => item.id === id);
+                  if (pin) setFocus({ lon: pin.lon, lat: pin.lat, nonce: Date.now(), zoom: 16 });
+                }}
+                onUpload={uploadFieldPhoto}
+              />
+            </div>
+          ) : null}
+          {filtersOpen ? (
+            <MapFilters
+              filter={filter}
+              onFilter={(next) => {
+                const stateChanged = next.state !== filter.state && (next.state.length === 2 || next.state.length === 0);
+                setFilter(next);
+                if (stateChanged) frameFilter(next);
+              }}
+              onToggleConfidence={toggleConfidence}
+              showPoints={showPoints}
+              showSwaths={showSwaths}
+              showThreats={showThreats}
+              showOutlook={showOutlook}
+              showIncome={showIncome}
+              showHeat={showHeat}
+              onToggle={(key) => {
+                if (key === "points") setShowPoints((value) => !value);
+                if (key === "swaths") setShowSwaths((value) => !value);
+                if (key === "threats") setShowThreats((value) => !value);
+                if (key === "outlook") setShowOutlook((value) => !value);
+                if (key === "income") setShowIncome((value) => !value);
+                if (key === "heat") setShowHeat((value) => !value);
+              }}
+              incomeError={incomeError}
+              threatError={threatError}
+              threatStatus={threatStatus}
+              status={status}
+              syncedAt={syncedAt}
+              folded={folded}
+              importNote={importNote}
+              onImport={(file) => void onImport(file)}
+              onCommunityPhoto={() => {
+                setFiltersOpen(false);
+                setDraftPin(null);
+                setReportOpen(true);
+              }}
+              onClose={() => setFiltersOpen(false)}
+            />
+          ) : null}
+          {reportOpen ? (
+            <PhotoReportSheet
+              pin={draftPin}
+              onPinChange={setDraftPin}
+              onPickingChange={setPicking}
+              onFocus={setFocus}
+              onClose={() => {
+                setReportOpen(false);
+                setPicking(false);
+                setDraftPin(null);
+              }}
+              onSubmitted={onPhotoSubmitted}
+            />
+          ) : null}
+          {loading ? (
+            <p className="pointer-events-none absolute left-3 top-36 z-10 rounded-full bg-panel px-3 py-1 text-xs text-muted shadow-sheet">
+              Loading reports…
+            </p>
+          ) : null}
         </div>
-      </section>
-    </div>
+      ) : null}
+      {section === "storms" ? (
+        <StormsPanel
+          loading={loading}
+          error={error}
+          reports={filtered}
+          filter={filter}
+          status={status}
+          syncedAt={syncedAt}
+          onSelect={(report) => {
+            setSelectedId(report.id);
+            setPlace(null);
+            setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 10 });
+            setSection("map");
+          }}
+        />
+      ) : null}
+      {section === "properties" ? (
+        <PropertiesPanel
+          radiusKm={radiusKm}
+          hours={filter.hours}
+          onRadius={setRadiusKm}
+          onHours={setHours}
+          onSearch={chooseAddress}
+          history={place}
+          label={placeLabel}
+          loading={placeLoading}
+          error={placeError}
+          mesh={status?.mesh ?? null}
+          signedIn={Boolean(user)}
+          watch={watch}
+          onSave={() => void saveWatch()}
+          onOpenWatch={(item) => {
+            setRadiusKm(item.radiusKm);
+            chooseAddress({ label: item.label, lat: item.lat, lon: item.lon, city: null, state: null });
+          }}
+          onRemoveWatch={(id) => void removeWatch(id)}
+          onReport={() => {
+            setSection("reports");
+            void generateReport("address");
+          }}
+          onShowMap={() => setSection("map")}
+        />
+      ) : null}
+      {section === "reports" ? (
+        <ReportsPanel
+          canUseView={Boolean(viewBounds)}
+          hasPlace={Boolean(placePoint && placeLabel)}
+          placeLabel={placeLabel}
+          busy={reportBusy}
+          error={reportError}
+          lastUrl={reportUrl}
+          saved={savedReports}
+          signedIn={Boolean(user)}
+          onAddress={() => void generateReport("address")}
+          onView={() => void generateReport("view")}
+        />
+      ) : null}
+      {authOpen ? (
+        <AuthDialog
+          configured={authConfigured}
+          onClose={() => setAuthOpen(false)}
+          onSignedIn={(next) => {
+            setUser(next);
+            setAuthOpen(false);
+          }}
+        />
+      ) : null}
+    </AppShell>
   );
 }
 
-function threatWhen(threat: ThreatInfo): string {
-  const office = threat.office;
-  if (!threat.until) return office;
-  const when = formatUntil(threat.until);
-  if (!when) return office;
-  const prefix = threat.kind === "outlook" || threat.kind === "significant" ? "valid until" : "until";
-  return office ? `${office} · ${prefix} ${when}` : `${prefix} ${when}`;
-}
-
-function formatUntil(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
-}
-
-function LegendSwatch({ label, fill, dashed = false }: { label: string; fill: string; dashed?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span
-        className="inline-block h-2.5 w-2.5 rounded-sm"
-        style={{
-          background: dashed ? "transparent" : fill,
-          border: `2px ${dashed ? "dashed" : "solid"} ${fill}`,
-        }}
-      />
-      {label}
-    </span>
-  );
-}
-
-function LayerButton({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm ${
-        on ? "bg-accent text-accentink" : "border border-line text-muted"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function FeedPill({ label, status }: { label: string; status?: string }) {
-  return (
-    <span className="rounded-full border border-line px-2 py-0.5">
-      {label}: {feedPhrase(status)}
-    </span>
-  );
+function placeLabelOf(report: HailReport): string {
+  return report.location || report.county || report.state
+    ? placeLabel(report)
+    : `${report.lat.toFixed(3)}, ${report.lon.toFixed(3)}`;
 }

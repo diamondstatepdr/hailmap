@@ -3,6 +3,7 @@ import { parseCsv } from "@/lib/csv";
 import { extractDamageTags } from "@/lib/damage";
 import { upsertReports } from "@/lib/db";
 import { validLatLon } from "@/lib/geo";
+import { hazardOf } from "@/lib/hazard";
 import { stableId } from "@/lib/ids";
 import { PHOTO_FILENAME_RE, photoUrlFor } from "@/lib/photos";
 import { parseHailSizeInches } from "@/lib/size";
@@ -149,10 +150,13 @@ export function toHailReport(report: IncomingReport): HailReport {
     id: `${report.source}:${report.externalId}`,
     source: report.source,
     confidence: report.confidence,
+    hazard: hazardOf(report.hazard),
     lat: report.lat,
     lon: report.lon,
     sizeIn: report.sizeIn,
     sizeRaw: report.sizeRaw,
+    windMph: report.windMph ?? null,
+    efRating: report.efRating ?? null,
     occurredAt: report.occurredAt,
     location: report.location,
     county: report.county,

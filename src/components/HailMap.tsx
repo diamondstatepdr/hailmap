@@ -20,24 +20,60 @@ const states = stateOverlay as FeatureCollection;
 const LIGHT_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
-const sizeColor = [
+const hailSizeColor = [
+  "interpolate",
+  ["linear"],
+  ["get", "sizeIn"],
+  0.25,
+  "#16a34a",
+  1,
+  "#ca8a04",
+  1.75,
+  "#ea580c",
+  2.5,
+  "#dc2626",
+  4,
+  "#7c3aed",
+];
+
+const windColor = [
+  "interpolate",
+  ["linear"],
+  ["get", "windMph"],
+  40,
+  "#93c5fd",
+  58,
+  "#3b82f6",
+  70,
+  "#1d4ed8",
+  90,
+  "#1e3a8a",
+];
+
+const pointColor = [
   "case",
-  ["==", ["typeof", ["get", "sizeIn"]], "number"],
+  ["==", ["get", "hazard"], "tornado"],
   [
-    "interpolate",
-    ["linear"],
-    ["get", "sizeIn"],
-    0.25,
-    "#16a34a",
-    1,
-    "#ca8a04",
-    1.75,
-    "#ea580c",
-    2.5,
-    "#dc2626",
-    4,
-    "#7c3aed",
+    "match",
+    ["get", "efRating"],
+    "EF0",
+    "#fb7185",
+    "EF1",
+    "#e11d48",
+    "EF2",
+    "#be123c",
+    "EF3",
+    "#9f1239",
+    "EF4",
+    "#881337",
+    "EF5",
+    "#4c0519",
+    "#e11d48",
   ],
+  ["==", ["get", "hazard"], "wind"],
+  ["case", ["==", ["typeof", ["get", "windMph"]], "number"], windColor, "#60a5fa"],
+  ["==", ["typeof", ["get", "sizeIn"]], "number"],
+  hailSizeColor,
   "#64748b",
 ];
 
@@ -107,6 +143,10 @@ interface Props {
   showIncome: boolean;
   showThreats: boolean;
   showOutlook: boolean;
+  showHeat?: boolean;
+  heat?: GeoJSON.FeatureCollection | null;
+  userLocation?: { lat: number; lon: number } | null;
+  fieldPins?: GeoJSON.FeatureCollection | null;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -115,8 +155,10 @@ interface Props {
   blockSelection: boolean;
   onPickLocation: (lon: number, lat: number) => void;
   onSelectReport: (id: string) => void;
+  onSelectFieldPin?: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
   onSelectThreat: (info: ThreatInfo) => void;
+  onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }
 
 export default function HailMap({
@@ -130,6 +172,10 @@ export default function HailMap({
   showIncome,
   showThreats,
   showOutlook,
+  showHeat = false,
+  heat = null,
+  userLocation = null,
+  fieldPins = null,
   selectedId,
   focus,
   frame,
@@ -138,8 +184,10 @@ export default function HailMap({
   blockSelection,
   onPickLocation,
   onSelectReport,
+  onSelectFieldPin,
   onSelectCounty,
   onSelectThreat,
+  onViewChange,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const frameRef = useRef(frame);
@@ -156,6 +204,7 @@ export default function HailMap({
     showOutlook ? "outlook-fill" : "",
     showOutlook ? "significant-fill" : "",
     showIncome ? "income-fill" : "",
+    fieldPins?.features.length ? "field-pins" : "",
   ].filter(Boolean);
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
@@ -243,6 +292,10 @@ export default function HailMap({
           .catch(() => undefined);
         return;
       }
+      if (feature.layer?.id === "field-pins" && props.id) {
+        onSelectFieldPin?.(String(props.id));
+        return;
+      }
       if (feature.layer?.id === "hail-points" && props.id) {
         onSelectReport(String(props.id));
         return;
@@ -271,10 +324,28 @@ export default function HailMap({
       onLoad={() => {
         quietBaseStateLayers();
         applyFrame();
+        const box = mapRef.current?.getBounds();
+        if (box) {
+          onViewChange?.({
+            west: box.getWest(),
+            south: box.getSouth(),
+            east: box.getEast(),
+            north: box.getNorth(),
+          });
+        }
       }}
       onStyleData={() => quietBaseStateLayers()}
       interactiveLayerIds={interactiveLayerIds}
       onClick={onClick}
+      onMoveEnd={(event) => {
+        const box = event.target.getBounds();
+        onViewChange?.({
+          west: box.getWest(),
+          south: box.getSouth(),
+          east: box.getEast(),
+          north: box.getNorth(),
+        });
+      }}
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();
         if (canvas) canvas.style.cursor = pickMode ? "crosshair" : event.features?.length ? "pointer" : "";
@@ -360,6 +431,18 @@ export default function HailMap({
               "line-width": 2.2,
               "line-opacity": 0.95,
               "line-dasharray": [2, 1.4],
+            }}
+          />
+        </Source>
+      ) : null}
+      {showHeat && heat?.features.length ? (
+        <Source id="damage-heat" type="geojson" data={heat}>
+          <Layer
+            id="damage-heat-fill"
+            type="fill"
+            paint={{
+              "fill-color": ["get", "fill"] as never,
+              "fill-opacity": theme === "dark" ? 0.38 : 0.45,
             }}
           />
         </Source>
@@ -540,7 +623,7 @@ export default function HailMap({
             type="circle"
             filter={["!", ["has", "point_count"]]}
             paint={{
-              "circle-color": sizeColor as never,
+              "circle-color": pointColor as never,
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 8, 6, 11, 10, 15],
               "circle-stroke-color": [
                 "case",
@@ -561,7 +644,52 @@ export default function HailMap({
               "circle-opacity": 0.96,
             }}
           />
+          <Layer
+            id="hazard-mark"
+            type="symbol"
+            filter={[
+              "all",
+              ["!", ["has", "point_count"]],
+              ["any", ["==", ["get", "hazard"], "wind"], ["==", ["get", "hazard"], "tornado"]],
+            ]}
+            layout={{
+              "text-field": ["match", ["get", "hazard"], "wind", "W", "tornado", "T", ""],
+              "text-size": 11,
+              "text-font": ["Noto Sans Bold"],
+              "text-allow-overlap": true,
+            }}
+            paint={{ "text-color": "#ffffff" }}
+          />
         </Source>
+      ) : null}
+      {fieldPins?.features.length ? (
+        <Source id="field-pins" type="geojson" data={fieldPins}>
+          <Layer
+            id="field-pins"
+            type="circle"
+            paint={{
+              "circle-color": [
+                "match",
+                ["get", "status"],
+                "damage",
+                "#be123c",
+                "talked",
+                "#0f766e",
+                "lead",
+                "#ca8a04",
+                "#64748b",
+              ],
+              "circle-radius": 8,
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            }}
+          />
+        </Source>
+      ) : null}
+      {userLocation ? (
+        <Marker longitude={userLocation.lon} latitude={userLocation.lat} anchor="center">
+          <span className="user-dot" aria-label="Your location" />
+        </Marker>
       ) : null}
       {draftPin ? (
         <Marker

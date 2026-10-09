@@ -33,23 +33,44 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  letter-spacing: -0.011em;
 }
 
 .map-state-jumps {
-  top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.45rem);
+  top: calc(max(0.55rem, env(safe-area-inset-top)) + 10.1rem);
+  padding-right: 3.25rem;
 }
 
 .map-banner {
-  top: calc(max(0.6rem, env(safe-area-inset-top)) + 6.35rem);
+  top: calc(max(0.55rem, env(safe-area-inset-top)) + 12.6rem);
 }
 
 .map-legend {
-  bottom: calc(15.75rem + env(safe-area-inset-bottom));
+  bottom: 0.75rem;
 }
 
 .maplibregl-ctrl-top-right {
-  top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.45rem);
+  top: calc(max(0.55rem, env(safe-area-inset-top)) + 10.1rem);
+}
+
+.user-dot {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 7px rgba(37, 99, 235, 0.28);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
 }
 
 .prose-hail h1 {

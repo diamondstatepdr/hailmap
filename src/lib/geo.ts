@@ -79,3 +79,30 @@ export function ringSpanKm(ring: Array<[number, number]>): number {
   }
   return haversineKm(minLat, minLon, maxLat, maxLon);
 }
+
+function ringContains(lon: number, lat: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = Number(ring[i][0]);
+    const yi = Number(ring[i][1]);
+    const xj = Number(ring[j][0]);
+    const yj = Number(ring[j][1]);
+    const crosses = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(lon: number, lat: number, coordinates: number[][][]): boolean {
+  const [outer, ...holes] = coordinates;
+  if (!outer || !ringContains(lon, lat, outer)) return false;
+  return !holes.some((hole) => ringContains(lon, lat, hole));
+}
+
+/** True when lon/lat falls inside a Polygon or MultiPolygon, respecting holes. */
+export function pointInGeometry(lon: number, lat: number, geometry: GeoJSON.Geometry | null | undefined): boolean {
+  if (!geometry) return false;
+  if (geometry.type === "Polygon") return pointInPolygon(lon, lat, geometry.coordinates);
+  if (geometry.type === "MultiPolygon") return geometry.coordinates.some((polygon) => pointInPolygon(lon, lat, polygon));
+  return false;
+}

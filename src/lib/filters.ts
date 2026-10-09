@@ -1,5 +1,6 @@
 import type { FeatureCollection, Point } from "geojson";
 import type { Confidence } from "@/lib/confidence";
+import { HAZARDS, hazardOf, type Hazard } from "@/lib/hazard";
 import type { HailReport } from "@/lib/types";
 
 export interface ReportFilter {
@@ -7,7 +8,11 @@ export interface ReportFilter {
   hours: number;
   confidences: Confidence[];
   state: string;
+  /** When set, only these hazards are shown. Omitted means all hazards. */
+  hazards?: Hazard[];
 }
+
+export const ALL_HAZARDS: readonly Hazard[] = HAZARDS;
 
 /** Last 45 minutes. Distinct from the 1 hour chip, and refreshed faster. */
 export const LIVE_WINDOW_HOURS = 0.75;
@@ -66,7 +71,9 @@ export function applyReportFilter(reports: HailReport[], filter: ReportFilter, n
   return reports.filter((report) => {
     const time = Date.parse(report.occurredAt);
     if (Number.isNaN(time) || time < cutoff) return false;
-    if ((report.sizeIn ?? 0) < filter.minSize) return false;
+    const hazard = hazardOf(report.hazard);
+    if (filter.hazards && filter.hazards.length && !filter.hazards.includes(hazard)) return false;
+    if (hazard === "hail" && (report.sizeIn ?? 0) < filter.minSize) return false;
     if (!filter.confidences.includes(report.confidence)) return false;
     if (state && (report.state ?? "").toUpperCase() !== state) return false;
     return true;
@@ -95,8 +102,11 @@ export function reportsToPointCollection(reports: HailReport[]): FeatureCollecti
       properties: {
         id: report.id,
         confidence: report.confidence,
+        hazard: hazardOf(report.hazard),
         hasPhoto: report.photoUrl ? 1 : 0,
         ...(report.sizeIn != null ? { sizeIn: report.sizeIn } : {}),
+        ...(report.windMph != null ? { windMph: report.windMph } : {}),
+        ...(report.efRating ? { efRating: report.efRating } : {}),
       },
     })),
   };

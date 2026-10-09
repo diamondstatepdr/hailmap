@@ -1,6 +1,7 @@
 import { classifyOfficialLsr } from "@/lib/confidence";
 import { parseCsv } from "@/lib/csv";
 import { ringSpanKm, validLatLon } from "@/lib/geo";
+import { parseEfRating, parseWindMph, type Hazard } from "@/lib/hazard";
 import { stableId } from "@/lib/ids";
 import { parseHailSizeInches, parseSpcSizeToken } from "@/lib/size";
 import type { IncomingReport } from "@/lib/types";
@@ -41,6 +42,26 @@ function clip(value: string | null, max: number): string | null {
   return trimmed.slice(0, max);
 }
 
+/** IEM LSR type text/code to a hazard HailMap stores. Other LSR types are ignored. */
+export function iemHazard(typeText: string, typeCode: string): Hazard | null {
+  const text = typeText.toUpperCase();
+  const code = typeCode.toUpperCase();
+  if (text.includes("HAIL") || (!text && code === "H")) return "hail";
+  if (text.includes("TORNADO") || (!text && code === "T") || code === "T") return "tornado";
+  if (
+    text.includes("WND") ||
+    text.includes("WIND") ||
+    code === "G" ||
+    code === "D" ||
+    code === "M" ||
+    code === "N" ||
+    code === "O"
+  ) {
+    return "wind";
+  }
+  return null;
+}
+
 export function parseSpcHailCsv(csv: string, convectiveDate: string): IncomingReport[] {
   const rows = parseCsv(csv.replace(/^\uFEFF/, ""));
   const reports: IncomingReport[] = [];
@@ -61,6 +82,7 @@ export function parseSpcHailCsv(csv: string, convectiveDate: string): IncomingRe
       source: "spc",
       externalId: stableId(["spc", occurredAt, lat.toFixed(3), lon.toFixed(3), sizeIn]),
       confidence: classifyOfficialLsr(null, remark),
+      hazard: "hail",
       lat,
       lon,
       sizeIn,
@@ -70,6 +92,82 @@ export function parseSpcHailCsv(csv: string, convectiveDate: string): IncomingRe
       county: clip(cols[3], 120),
       state: state && state.length === 2 ? state.toUpperCase() : state,
       remark,
+    });
+  }
+  return reports;
+}
+
+function spcRows(csv: string): string[][] {
+  return parseCsv(csv.replace(/^\uFEFF/, "")).filter((cols) => cols.length >= 7 && !/^time$/i.test(cols[0].trim()));
+}
+
+function spcWhen(cols: string[], convectiveDate: string): { occurredAt: string; lat: number; lon: number } | null {
+  let hhmm = cols[0].trim();
+  if (/^\d{3}$/.test(hhmm)) hhmm = `0${hhmm}`;
+  const occurredAt = spcTimeToIso(convectiveDate, hhmm);
+  const lat = Number(cols[5]);
+  const lon = Number(cols[6]);
+  if (!occurredAt || !validLatLon(lat, lon)) return null;
+  return { occurredAt, lat, lon };
+}
+
+function spcPlace(cols: string[]) {
+  const state = clip(cols[4], 32);
+  return {
+    location: clip(cols[2], 200),
+    county: clip(cols[3], 120),
+    state: state && state.length === 2 ? state.toUpperCase() : state,
+    remark: clip(cols.slice(7).join(","), 2000),
+  };
+}
+
+/** SPC wind LSR file: speed is miles per hour. UNK is kept with a null speed. */
+export function parseSpcWindCsv(csv: string, convectiveDate: string): IncomingReport[] {
+  const reports: IncomingReport[] = [];
+  for (const cols of spcRows(csv)) {
+    const when = spcWhen(cols, convectiveDate);
+    if (!when) continue;
+    const token = cols[1]?.trim() || "";
+    const windMph = parseWindMph(token, "MPH");
+    const place = spcPlace(cols);
+    reports.push({
+      source: "spc",
+      externalId: stableId(["spc", "wind", when.occurredAt, when.lat.toFixed(3), when.lon.toFixed(3), windMph]),
+      confidence: classifyOfficialLsr(null, place.remark),
+      hazard: "wind",
+      lat: when.lat,
+      lon: when.lon,
+      sizeIn: null,
+      sizeRaw: token || null,
+      windMph,
+      occurredAt: when.occurredAt,
+      ...place,
+    });
+  }
+  return reports;
+}
+
+/** SPC tornado LSR file. The scale column is EF/F/UNK when the office published one. */
+export function parseSpcTornadoCsv(csv: string, convectiveDate: string): IncomingReport[] {
+  const reports: IncomingReport[] = [];
+  for (const cols of spcRows(csv)) {
+    const when = spcWhen(cols, convectiveDate);
+    if (!when) continue;
+    const token = cols[1]?.trim() || "";
+    const efRating = parseEfRating(token);
+    const place = spcPlace(cols);
+    reports.push({
+      source: "spc",
+      externalId: stableId(["spc", "tornado", when.occurredAt, when.lat.toFixed(3), when.lon.toFixed(3), efRating]),
+      confidence: classifyOfficialLsr(null, place.remark),
+      hazard: "tornado",
+      lat: when.lat,
+      lon: when.lon,
+      sizeIn: null,
+      sizeRaw: token || null,
+      efRating,
+      occurredAt: when.occurredAt,
+      ...place,
     });
   }
   return reports;
@@ -90,11 +188,8 @@ export function parseIemGeoJson(payload: unknown): IncomingReport[] {
     const props = asRecord(record?.properties) ?? {};
     const typeText = String(props.typetext ?? "").toUpperCase();
     const typeCode = String(props.type ?? "").toUpperCase();
-    if (typeText) {
-      if (typeText !== "HAIL") continue;
-    } else if (typeCode !== "H") {
-      continue;
-    }
+    const hazard = iemHazard(typeText, typeCode);
+    if (!hazard) continue;
     const geometry = asRecord(record?.geometry);
     let lat = Number(props.lat);
     let lon = Number(props.lon);
@@ -105,32 +200,61 @@ export function parseIemGeoJson(payload: unknown): IncomingReport[] {
     if (!validLatLon(lat, lon)) continue;
     const occurred = new Date(String(props.valid ?? ""));
     if (Number.isNaN(occurred.getTime())) continue;
-    let sizeIn = typeof props.magf === "number" ? props.magf : parseHailSizeInches(props.magnitude);
     const unit = String(props.unit ?? "");
-    if (sizeIn != null && /mm/i.test(unit)) sizeIn = sizeIn / 25.4;
-    sizeIn = sizeIn == null ? null : parseHailSizeInches(sizeIn);
+    let sizeIn: number | null = null;
+    let windMph: number | null = null;
+    let efRating: string | null = null;
+    if (hazard === "hail") {
+      sizeIn = typeof props.magf === "number" ? props.magf : parseHailSizeInches(props.magnitude);
+      if (sizeIn != null && /mm/i.test(unit)) sizeIn = sizeIn / 25.4;
+      sizeIn = sizeIn == null ? null : parseHailSizeInches(sizeIn);
+    } else if (hazard === "wind") {
+      const raw = typeof props.magf === "number" ? props.magf : props.magnitude;
+      windMph = parseWindMph(raw, unit);
+    } else {
+      efRating =
+        parseEfRating(props.magnitude) ??
+        parseEfRating(props.magf) ??
+        parseEfRating(props.remark);
+    }
     const sourceText = props.source == null ? null : String(props.source);
     const remark = props.remark == null ? null : String(props.remark);
     const stateRaw = String(props.st ?? props.state ?? "").trim();
+    const idParts: Array<string | number | null> = [
+      "iem",
+      props.product_id == null ? "" : String(props.product_id),
+      occurred.toISOString(),
+      lat,
+      lon,
+      sizeIn,
+      props.city == null ? "" : String(props.city),
+    ];
+    if (hazard !== "hail") idParts.push(hazard, windMph, efRating);
     reports.push({
       source: "iem",
       // product_id is the LSR bulletin, which often lists several cities. Keying
       // only on it kept the last report in the product and dropped the rest
       // (Salt Lake Holladay was overwritten by Spanish Fork).
-      externalId: stableId([
-        "iem",
-        props.product_id == null ? "" : String(props.product_id),
-        occurred.toISOString(),
-        lat,
-        lon,
-        sizeIn,
-        props.city == null ? "" : String(props.city),
-      ]),
+      externalId: stableId(idParts),
       confidence: classifyOfficialLsr(sourceText, remark),
+      hazard,
       lat,
       lon,
       sizeIn,
-      sizeRaw: props.magnitude == null ? (sizeIn == null ? null : String(sizeIn)) : String(props.magnitude),
+      sizeRaw:
+        hazard === "wind"
+          ? windMph == null
+            ? null
+            : String(windMph)
+          : hazard === "tornado"
+            ? efRating
+            : props.magnitude == null
+              ? sizeIn == null
+                ? null
+                : String(sizeIn)
+              : String(props.magnitude),
+      windMph,
+      efRating,
       occurredAt: occurred.toISOString(),
       location: clip(props.city == null ? null : String(props.city), 200),
       county: clip(props.county == null ? null : String(props.county), 120),
@@ -202,6 +326,39 @@ function hailFromAlert(props: Record<string, unknown>): { sizeIn: number | null;
   return { sizeIn: null, sizeRaw: null };
 }
 
+function windFromAlert(props: Record<string, unknown>): number | null {
+  const params = asRecord(props.parameters);
+  if (params) {
+    for (const [key, values] of Object.entries(params)) {
+      if (!/wind|gust/i.test(key)) continue;
+      const list = Array.isArray(values) ? values : [values];
+      for (const value of list) {
+        const mph = parseWindMph(value, /kt|knot/i.test(String(value)) || /kt|knot/i.test(key) ? "KT" : "MPH");
+        if (mph) return mph;
+      }
+    }
+  }
+  const text = `${props.description ?? ""}\n${props.headline ?? ""}`;
+  const patterns = [
+    /MAX(?:IMUM)? WIND GUST\.{0,3}\s*([0-9]{2,3})\s*(MPH|KT|KNOTS)?/i,
+    /WIND GUSTS?\.{0,3}\s*([0-9]{2,3})\s*(MPH|KT|KNOTS)?/i,
+    /([0-9]{2,3})\s*(MPH|KT|KNOTS)\s+WIND/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const mph = parseWindMph(match[1], match[2] ?? "MPH");
+    if (mph) return mph;
+  }
+  return null;
+}
+
+function tornadoFromAlert(props: Record<string, unknown>): string | null {
+  const text = `${props.event ?? ""}\n${props.headline ?? ""}\n${props.description ?? ""}`;
+  if (!/tornado/i.test(text)) return null;
+  return parseEfRating(text);
+}
+
 export function parseNwsAlerts(payload: unknown): IncomingReport[] {
   const root = asRecord(payload);
   const features = root?.features;
@@ -211,10 +368,10 @@ export function parseNwsAlerts(payload: unknown): IncomingReport[] {
     const record = asRecord(feature);
     const props = asRecord(record?.properties);
     if (!props) continue;
-    const blob = `${props.event ?? ""} ${props.headline ?? ""} ${props.description ?? ""}`;
-    if (!/hail/i.test(blob)) continue;
     const { sizeIn, sizeRaw } = hailFromAlert(props);
-    if (sizeIn == null) continue;
+    const windMph = windFromAlert(props);
+    const efRating = tornadoFromAlert(props);
+    if (sizeIn == null && windMph == null && efRating == null) continue;
     const ring = outerRing(record?.geometry);
     if (!ring || ringSpanKm(ring) > 300) continue;
     const center = centroid(ring);
@@ -222,23 +379,57 @@ export function parseNwsAlerts(payload: unknown): IncomingReport[] {
     const when = new Date(String(props.onset ?? props.effective ?? props.sent ?? ""));
     if (Number.isNaN(when.getTime())) continue;
     const id = String(props.id ?? record?.id ?? stableId(["nws", when.toISOString(), center.lat, center.lon]));
-    reports.push({
-      source: "nws",
-      externalId: id,
-      confidence: "nws",
-      lat: center.lat,
-      lon: center.lon,
-      sizeIn,
-      sizeRaw,
-      occurredAt: when.toISOString(),
+    const place = {
       location: clip(props.areaDesc == null ? null : String(props.areaDesc), 200),
       county: null,
       state: null,
-      remark: clip(
-        `NWS warning centroid. ${props.headline ?? ""}`.trim(),
-        2000,
-      ),
-    });
+      occurredAt: when.toISOString(),
+    };
+    const headline = props.headline == null ? "" : String(props.headline);
+    if (sizeIn != null) {
+      reports.push({
+        source: "nws",
+        externalId: id,
+        confidence: "nws",
+        hazard: "hail",
+        lat: center.lat,
+        lon: center.lon,
+        sizeIn,
+        sizeRaw,
+        ...place,
+        remark: clip(`NWS warning centroid. ${headline}`.trim(), 2000),
+      });
+    }
+    if (windMph != null) {
+      reports.push({
+        source: "nws",
+        externalId: `${id}:wind`,
+        confidence: "nws",
+        hazard: "wind",
+        lat: center.lat,
+        lon: center.lon,
+        sizeIn: null,
+        sizeRaw: String(windMph),
+        windMph,
+        ...place,
+        remark: clip(`NWS warning centroid. Wind ${windMph} mph. ${headline}`.trim(), 2000),
+      });
+    }
+    if (efRating != null) {
+      reports.push({
+        source: "nws",
+        externalId: `${id}:tornado`,
+        confidence: "nws",
+        hazard: "tornado",
+        lat: center.lat,
+        lon: center.lon,
+        sizeIn: null,
+        sizeRaw: efRating,
+        efRating,
+        ...place,
+        remark: clip(`NWS warning centroid. ${efRating} tornado. ${headline}`.trim(), 2000),
+      });
+    }
   }
   return reports;
 }
@@ -267,6 +458,7 @@ export function parseMeshGeoJson(payload: unknown): IncomingReport[] {
       source: "mesh",
       externalId: String(props.id ?? record.id ?? stableId(["mesh", when.toISOString(), center.lat, center.lon, sizeIn])),
       confidence: "mesh",
+      hazard: "hail",
       lat: center.lat,
       lon: center.lon,
       sizeIn,

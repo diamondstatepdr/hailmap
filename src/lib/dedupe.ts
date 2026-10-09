@@ -1,6 +1,7 @@
 import { confidenceRank, type Confidence } from "@/lib/confidence";
 import { sortDamageTags } from "@/lib/damage";
 import { haversineKm } from "@/lib/geo";
+import { hazardOf, type Hazard } from "@/lib/hazard";
 
 export const DEDUPE_RADIUS_KM = 10;
 export const DEDUPE_WINDOW_MINUTES = 45;
@@ -13,6 +14,9 @@ export interface DedupeReport {
   occurredAt: string;
   sizeIn: number | null;
   confidence: Confidence;
+  hazard?: Hazard;
+  windMph?: number | null;
+  efRating?: string | null;
   damageTags?: string[];
   remark?: string | null;
   /** Set when the report has a stored photo. Those pins are never dropped. */
@@ -52,7 +56,16 @@ export function fuseReports<T extends DedupeReport>(reports: T[], options: Dedup
       const existingTime = Date.parse(existing.occurredAt);
       if (Number.isNaN(time) || Number.isNaN(existingTime)) return false;
       if (Math.abs(existingTime - time) > windowMs) return false;
+      if (hazardOf(existing.hazard) !== hazardOf(report.hazard)) return false;
       if (haversineKm(existing.lat, existing.lon, report.lat, report.lon) > radiusKm) return false;
+      if (
+        existing.windMph != null &&
+        report.windMph != null &&
+        Math.abs(existing.windMph - report.windMph) > 15
+      ) {
+        return false;
+      }
+      if (existing.efRating && report.efRating && existing.efRating !== report.efRating) return false;
       if (
         existing.sizeIn != null &&
         report.sizeIn != null &&

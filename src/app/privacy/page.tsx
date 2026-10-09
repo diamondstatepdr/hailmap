@@ -16,16 +16,16 @@ export default function PrivacyPage() {
       </p>
       <article className="prose-hail space-y-3">
         <h1>Privacy policy</h1>
-        <p>Effective September 21, 2026. HailMap is operated by Diamond State Hail Solutions.</p>
+        <p>Effective October 9, 2026. HailMap is operated by Diamond State Hail Solutions.</p>
         <p>
           Contact: <a href="mailto:diamondstatepdr@gmail.com">diamondstatepdr@gmail.com</a>
         </p>
 
         <h2>What HailMap is</h2>
         <p>
-          HailMap shows recent United States hail reports on a map, draws report-derived swaths, and
-          can shade counties by Census median household income. It is a weather display. It is not a
-          social network and it does not scrape social media, forums, or private accounts.
+          HailMap shows recent United States hail, wind, and tornado reports on a map, draws hail
+          swaths, and can shade counties by Census median household income. It is a weather display.
+          It is not a social network and it does not scrape social media, forums, or private accounts.
         </p>
 
         <h2>Data we do not collect</h2>
@@ -38,8 +38,9 @@ export default function PrivacyPage() {
 
         <h2>Weather data</h2>
         <p>
-          Live hail locations come from public National Weather Service alerts, Storm Prediction
-          Center hail reports, and Iowa Environmental Mesonet local storm reports. A county income
+          Live hail, wind, and tornado locations come from public National Weather Service alerts,
+          Storm Prediction Center local storm reports, and Iowa Environmental Mesonet local storm
+          reports. A county income
           layer uses a bundled American Community Survey cache (table B19013, median household
           income). An optional Census API key can refresh that cache on the server. Map tiles are
           loaded from OpenFreeMap.
@@ -76,6 +77,20 @@ export default function PrivacyPage() {
           to a webhook, or submit with a photo stay until you ask us to delete them or we remove
           the database. The database and photo files live on the server volume, not on the phone,
           except for a short-lived cache of the app shell in the browser.
+        </p>
+
+        <h2>Optional team sign-in</h2>
+        <p>
+          Viewing the map does not require an account. Field notes, damage photos, and a watch list
+          are stored only after you sign in with a name and the team passcode. The name is the
+          account. Those notes and photos are not shown on the public map and are not labeled as
+          official weather reports. A shareable storm report includes your field photos only when
+          you generate it while signed in. Anyone with that link can open that one report.
+        </p>
+        <p>
+          Field mode can use your device location to show where you are and the damage score at that
+          point. Location is requested only in Field mode, or when you choose it for a community hail
+          photo. We do not read GPS from a photo file.
         </p>
 
         <h2>The Android app</h2>

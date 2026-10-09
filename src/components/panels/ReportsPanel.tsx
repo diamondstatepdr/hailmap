@@ -1,7 +1,5 @@
 "use client";
 
-import { laterPhase } from "@/lib/seams";
-
 export interface SavedReport {
   id: string;
   title: string;
@@ -86,11 +84,6 @@ export default function ReportsPanel({
           ))}
         </ul>
       </section>
-      {!laterPhase.askAboutStorms ? (
-        <p className="mt-8 text-xs leading-relaxed text-muted">
-          An AI briefing on storms and markets is a later release. This report is built only from the data listed on the page.
-        </p>
-      ) : null}
     </div>
   );
 }

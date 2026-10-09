@@ -117,7 +117,7 @@ Search uses the US Census geocoder. If that returns no match, HailMap asks Nomin
 
 ## Later phase
 
-Roof and property records, and an AI briefing on storms and markets, are not in this build. `src/lib/seams.ts` records those flags as off so a later change can turn them on without inventing answers now.
+Roof and property records are not in this build. `src/lib/seams.ts` records that flag as off so a later change can turn it on without inventing answers now.
 
 ## Map
 

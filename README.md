@@ -56,6 +56,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/photos/[id]` — the stored image. `id` is the file id without an extension.
 - `GET /api/swaths` — GeoJSON swaths from those reports
 - `GET /api/mesh?hours=` or `GET /api/mesh?date=YYYY-MM-DD` — NOAA MRMS MESH hail swaths. `hours` follows the map windows (last hour for Live, 1 hour, and 6 hours; last 24 hours; daily composite for 3 and 7 days). A date uses that day’s 24-hour maximum. Results are cached under `$HAILMAP_DATA_DIR/mesh`.
+- `GET /api/honey?date=YYYY-MM-DD&west=&south=&east=&north=` or `hours=` instead of `date` — Money Hole ranks for that storm day inside the map view. Optional `lat` and `lon` set the distance origin. Targets come from OpenStreetMap (dealerships, large parking lots, apartments, malls, fleet and rental yards) and Census ACS housing units. Cached under `$HAILMAP_DATA_DIR/honey`. A wide view asks you to zoom in. The response can be `partial` while Overpass tiles are still loading.
 - `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
 - `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap
 - `GET /api/income` — county polygons with ACS median household income
@@ -123,6 +124,12 @@ In Android Studio, generate a signed App Bundle with that keystore. Play Console
 Field notes, field photos, and the watch list belong to a name plus the team passcode (`HAILMAP_TEAM_PASSCODE`). The public map, address search, and damage score work without signing in. The name is the account: two people who type the same name share that field data. Notes are not published on the map. A storm report link is unlisted; field photos are included only when the person who generated it was signed in.
 
 Set `HAILMAP_AUTH_SECRET` in production so the cookie key is not the passcode itself.
+
+## Money holes
+
+For one storm day — Live through 24 hours, or a day from the hail calendar — Money Holes rank where a tech should go first. The Money Hole score multiplies hail size, target density, recency, and confidence. Hail size is the MRMS MESH sample at the stop, raised when a nearby spotter or NWS report is larger. A spotter or NWS report that agrees with radar scores higher than radar alone. Recency favors the latest hail that day, and a live window favors hail that just fell. Density is estimated vehicles (PDR) or homes (Roofing). Parking vehicles are lot area divided by about 30 m². Homes are Census ACS housing units, with named apartment buildings when a tract is not the useful stop.
+
+The list shows the name or neighborhood, hail size, estimated vehicles or homes, a 0–100 score, and distance. Tap a row to zoom. PDR and Roofing are a toggle. The heat layer is optional. OpenStreetMap requests are cached on the data volume and paced so a metro view does not hammer Overpass. The first look at a city fills in over a few requests.
 
 ## Damage probability
 

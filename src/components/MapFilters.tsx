@@ -16,8 +16,9 @@ interface Props {
   showOutlook: boolean;
   showIncome: boolean;
   showHeat: boolean;
+  showHoney: boolean;
   showMesh: boolean;
-  onToggle: (key: "points" | "swaths" | "mesh" | "threats" | "outlook" | "income" | "heat") => void;
+  onToggle: (key: "points" | "swaths" | "mesh" | "threats" | "outlook" | "income" | "heat" | "honey") => void;
   incomeError: boolean;
   threatError: boolean;
   threatStatus: ThreatsResponse["status"] | null;
@@ -85,12 +86,13 @@ export default function MapFilters(props: Props) {
             <Toggle on={props.showMesh} label="Radar hail" onClick={() => props.onToggle("mesh")} />
             <Toggle on={props.showSwaths} label="Report swaths" onClick={() => props.onToggle("swaths")} />
             <Toggle on={props.showHeat} label="Damage areas" onClick={() => props.onToggle("heat")} />
+            <Toggle on={props.showHoney} label="Money holes" onClick={() => props.onToggle("honey")} />
             <Toggle on={props.showThreats} label="Threats" onClick={() => props.onToggle("threats")} />
             <Toggle on={props.showOutlook} label="Outlook" onClick={() => props.onToggle("outlook")} />
             <Toggle on={props.showIncome} label="County income" onClick={() => props.onToggle("income")} />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
-            Radar hail is NOAA MRMS MESH, estimated hail size where stones fell. Report swaths still group nearby hail reports. Damage areas use the same score as an address, on a coarse grid.
+            Radar hail is NOAA MRMS MESH, estimated hail size where stones fell. Report swaths still group nearby hail reports. Damage areas use the same score as an address, on a coarse grid. Money holes rank hail-hit lots and neighborhoods for the storm day in view.
             {props.showIncome && props.incomeError ? " Income data is unavailable right now." : ""}
             {props.showThreats && (props.threatError || props.threatStatus?.nws === "error")
               ? " Watches and warnings are unavailable right now."

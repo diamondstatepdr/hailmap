@@ -163,6 +163,10 @@ interface Props {
   showOutlook: boolean;
   showHeat?: boolean;
   heat?: GeoJSON.FeatureCollection | null;
+  showHoney?: boolean;
+  honey?: GeoJSON.FeatureCollection | null;
+  /** When the honey panel is open, keep the storm in the map area beside or above it. */
+  honeyPanel?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
   selectedId: string | null;
@@ -178,6 +182,7 @@ interface Props {
   onSelectThreat: (info: ThreatInfo) => void;
   onSelectArea?: (area: AreaSelection) => void;
   onSelectDealer?: (id: string) => void;
+  onSelectHoney?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   /** When false, points are already aggregated and MapLibre should not cluster them again. */
@@ -200,6 +205,9 @@ export default function HailMap({
   showOutlook,
   showHeat = false,
   heat = null,
+  showHoney = false,
+  honey = null,
+  honeyPanel = false,
   userLocation = null,
   fieldPins = null,
   selectedId,
@@ -215,6 +223,7 @@ export default function HailMap({
   onSelectThreat,
   onSelectArea,
   onSelectDealer,
+  onSelectHoney,
   onViewChange,
   onPreviewBounds,
   clusterPoints = true,
@@ -226,6 +235,8 @@ export default function HailMap({
   const outlookData = useMemo(() => subsetThreats(threats, ["outlook", "significant"]), [threats]);
   const alertData = useMemo(() => subsetThreats(threats, ["watch", "warning", "statement"]), [threats]);
   const interactiveLayerIds = [
+    showHoney && honey?.features.length ? "honey-pins" : "",
+    showHoney && honey?.features.length ? "honey-heat" : "",
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
     showMesh && mesh?.features.length ? "mesh-fill" : "",
@@ -253,13 +264,21 @@ export default function HailMap({
       });
       return;
     }
+    const width = raw.getContainer().clientWidth;
+    const height = raw.getContainer().clientHeight;
+    const desktop = width >= 768;
+    const padding = honeyPanel
+      ? desktop
+        ? { top: 124, bottom: 72, left: Math.min(400, Math.round(width * 0.34)), right: 48 }
+        : { top: 96, bottom: Math.round(height * 0.6), left: 16, right: 16 }
+      : { top: 124, bottom: 232, left: 36, right: 48 };
     map.fitBounds(
       [
         [next.west, next.south],
         [next.east, next.north],
       ],
       {
-        padding: { top: 124, bottom: 232, left: 36, right: 48 },
+        padding,
         duration: 800,
         maxZoom: next.maxZoom ?? 8.2,
       },
@@ -270,13 +289,20 @@ export default function HailMap({
     if (!focus) return;
     const map = mapRef.current;
     if (!map) return;
+    const width = map.getContainer().clientWidth;
+    const desktop = width >= 768;
     const camera = {
       center: [focus.lon, focus.lat] as [number, number],
       zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
       duration: 700,
     };
-    map.flyTo(focus.zoom ? { ...camera, padding: { top: 96, bottom: 260, left: 28, right: 28 } } : camera);
-  }, [focus]);
+    const padding = honeyPanel
+      ? desktop
+        ? { top: 120, bottom: 48, left: Math.min(400, Math.round(width * 0.34)), right: 36 }
+        : { top: 88, bottom: 280, left: 16, right: 16 }
+      : { top: 96, bottom: 260, left: 28, right: 28 };
+    map.flyTo(focus.zoom ? { ...camera, padding } : camera);
+  }, [focus, honeyPanel]);
 
   useEffect(() => {
     applyFrame(frame);
@@ -321,6 +347,13 @@ export default function HailMap({
       return;
     }
     if (blockSelection) return;
+    const honeyHit = (event.features ?? []).find(
+      (feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat",
+    );
+    if (honeyHit?.properties?.id) {
+      onSelectHoney?.(String(honeyHit.properties.id));
+      return;
+    }
     for (const feature of event.features ?? []) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
@@ -539,7 +572,7 @@ export default function HailMap({
             type="fill"
             paint={{
               "fill-color": ["get", "color"] as never,
-              "fill-opacity": theme === "dark" ? 0.34 : 0.4,
+              "fill-opacity": showHoney ? (theme === "dark" ? 0.16 : 0.18) : theme === "dark" ? 0.34 : 0.4,
             }}
           />
           <Layer
@@ -552,6 +585,54 @@ export default function HailMap({
               "line-blur": 0.4,
             }}
             layout={{ "line-join": "round", "line-cap": "round" }}
+          />
+        </Source>
+      ) : null}
+      {showHoney && honey?.features.length ? (
+        <Source id="honey" type="geojson" data={honey}>
+          <Layer
+            id="honey-heat"
+            type="fill"
+            filter={["==", ["geometry-type"], "Polygon"]}
+            paint={{
+              "fill-color": ["get", "fill"] as never,
+              "fill-opacity": ["get", "opacity"] as never,
+            }}
+          />
+          <Layer
+            id="honey-heat-line"
+            type="line"
+            filter={["==", ["geometry-type"], "Polygon"]}
+            paint={{
+              "line-color": ["get", "fill"] as never,
+              "line-width": 1.25,
+              "line-opacity": 0.85,
+            }}
+          />
+          <Layer
+            id="honey-pins"
+            type="circle"
+            filter={["==", ["geometry-type"], "Point"]}
+            paint={{
+              "circle-radius": ["case", ["==", ["get", "selected"], 1], 16, 13],
+              "circle-color": ["get", "fill"] as never,
+              "circle-stroke-color": theme === "dark" ? "#0b111a" : "#ffffff",
+              "circle-stroke-width": ["case", ["==", ["get", "selected"], 1], 3, 2],
+            }}
+          />
+          <Layer
+            id="honey-rank"
+            type="symbol"
+            filter={["==", ["geometry-type"], "Point"]}
+            layout={{
+              "text-field": ["to-string", ["get", "rank"]],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": 11,
+              "text-allow-overlap": true,
+            }}
+            paint={{
+              "text-color": "#ffffff",
+            }}
           />
         </Source>
       ) : null}

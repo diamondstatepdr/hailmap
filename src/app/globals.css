@@ -266,6 +266,11 @@ html.dark .maplibregl-ctrl-attrib a {
   -webkit-backdrop-filter: blur(16px) saturate(1.35);
 }
 
+.icon-btn[data-honey-open][aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .seg {
   display: flex;
   gap: 0.2rem;
@@ -645,6 +650,257 @@ html.dark .hazard-tornado {
   width: 2.4rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+
+.honey-dock {
+  position: absolute;
+  z-index: 32;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  max-height: min(58dvh, 32rem);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 1.35rem;
+  color: var(--text);
+}
+
+.honey-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 0.9rem 0.35rem;
+}
+
+.honey-head h2 {
+  font-size: 1.35rem;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.honey-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html.dark .honey-kicker {
+  color: var(--mark);
+}
+
+.honey-close {
+  display: grid;
+  height: 2rem;
+  width: 2rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.honey-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  margin: 0.45rem 0.75rem 0;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  padding: 0.22rem;
+}
+
+.honey-modes button {
+  min-height: 2.55rem;
+  border-radius: 0.8rem;
+  padding: 0.3rem 0.4rem 0.35rem;
+  font-size: 0.84rem;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+}
+
+.honey-modes button small {
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+
+.honey-modes button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 14px rgba(12, 98, 120, 0.22);
+}
+
+.honey-heat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.45rem 0.9rem 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 680;
+  color: var(--muted);
+}
+
+.honey-heat[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.honey-switch {
+  position: relative;
+  height: 1.15rem;
+  width: 1.9rem;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--panel-2));
+  transition: background-color 160ms ease;
+}
+
+.honey-switch::after {
+  position: absolute;
+  top: 0.12rem;
+  left: 0.12rem;
+  height: 0.9rem;
+  width: 0.9rem;
+  border-radius: 999px;
+  background: white;
+  box-shadow: 0 1px 2px rgba(16, 36, 56, 0.25);
+  transition: transform 160ms ease;
+  content: "";
+}
+
+.honey-heat[aria-pressed="true"] .honey-switch {
+  background: var(--accent);
+}
+
+.honey-heat[aria-pressed="true"] .honey-switch::after {
+  transform: translateX(0.75rem);
+}
+
+.honey-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0.2rem 0.45rem 0.35rem;
+}
+
+.honey-note {
+  margin: 0.25rem 0.45rem 0.4rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.honey-list {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.honey-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.9rem;
+  padding: 0.45rem 0.4rem;
+  text-align: left;
+}
+
+.honey-row[data-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.honey-row:hover {
+  background: color-mix(in srgb, var(--accent-soft) 65%, transparent);
+}
+
+.honey-rank {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.honey-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.honey-meta,
+.honey-source {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.honey-score {
+  display: grid;
+  min-width: 2.55rem;
+  height: 2.45rem;
+  place-items: center;
+  border-radius: 0.8rem;
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.honey-score[data-level="Very High"] {
+  background: #be123c;
+}
+
+.honey-score[data-level="High"] {
+  background: #ea580c;
+}
+
+.honey-score[data-level="Moderate"] {
+  background: #d97706;
+}
+
+.honey-score[data-level="Low"] {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.honey-attrib {
+  border-top: 1px solid var(--border);
+  padding: 0.4rem 0.9rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+@media (min-width: 768px) {
+  .honey-dock {
+    top: calc(var(--chrome-offset) + 0.35rem);
+    right: auto;
+    bottom: auto;
+    left: 0.75rem;
+    width: min(23rem, calc(100% - 1.5rem));
+    max-height: min(68dvh, 40rem);
+  }
 }
 
 .field-action {

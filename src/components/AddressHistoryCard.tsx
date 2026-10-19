@@ -17,7 +17,7 @@ export interface AddressEventView {
   tornado: string | null;
   tornadoCount: number;
   meshMaxIn: number | null;
-  meshStatus: "ok" | "empty" | "pending" | "outside-archive" | "error";
+  meshStatus: "ok" | "empty" | "pending" | "outside-archive" | "error" | "no-hail";
   warnings: Array<{ id: string; event: string }>;
   lossCandidate: boolean;
 }
@@ -30,6 +30,7 @@ export interface AddressHistoryView {
   end: string;
   pendingDays: number;
   events: AddressEventView[];
+  maxHailIn: number | null;
   selectedDate: string | null;
   score: DamageScore;
   warningNote: string | null;
@@ -92,6 +93,9 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
           <p className="mt-1 text-xs text-muted">
             {formatDay(history.start)} – {formatDay(history.end)} · {history.radiusKm} km
             {history.pendingDays ? ` · loading ${history.pendingDays} recent days` : ""}
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            Max hail in this range · {history.maxHailIn != null ? `${history.maxHailIn.toFixed(2)} in` : "None"}
           </p>
         </div>
         {onClose ? (
@@ -156,7 +160,7 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="font-semibold">
                     {event.label}
-                    {event.lossCandidate ? <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-accent">Date of loss</span> : null}
+                    {event.date === history.selectedDate ? <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-accent">Date of loss</span> : null}
                   </span>
                   <span className="text-sm font-semibold">{sizeLine(event.meshMaxIn, event.spotterMaxIn)}</span>
                 </span>
@@ -232,6 +236,7 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
 
 function inches(value: number | null, status: string): string {
   if (status === "pending") return "…";
+  if (status === "no-hail") return "No hail reports";
   if (status === "outside-archive") return "n/a";
   if (status === "error") return "—";
   if (value == null) return "—";

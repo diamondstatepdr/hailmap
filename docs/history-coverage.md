@@ -44,7 +44,7 @@ Immutable past days stay cached. The annual SPC zip is re-checked by `Last-Modif
 - Requests to the same host are serialized: about 120 ms between SPC calls, 350 ms for the MESH archive, 400 ms for IEM.
 - The first history request downloads and indexes the SPC database if `history/history.sqlite` has no `svrgisYear`. Later requests only fill SPC daily files after that year.
 - Long ranges aggregate points on the server when there are more than 2,500 reports, or more than 900 across a view at least 8° wide. The browser does not cluster those dots again. A query returns at most 60,000 raw rows before aggregating; a nationwide multi-decade view is a sample of that cap. A state or metro view of one year is inside the cap.
-- Address history defaults to 2 years (`/api/history/place`). Spans of 1, 5, and 10 years, or the full archive back to 1950, are on the card. Radar MESH is sampled for the largest hail dates in the span (up to 14 dates, at most 8 uncached days per request). The damage score uses the selected date, or the newest event when none is selected.
+- Address history defaults to 2 years (`/api/history/place`). Spans of 1, 5, and 10 years, or the full archive back to 1950, are on the card. Radar MESH is sampled for the largest hail dates in the span (up to 14 dates, at most 8 uncached days per request). The damage score uses the selected date, or the strongest hail day when none is selected.
 
 ## Rebuild
 

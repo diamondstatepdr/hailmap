@@ -80,7 +80,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/alerts/replay?date=YYYY-MM-DD&lat=&lon=&radiusMi=&state=&minSizeIn=` — what the engine would have sent for a past convective day. It does not send pushes.
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
-- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot. A body with `start` and `end` uses the multi-year archive: date-of-loss candidates are listed, and the damage score is the selected `scoreDate` or the newest event.
+- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot. A body with `start` and `end` uses the multi-year archive: date-of-loss candidates are listed, and the damage score is the selected `scoreDate` or the strongest hail day.
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
 
@@ -134,7 +134,7 @@ Each nearby report gets points from hail size, wind speed, or tornado rating, th
 
 Bands: 0–17 Low, 18–39 Moderate, 40–64 High, 65–100 Very High. The optional Damage areas layer scores the same model on a coarse grid.
 
-On a multi-year address history, the score is only the selected storm (the newest event until a date is chosen). It is not a blend of every hail day in the span. The date-of-loss list is separate: spotter or radar hail of at least 1.00 in, wind of at least 58 mph, or any tornado.
+On a multi-year address history, the score is only the selected storm (the strongest hail day until a date is chosen). It is not a blend of every hail day in the span. The card also shows the largest hail in the span. The date-of-loss list is separate: spotter or radar hail of at least 1.00 in, wind of at least 58 mph, or any tornado. Days with no hail report are not checked for radar hail.
 
 ## Address search
 

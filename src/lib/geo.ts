@@ -64,6 +64,71 @@ export function boundsOf(
   };
 }
 
+const MAP_LAT_LIMIT = 85;
+
+/** Longitude in [-180, 180]. Values from another world copy land on the same meridian. */
+export function wrapLongitude(lon: number): number {
+  if (!Number.isFinite(lon)) return NaN;
+  const wrapped = ((((lon + 180) % 360) + 360) % 360) - 180;
+  return wrapped === -180 ? 180 : wrapped;
+}
+
+/**
+ * A view MapLibre can actually draw and the history API can query.
+ * Phone cameras zoomed past the world, or panned onto another copy, report
+ * longitudes outside [-180, 180]. Those get folded back in. A lat/lng pair
+ * that was stored backwards is swapped. Anything non-finite is rejected.
+ */
+export function normalizeMapBounds(
+  input: { west: number; south: number; east: number; north: number } | null | undefined,
+): LngLatBounds | null {
+  if (!input) return null;
+  let { west, south, east, north } = input;
+  if (![west, south, east, north].every((value) => Number.isFinite(value))) return null;
+  const latitudesLookLikeLongitudes = (Math.abs(south) > 90 || Math.abs(north) > 90) && Math.abs(west) <= 90 && Math.abs(east) <= 90;
+  if (latitudesLookLikeLongitudes) {
+    const latWest = west;
+    const latEast = east;
+    west = Math.min(south, north);
+    east = Math.max(south, north);
+    south = Math.min(latWest, latEast);
+    north = Math.max(latWest, latEast);
+  }
+  south = Math.min(MAP_LAT_LIMIT, Math.max(-MAP_LAT_LIMIT, south));
+  north = Math.min(MAP_LAT_LIMIT, Math.max(-MAP_LAT_LIMIT, north));
+  if (south > north) [south, north] = [north, south];
+  if (north - south < 1e-4) {
+    south = Math.max(-MAP_LAT_LIMIT, south - 0.05);
+    north = Math.min(MAP_LAT_LIMIT, north + 0.05);
+  }
+  if (east < west) east += 360;
+  const span = east - west;
+  if (!(span > 0)) return null;
+  if (span >= 360) return { west: -180, south, east: 180, north };
+  const center = wrapLongitude((west + east) / 2);
+  let wrappedWest = center - span / 2;
+  let wrappedEast = center + span / 2;
+  if (wrappedWest < -180) {
+    wrappedWest = -180;
+    wrappedEast = Math.min(180, -180 + span);
+  }
+  if (wrappedEast > 180) {
+    wrappedEast = 180;
+    wrappedWest = Math.max(-180, 180 - span);
+  }
+  if (!(wrappedEast > wrappedWest)) return { west: -180, south, east: 180, north };
+  return { west: wrappedWest, south, east: wrappedEast, north };
+}
+
+/** Bounds failures stay off the screen as raw parser text. */
+export function mapBoundsMessage(message: string | null | undefined): string | null {
+  if (!message) return null;
+  if (/outside the world|map bounds are empty|map bounds are not usable|west, south, east, and north are required/i.test(message)) {
+    return "Zoom in a little to load storms for this view.";
+  }
+  return message;
+}
+
 /** Rough diagonal span of a lon/lat ring, in kilometres. */
 export function ringSpanKm(ring: Array<[number, number]>): number {
   if (ring.length === 0) return 0;

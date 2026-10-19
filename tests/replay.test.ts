@@ -14,11 +14,13 @@ import {
   geometryHitsBounds,
   loadedFrameIndex,
   parseArchiveNames,
+  parseReplayQuery,
   prefetchFrameTimes,
   replayFrames,
   stormTimeZone,
   warningActive,
 } from "@/lib/replay-time";
+import { mapBoundsMessage, normalizeMapBounds } from "@/lib/geo";
 import { DEFAULT_MESH_SHAPE, type MeshCell } from "@/lib/mesh-contour";
 
 describe("storm replay timing", () => {
@@ -179,6 +181,53 @@ describe("storm replay map framing", () => {
     expect(bounds.north).toBeGreaterThan(32.753);
     expect(bounds.west).toBeLessThan(-97.8);
     expect(bounds.east).toBeGreaterThan(-97.333);
+  });
+
+  it("folds a phone camera that has panned off the world back onto the storm", () => {
+    const bounds = frameReplayBounds({ west: -234, south: 25, east: 40, north: 50 }, null);
+    expect(bounds.west).toBeGreaterThanOrEqual(-180);
+    expect(bounds.east).toBeLessThanOrEqual(180);
+    expect(bounds.south).toBeGreaterThan(30);
+    expect(bounds.north).toBeLessThan(45);
+    expect(bounds.west).toBeLessThan(-97);
+    expect(bounds.east).toBeGreaterThan(-97);
+  });
+
+  it("replays from the address when the map has no location yet", () => {
+    const bounds = frameReplayBounds({ west: Number.NaN, south: Number.NaN, east: Number.NaN, north: Number.NaN }, { lat: 32.75, lon: -97.33 });
+    expect(bounds.south).toBeLessThan(32.75);
+    expect(bounds.north).toBeGreaterThan(32.75);
+    expect(bounds.west).toBeGreaterThanOrEqual(-180);
+    expect(bounds.east).toBeLessThanOrEqual(180);
+  });
+
+  it("falls back to nearby reports when neither the map nor an address is usable", () => {
+    const bounds = frameReplayBounds(null, { lat: Number.NaN, lon: Number.NaN }, [{ lat: 32.4, lon: -97.7 }]);
+    expect(bounds.south).toBeLessThan(32.4);
+    expect(bounds.north).toBeGreaterThan(32.4);
+    expect(bounds.west).toBeLessThan(-97.7);
+    expect(bounds.east).toBeGreaterThan(-97.7);
+  });
+
+  it("accepts a world-copy history window instead of rejecting it", () => {
+    const params = new URLSearchParams({ date: "2024-05-09", west: "-400", south: "32", east: "-396", north: "33" });
+    const parsed = parseReplayQuery(params);
+    expect("error" in parsed).toBe(false);
+    if ("error" in parsed) return;
+    expect(parsed.bounds.west).toBeGreaterThanOrEqual(-180);
+    expect(parsed.bounds.east).toBeLessThanOrEqual(180);
+    expect(parsed.bounds.west).toBeLessThan(-30);
+    expect(parsed.bounds.east).toBeGreaterThan(-50);
+  });
+
+  it("does not surface the raw bounds error", () => {
+    expect(mapBoundsMessage("Those map bounds are outside the world.")).toBe("Zoom in a little to load storms for this view.");
+    expect(mapBoundsMessage("Those map bounds are not usable.")).toBe("Zoom in a little to load storms for this view.");
+    const swapped = normalizeMapBounds({ west: 32.7, south: -97.4, east: 32.8, north: -97.2 });
+    expect(swapped?.west).toBeCloseTo(-97.4, 4);
+    expect(swapped?.east).toBeCloseTo(-97.2, 4);
+    expect(swapped?.south).toBeCloseTo(32.7, 4);
+    expect(swapped?.north).toBeCloseTo(32.8, 4);
   });
 
   it("keeps a view that is already metro sized", () => {

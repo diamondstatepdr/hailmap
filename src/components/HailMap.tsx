@@ -13,6 +13,7 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
+import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -190,6 +191,15 @@ interface Props {
   clusterPoints?: boolean;
 }
 
+function readMapBounds(map: { getBounds: () => { getWest: () => number; getSouth: () => number; getEast: () => number; getNorth: () => number } }): LngLatBounds | null {
+  try {
+    const box = map.getBounds();
+    return normalizeMapBounds({ west: box.getWest(), south: box.getSouth(), east: box.getEast(), north: box.getNorth() });
+  } catch {
+    return null;
+  }
+}
+
 export default function HailMap({
   theme,
   points,
@@ -265,22 +275,28 @@ export default function HailMap({
       return;
     }
     raw.stop();
+    const safe = normalizeMapBounds(next);
+    if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
     if (raw.getContainer().clientWidth < 768) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
-    map.fitBounds(
-      [
-        [next.west, next.south],
-        [next.east, next.north],
-      ],
-      {
-        padding: next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 },
-        duration: 0,
-        maxZoom: next.maxZoom ?? 8.2,
-      },
-    );
+    try {
+      map.fitBounds(
+        [
+          [safe.west, safe.south],
+          [safe.east, safe.north],
+        ],
+        {
+          padding: next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 },
+          duration: 0,
+          maxZoom: next.maxZoom ?? 8.2,
+        },
+      );
+    } catch {
+      // A latitude outside the world throws inside MapLibre. Keep the camera where it is.
+    }
   }
 
   useEffect(() => {
@@ -429,22 +445,12 @@ export default function HailMap({
       interactiveLayerIds={interactiveLayerIds}
       onClick={onClick}
       onMove={(event) => {
-        const box = event.target.getBounds();
-        onPreviewBounds?.({
-          west: box.getWest(),
-          south: box.getSouth(),
-          east: box.getEast(),
-          north: box.getNorth(),
-        });
+        const bounds = readMapBounds(event.target);
+        if (bounds) onPreviewBounds?.(bounds);
       }}
       onMoveEnd={(event) => {
-        const box = event.target.getBounds();
-        const bounds = {
-          west: box.getWest(),
-          south: box.getSouth(),
-          east: box.getEast(),
-          north: box.getNorth(),
-        };
+        const bounds = readMapBounds(event.target);
+        if (!bounds) return;
         onPreviewBounds?.(bounds);
         onViewChange?.(bounds);
       }}

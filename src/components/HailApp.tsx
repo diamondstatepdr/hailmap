@@ -42,7 +42,7 @@ import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
-import { haversineKm, boundsOf } from "@/lib/geo";
+import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -590,7 +590,7 @@ export default function HailApp() {
         })
         .catch((reason: unknown) => {
           if (reason instanceof DOMException && reason.name === "AbortError") return;
-          setError(reason instanceof Error ? reason.message : "Storm history is unavailable");
+          setError(mapBoundsMessage(reason instanceof Error ? reason.message : "Storm history is unavailable"));
         })
         .finally(() => {
           if (!controller.signal.aborted) setHistoryLoading(false);
@@ -874,7 +874,10 @@ export default function HailApp() {
   }
 
   function beginReplay(date: string, center?: { lat: number; lon: number } | null) {
-    const bounds = frameReplayBounds(center ? null : (viewBoundsRef.current ?? viewBounds), center ?? null);
+    const view = viewBoundsRef.current ?? viewBounds;
+    const viewUsable = Boolean(view && [view.west, view.south, view.east, view.north].every((value) => Number.isFinite(value)));
+    const anchor = center ?? (viewUsable ? null : placePoint);
+    const bounds = frameReplayBounds(anchor ? null : view, anchor ?? null);
     replayAnchor.current = center ?? { lat: (bounds.north + bounds.south) / 2, lon: (bounds.east + bounds.west) / 2 };
     replayFitReports.current = false;
     setSection("map");
@@ -885,6 +888,7 @@ export default function HailApp() {
     setCustomOpen(false);
     setFiltersOpen(false);
     setAddressClose((value) => value + 1);
+    setError(null);
     setShowMesh(true);
     setShowPoints(true);
     setShowThreats(true);
@@ -1613,7 +1617,7 @@ export default function HailApp() {
                     ? "Fetching radar"
                     : null
               }
-              note={replay.manifestError ?? (!replay.loadingManifest ? replay.manifest?.warningNote ?? null : null)}
+              note={mapBoundsMessage(replay.manifestError) ?? (!replay.loadingManifest ? replay.manifest?.warningNote ?? null : null)}
               onTogglePlay={replay.togglePlay}
               onStep={replay.move}
               onScrub={replay.scrub}

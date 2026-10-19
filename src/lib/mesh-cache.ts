@@ -14,11 +14,15 @@ import {
   type MeshGridShape,
 } from "@/lib/mesh-contour";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { meshDayReady, recordMeshGrid } from "@/lib/history-db";
+import { gapFor, hostOf, pace } from "@/lib/paced";
 import {
   LATEST_MESH_URL,
   dayFetchUrls,
   formatStormDate,
   isoDateUTC,
+  meshArchivePage,
+  pickMeshArchiveName,
   type MeshRequestPlan,
 } from "@/lib/mesh-plan";
 
@@ -95,16 +99,55 @@ function fresh(stored: StoredGrid, ttl: number | null): boolean {
 }
 
 async function fetchGrib(url: string): Promise<Buffer | null> {
-  const response = await fetch(url, {
-    headers: { "User-Agent": userAgent(), Accept: "application/octet-stream,*/*" },
-    signal: AbortSignal.timeout(30000),
-    cache: "no-store",
+  return pace(hostOf(url), gapFor(url), async () => {
+    const response = await fetch(url, {
+      headers: { "User-Agent": userAgent(), Accept: "application/octet-stream,*/*" },
+      signal: AbortSignal.timeout(30000),
+      cache: "no-store",
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length < 64) return null;
+    return bytes;
   });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length < 64) return null;
-  return bytes;
+}
+
+async function listedDayUrls(convectiveDate: string): Promise<string[]> {
+  const page = meshArchivePage(convectiveDate);
+  try {
+    const html = await pace(hostOf(page), gapFor(page), async () => {
+      const response = await fetch(page, {
+        headers: { "User-Agent": userAgent(), Accept: "text/html" },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) return "";
+      return response.text();
+    });
+    const names = [...html.matchAll(/href="([^"]+)"/g)].map((match) => decodeURIComponent(match[1].split("/").pop() ?? ""));
+    const best = pickMeshArchiveName(names);
+    return best ? [new URL(best, page).href] : [];
+  } catch (error) {
+    console.error("[hailmap] mesh list", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+function rememberMeshDay(stored: StoredGrid) {
+  if (!stored.key.startsWith("day-") || stored.missing) return;
+  const date = stored.key.slice(4);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || meshDayReady(date)) return;
+  const step = stored.step || 0.02;
+  const cells = stored.cells.map(([ix, iy, inches]) => ({
+    lat: stored.south + (iy + 0.5) * step,
+    lon: stored.west + (ix + 0.5) * step,
+    inches,
+  }));
+  try {
+    recordMeshGrid(date, cells);
+  } catch (error) {
+    console.error("[hailmap] mesh index", error instanceof Error ? error.message : error);
+  }
 }
 
 function storedFromGrib(key: string, label: string, product: string, sourceUrl: string, bytes: Buffer): StoredGrid {
@@ -146,26 +189,50 @@ function miss(key: string, label: string, product: string, note: string): Stored
   };
 }
 
-async function loadKey(key: string, ttl: number | null, label: string, product: string, urls: string[]): Promise<StoredGrid> {
+async function loadKey(
+  key: string,
+  ttl: number | null,
+  label: string,
+  product: string,
+  urls: string[],
+  more?: () => Promise<string[]>,
+): Promise<StoredGrid> {
   const cached = readStored(key);
-  if (cached && fresh(cached, cached.missing ? MISS_TTL_MS : ttl)) return cached;
+  if (cached && fresh(cached, cached.missing ? MISS_TTL_MS : ttl)) {
+    rememberMeshDay(cached);
+    return cached;
+  }
   const pending = inflight.get(key);
   if (pending) return pending;
   const job = (async () => {
     let lastError = "Radar file was not found";
-    for (const url of urls) {
-      try {
-        const bytes = await fetchGrib(url);
-        if (!bytes) continue;
-        const stored = storedFromGrib(key, label, product, url, bytes);
-        writeStored(stored);
-        return stored;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : "Radar file could not be read";
-        console.error("[hailmap] mesh", url, lastError);
+    const readUrls = async (queue: string[]) => {
+      for (const url of queue) {
+        try {
+          const bytes = await fetchGrib(url);
+          if (!bytes) continue;
+          const stored = storedFromGrib(key, label, product, url, bytes);
+          writeStored(stored);
+          rememberMeshDay(stored);
+          return stored;
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : "Radar file could not be read";
+          console.error("[hailmap] mesh", url, lastError);
+        }
       }
+      return null;
+    };
+    const direct = await readUrls(urls);
+    if (direct) return direct;
+    if (more) {
+      const extra = await more().catch(() => [] as string[]);
+      const listed = await readUrls(extra.filter((url) => !urls.includes(url)));
+      if (listed) return listed;
     }
-    if (cached && !cached.missing) return cached;
+    if (cached && !cached.missing) {
+      rememberMeshDay(cached);
+      return cached;
+    }
     const failed = miss(key, label, product, lastError);
     writeStored(failed);
     return failed;
@@ -239,7 +306,9 @@ export async function loadPlanGrids(plan: MeshRequestPlan, now = new Date()): Pr
         grids.push(asLoaded(stored, date, formatStormDate(date)));
         continue;
       }
-      const stored = await loadKey(`day-${date}`, null, formatStormDate(date), "MESH_Max_1440min", dayFetchUrls(date, now));
+      const stored = await loadKey(`day-${date}`, null, formatStormDate(date), "MESH_Max_1440min", dayFetchUrls(date, now), () =>
+        listedDayUrls(date),
+      );
       grids.push(asLoaded(stored, date));
     }
   });

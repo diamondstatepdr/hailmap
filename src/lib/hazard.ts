@@ -51,7 +51,7 @@ export function parseEfRating(value: unknown): string | null {
 export function efRank(rating: string | null | undefined): number {
   if (!rating) return -1;
   if (rating === "EFU" || rating === "UNK") return 0;
-  const match = rating.match(/^EF([0-5])$/);
+  const match = rating.match(/^(?:EF|F)([0-5])$/);
   return match ? Number(match[1]) : -1;
 }
 

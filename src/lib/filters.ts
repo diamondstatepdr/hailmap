@@ -65,8 +65,13 @@ export function emptyWindowMessage(hours: number): string {
   return "No hail reports in this window.";
 }
 
-export function applyReportFilter(reports: HailReport[], filter: ReportFilter, now = Date.now()): HailReport[] {
-  const cutoff = now - filter.hours * 3600 * 1000;
+export function applyReportFilter(
+  reports: HailReport[],
+  filter: ReportFilter,
+  now = Date.now(),
+  options?: { ignoreTime?: boolean },
+): HailReport[] {
+  const cutoff = options?.ignoreTime ? Number.NEGATIVE_INFINITY : now - filter.hours * 3600 * 1000;
   const state = filter.state.trim().toUpperCase();
   return reports.filter((report) => {
     const time = Date.parse(report.occurredAt);
@@ -107,6 +112,7 @@ export function reportsToPointCollection(reports: HailReport[]): FeatureCollecti
         ...(report.sizeIn != null ? { sizeIn: report.sizeIn } : {}),
         ...(report.windMph != null ? { windMph: report.windMph } : {}),
         ...(report.efRating ? { efRating: report.efRating } : {}),
+        ...(report.clusterCount && report.clusterCount > 1 ? { clusterCount: report.clusterCount } : {}),
       },
     })),
   };

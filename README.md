@@ -45,6 +45,8 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Optional Web Push keys. When unset, the first boot writes `vapid.json` in the data directory. |
 | `VAPID_SUBJECT` | `mailto:` or `https:` contact on each push. Defaults to the project mailbox. |
 | `HAILMAP_ALERT_INTERVAL_MS` | Alert loop interval. Default 3 minutes, clamped between 2 and 5. |
+| `HAILMAP_HISTORY_BACKFILL` | Set to `0` to skip the background fill of SPC daily files after the annual severe-weather database. |
+| `HAILMAP_MESH_BACKFILL` | Set to `1` to cache one past MESH day every 20 seconds. Leave unset on a small volume. |
 | `CAPACITOR_SERVER_URL` | HTTPS origin loaded by the Android WebView. |
 
 ## HTTP API
@@ -60,7 +62,11 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway
 - `GET /api/geocode?q=` — US address, city, or ZIP. Census geocoder first, Nominatim if Census has no match. Results are cached. `lat` and `lon` reverse-geocode a street name.
-- `GET /api/place?lat=&lon=&radiusKm=&hours=` — property storm history and damage probability. `hours` is a map window (0.75, 1, 6, 24, 72, 168). `radiusKm` is 1–80.
+- `GET /api/place?lat=&lon=&radiusKm=&hours=` — property storm history and damage probability for a live map window. `hours` is 0.75, 1, 6, 24, 72, or 168. `radiusKm` is 1–80.
+- `GET /api/history/reports?start=&end=&west=&south=&east=&north=` — hail, wind, and tornado reports for a map view. Dates can go back to 1950. Long ranges come back as clusters.
+- `GET /api/history/days?start=&end=&west=&south=&east=&north=` — hail dates in that view, largest hail first, with counts and any cached radar maximum.
+- `GET /api/history/place?lat=&lon=&radiusKm=&years=` — address history. `years` defaults to 2 (max 80). `start` and `end` override it. Optional `scoreDate` picks which storm the damage score uses.
+- `GET /api/history/coverage` — probed archive start dates, index counts, and bytes under the history directory. `?build=1` builds the SPC index first.
 - `GET /api/auth/session`, `POST /api/auth/session`, `DELETE /api/auth/session` — team sign-in. Body `{ "name", "passcode" }`.
 - `GET /api/watch`, `POST /api/watch`, `DELETE /api/watch/[id]` — per-user address watch list.
 - `GET /api/alerts/vapid` — public VAPID key for the browser Push API.
@@ -72,7 +78,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/alerts/replay?date=YYYY-MM-DD&lat=&lon=&radiusMi=&state=&minSizeIn=` — what the engine would have sent for a past convective day. It does not send pushes.
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
-- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot.
+- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot. A body with `start` and `end` uses the multi-year archive: date-of-loss candidates are listed, and the damage score is the selected `scoreDate` or the newest event.
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
 
@@ -126,6 +132,8 @@ Each nearby report gets points from hail size, wind speed, or tornado rating, th
 
 Bands: 0–17 Low, 18–39 Moderate, 40–64 High, 65–100 Very High. The optional Damage areas layer scores the same model on a coarse grid.
 
+On a multi-year address history, the score is only the selected storm (the newest event until a date is chosen). It is not a blend of every hail day in the span. The date-of-loss list is separate: spotter or radar hail of at least 1.00 in, wind of at least 58 mph, or any tornado.
+
 ## Address search
 
 Search uses the US Census geocoder. If that returns no match, HailMap asks Nominatim with `HAILMAP_USER_AGENT`, at most about one request per second, and caches the result. There is no paid geocoder key.
@@ -142,7 +150,15 @@ Field mode can list car dealerships and named auto lots inside a tapped hail swa
 
 ## Radar hail
 
-MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address.
+MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address. Archive swaths start on 2019-09-28. See [docs/history-coverage.md](docs/history-coverage.md).
+
+## Storm history
+
+The Live, 1h, 6h, 24h, 3d, and 7d chips stay on the 7-day feed. **30 days**, **90 days**, **1 year**, **Custom**, and **Pick a day** read the SPC severe-weather database (hail and wind from 1955, tornadoes from 1950) plus SPC daily files for the year that database does not include yet. Wide views are clustered so a year of reports stays a few hundred dots. **Pick a day** opens a month calendar. Days with hail in the current map view are marked, and the dot grows from 1 inch to 1.75 inches to 2.5 inches. Month and year controls jump across the archive. Tapping a day loads that day’s reports and the radar swath. The same calendar sits on an address history, marked with the days that hit that point. **Hail days** lists dates in the current map view, largest hail first.
+
+An address search opens a history card. The default span is 2 years, and it can run out to the start of the archive. Each date shows the radar MESH maximum where the archive covers it, the spotter maximum, wind, tornadoes, and nearby warnings, as a timeline and a table. The storm report for that span lists date-of-loss candidates and keeps the damage score on the newest or selected event.
+
+The index is built on first use under `$HAILMAP_DATA_DIR/history`. The 1950–2025 database plus 2026 daily files measured 281 MB. Past days are cached. Details, including the dates that were actually probed, are in [docs/history-coverage.md](docs/history-coverage.md).
 
 ## Tests
 

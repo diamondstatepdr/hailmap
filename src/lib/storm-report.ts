@@ -21,6 +21,20 @@ export interface StormReportDocument {
     bounds: { west: number; south: number; east: number; north: number } | null;
   };
   hours: number;
+  /** Inclusive calendar span when this report looks back more than the live window. */
+  rangeLabel?: string | null;
+  scoreDate?: string | null;
+  lossCandidates?: Array<{
+    date: string;
+    label: string;
+    spotterMaxIn: number | null;
+    meshMaxIn: number | null;
+    windMaxMph: number | null;
+    tornado: string | null;
+    hailCount: number;
+    windCount: number;
+    tornadoCount: number;
+  }>;
   score: DamageScore;
   stats: {
     reportCount: number;
@@ -160,6 +174,9 @@ export function buildStormReport(input: {
   nearbyWarningNote?: string | null;
   snapshotSvg?: string | null;
   now?: string;
+  rangeLabel?: string | null;
+  scoreDate?: string | null;
+  lossCandidates?: StormReportDocument["lossCandidates"];
 }): StormReportDocument {
   const createdAt = input.createdAt ?? input.now ?? new Date().toISOString();
   const listed = [...input.listed].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
@@ -209,6 +226,9 @@ export function buildStormReport(input: {
       bounds: input.bounds,
     },
     hours: input.hours,
+    rangeLabel: input.rangeLabel ?? null,
+    scoreDate: input.scoreDate ?? null,
+    lossCandidates: input.lossCandidates ?? [],
     score: input.history.score,
     stats: {
       reportCount: listed.length,

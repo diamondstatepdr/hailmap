@@ -91,6 +91,12 @@ button {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset));
 }
 
+@media (max-width: 767px) {
+  .map-state-jumps.is-covered {
+    display: none;
+  }
+}
+
 .map-banner {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset) + 2.35rem);
 }
@@ -276,6 +282,21 @@ html.dark .maplibregl-ctrl-attrib a {
 
 .seg::-webkit-scrollbar {
   display: none;
+}
+
+.cal-nav {
+  display: inline-flex;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.cal-nav:disabled {
+  opacity: 0.3;
 }
 
 .seg button {

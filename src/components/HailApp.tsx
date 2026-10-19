@@ -9,6 +9,7 @@ import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
+import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
 import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import FieldSheet from "@/components/panels/FieldSheet";
@@ -32,6 +33,8 @@ import {
   wantsFreshSync,
   windowPhrase,
 } from "@/lib/filters";
+import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
+import { HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
@@ -82,6 +85,65 @@ interface ViewBounds {
   north: number;
 }
 
+type HistoryMode =
+  | { kind: "window" }
+  | { kind: "days"; days: number }
+  | { kind: "custom"; start: string; end: string }
+  | { kind: "day"; date: string };
+
+interface HailDayView {
+  date: string;
+  maxHailIn: number | null;
+  hailCount: number;
+  windCount: number;
+  tornadoCount: number;
+  meshMaxIn: number | null;
+}
+
+function modeSpan(mode: HistoryMode, hours: number): DateSpan | null {
+  if (mode.kind === "days") return lastDays(mode.days);
+  if (mode.kind === "custom") return { start: mode.start, end: mode.end };
+  if (mode.kind === "day") return { start: mode.date, end: mode.date };
+  if (hours >= 24) return lastDays(Math.max(1, Math.round(hours / 24)));
+  return lastDays(1);
+}
+
+function clusterReport(cluster: {
+  lat: number;
+  lon: number;
+  count: number;
+  hailCount: number;
+  windCount: number;
+  tornadoCount: number;
+  maxHailIn: number | null;
+  maxWindMph: number | null;
+  strongestTornado: string | null;
+  occurredAt: string;
+  stormDate: string;
+  state?: string | null;
+}): HailReport {
+  const hazard = cluster.hailCount ? "hail" : cluster.tornadoCount ? "tornado" : "wind";
+  return {
+    id: `c:${cluster.lat.toFixed(3)}:${cluster.lon.toFixed(3)}`,
+    source: "spc",
+    confidence: "nws",
+    hazard,
+    lat: cluster.lat,
+    lon: cluster.lon,
+    sizeIn: cluster.maxHailIn,
+    sizeRaw: null,
+    windMph: cluster.maxWindMph,
+    efRating: cluster.strongestTornado,
+    occurredAt: cluster.occurredAt || `${cluster.stormDate}T18:00:00.000Z`,
+    location: `${cluster.count} reports`,
+    county: null,
+    state: cluster.state ?? null,
+    remark: null,
+    damageTags: [],
+    clusterCount: cluster.count,
+  };
+}
+
 function readTheme(): "light" | "dark" {
   if (typeof document === "undefined") return "light";
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -105,6 +167,25 @@ export default function HailApp() {
   const [showHeat, setShowHeat] = useState(false);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
+  const [historyMode, setHistoryMode] = useState<HistoryMode>({ kind: "window" });
+  const [serverClusters, setServerClusters] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyNote, setHistoryNote] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
+  const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [chromePx, setChromePx] = useState(0);
+  const [hailDaysOpen, setHailDaysOpen] = useState(false);
+  const [hailDays, setHailDays] = useState<HailDayView[]>([]);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [addressSpanId, setAddressSpanId] = useState("2y");
+  const [addressHistory, setAddressHistory] = useState<AddressHistoryView | null>(null);
+  const [scoreDate, setScoreDate] = useState<string | null>(null);
+  const [addressTick, setAddressTick] = useState(0);
   const [meshCollection, setMeshCollection] = useState<GeoJSON.FeatureCollection | null>(null);
   const [meshLabel, setMeshLabel] = useState<string | null>(null);
   const [meshNote, setMeshNote] = useState<string | null>(null);
@@ -164,6 +245,12 @@ export default function HailApp() {
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
+  const historyActive = historyMode.kind !== "window";
+  const historyActiveRef = useRef(false);
+  historyActiveRef.current = historyActive;
+  const addressRetries = useRef(0);
+  const calendarCache = useRef(new Map<string, CalendarMark[]>());
+  const chromeRef = useRef<HTMLDivElement>(null);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
 
@@ -254,8 +341,11 @@ export default function HailApp() {
         if (!response.ok) throw new Error("reports failed");
         const payload = (await response.json()) as ReportsResponse;
         if (cancelled) return;
-        setReports(payload.reports ?? []);
-        setRawCount(payload.rawCount ?? payload.reports?.length ?? 0);
+        if (!historyActiveRef.current) {
+          setReports(payload.reports ?? []);
+          setRawCount(payload.rawCount ?? payload.reports?.length ?? 0);
+          setServerClusters(false);
+        }
         setStatus(payload.sourceStatus);
         setSyncedAt(payload.syncedAt);
         setError(null);
@@ -340,15 +430,28 @@ export default function HailApp() {
       lat: String(placePoint.lat),
       lon: String(placePoint.lon),
       radiusKm: String(radiusKm),
-      hours: String(filter.hours),
     });
-    fetch(`/api/place?${params}`)
+    if (addressSpanId === "max") {
+      params.set("start", "1950-01-01");
+      params.set("end", new Date().toISOString().slice(0, 10));
+    } else {
+      const years = addressSpanId === "1y" ? 1 : addressSpanId === "5y" ? 5 : addressSpanId === "10y" ? 10 : 2;
+      params.set("years", String(years));
+    }
+    if (scoreDate) params.set("scoreDate", scoreDate);
+    fetch(`/api/history/place?${params}`)
       .then(async (response) => {
-        const payload = (await response.json()) as PlaceHistory & { error?: string };
+        const payload = (await response.json()) as AddressHistoryView & { error?: string };
         if (!response.ok) throw new Error(payload.error ?? "Could not load this address");
         if (!cancelled) {
-          setPlace(payload);
+          setAddressHistory(payload);
           setPlaceCardOpen(true);
+          if (payload.events.some((event) => event.meshStatus === "pending") && addressRetries.current < 5) {
+            addressRetries.current += 1;
+            window.setTimeout(() => {
+              if (!cancelled) setAddressTick((value) => value + 1);
+            }, 1200);
+          }
         }
       })
       .catch((reason: unknown) => {
@@ -360,7 +463,7 @@ export default function HailApp() {
     return () => {
       cancelled = true;
     };
-  }, [placePoint, radiusKm, filter.hours, reloadKey]);
+  }, [placePoint, radiusKm, addressSpanId, scoreDate, addressTick]);
 
   useEffect(() => {
     if (!placePoint) {
@@ -397,6 +500,13 @@ export default function HailApp() {
     const controller = new AbortController();
     setMeshLoading(true);
     const params = new URLSearchParams();
+    if (historyMode.kind === "days" || historyMode.kind === "custom") {
+      setMeshCollection({ type: "FeatureCollection", features: [] });
+      setMeshLabel("Pick a hail day");
+      setMeshNote("Radar swaths load one convective day at a time. Open Hail days and tap a date.");
+      setMeshLoading(false);
+      return;
+    }
     if (meshDate) params.set("date", meshDate);
     else params.set("hours", String(filter.hours));
     fetch(`/api/mesh?${params}`, { signal: controller.signal })
@@ -427,7 +537,138 @@ export default function HailApp() {
         if (!controller.signal.aborted) setMeshLoading(false);
       });
     return () => controller.abort();
-  }, [showMesh, filter.hours, meshDate]);
+  }, [showMesh, filter.hours, meshDate, historyMode]);
+
+  useEffect(() => {
+    if (!historyActive) return;
+    const span = modeSpan(historyMode, filter.hours);
+    const bounds = viewBounds;
+    if (!span || !bounds) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        start: span.start,
+        end: span.end,
+        west: String(bounds.west),
+        south: String(bounds.south),
+        east: String(bounds.east),
+        north: String(bounds.north),
+      });
+      if (filter.state) params.set("state", filter.state);
+      setHistoryLoading(true);
+      fetch(`/api/history/reports?${params}`, { signal: controller.signal })
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            error?: string;
+            mode?: "points" | "clusters";
+            reports?: HailReport[];
+            clusters?: Parameters<typeof clusterReport>[0][];
+            total?: number;
+            pendingDays?: number;
+          };
+          if (!response.ok) throw new Error(payload.error ?? "Storm history is unavailable");
+          if (controller.signal.aborted) return;
+          if (payload.mode === "clusters") {
+            setReports((payload.clusters ?? []).map(clusterReport));
+            setServerClusters(true);
+          } else {
+            setReports(payload.reports ?? []);
+            setServerClusters(false);
+          }
+          setRawCount(payload.total ?? payload.reports?.length ?? 0);
+          setHistoryNote(payload.pendingDays ? `Indexing ${payload.pendingDays} recent days in the background.` : null);
+          setError(null);
+        })
+        .catch((reason: unknown) => {
+          if (reason instanceof DOMException && reason.name === "AbortError") return;
+          setError(reason instanceof Error ? reason.message : "Storm history is unavailable");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setHistoryLoading(false);
+        });
+    }, 320);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [historyActive, historyMode, viewBounds, filter.state, filter.hours]);
+
+  useEffect(() => {
+    if (!hailDaysOpen) return;
+    const span = modeSpan(historyMode, filter.hours);
+    const bounds = viewBounds;
+    if (!span || !bounds) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      start: span.start,
+      end: span.end,
+      west: String(bounds.west),
+      south: String(bounds.south),
+      east: String(bounds.east),
+      north: String(bounds.north),
+    });
+    if (filter.state) params.set("state", filter.state);
+    fetch(`/api/history/days?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as { days?: HailDayView[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Hail days are unavailable");
+        if (!controller.signal.aborted) setHailDays(payload.days ?? []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHailDays([]);
+      });
+    return () => controller.abort();
+  }, [hailDaysOpen, historyMode, viewBounds, filter.state, filter.hours]);
+
+  useEffect(() => {
+    if (!calendarOpen || !viewBounds) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const start = `${calendarYear}-01-01`;
+    const end = `${calendarYear}-12-31` > today ? today : `${calendarYear}-12-31`;
+    if (start > end) return;
+    const key = [calendarYear, viewBounds.west.toFixed(2), viewBounds.south.toFixed(2), viewBounds.east.toFixed(2), viewBounds.north.toFixed(2), filter.state].join("|");
+    const cached = calendarCache.current.get(key);
+    if (cached) {
+      setCalendarMarks(cached);
+      setCalendarLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        start,
+        end,
+        west: String(viewBounds.west),
+        south: String(viewBounds.south),
+        east: String(viewBounds.east),
+        north: String(viewBounds.north),
+      });
+      if (filter.state) params.set("state", filter.state);
+      setCalendarLoading(true);
+      fetch(`/api/history/days?${params}`, { signal: controller.signal })
+        .then(async (response) => {
+          const payload = (await response.json()) as { days?: HailDayView[]; error?: string };
+          if (!response.ok) throw new Error(payload.error ?? "Hail days are unavailable");
+          if (controller.signal.aborted) return;
+          const marks = (payload.days ?? []).flatMap((day) => {
+            const inches = Math.max(day.maxHailIn ?? 0, day.meshMaxIn ?? 0);
+            return inches > 0 ? [{ date: day.date, inches }] : [];
+          });
+          calendarCache.current.set(key, marks);
+          setCalendarMarks(marks);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setCalendarMarks([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setCalendarLoading(false);
+        });
+    }, 320);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [calendarOpen, calendarYear, viewBounds, filter.state]);
 
   const fieldHours = useRef(filter.hours);
   useEffect(() => {
@@ -477,7 +718,10 @@ export default function HailApp() {
     };
   }, [section, userLocation, filter.hours, fieldPlace]);
 
-  const filtered = useMemo(() => applyReportFilter(reports, filter), [reports, filter]);
+  const filtered = useMemo(
+    () => applyReportFilter(reports, filter, Date.now(), { ignoreTime: historyActive }),
+    [reports, filter, historyActive],
+  );
   const selected = filtered.find((report) => report.id === selectedId) ?? null;
   const points = useMemo(() => reportsToPointCollection(filtered), [filtered]);
   const stateCounts = useMemo(() => {
@@ -551,11 +795,50 @@ export default function HailApp() {
     setFrame({ ...bounds, nonce: Date.now() });
   }
 
-  function setHours(hours: number) {
-    if (filter.hours === hours) return;
+  function showLiveWindow(hours: number) {
+    historyActiveRef.current = false;
+    setHistoryMode({ kind: "window" });
+    setServerClusters(false);
+    setHistoryNote(null);
+    setMeshDate("");
+    setCustomOpen(false);
     const next = { ...filter, hours };
     setFilter(next);
+    setReloadKey((value) => value + 1);
     frameFilter(next);
+  }
+
+  function showHistoryDays(days: number) {
+    setHistoryMode({ kind: "days", days });
+    setMeshDate("");
+    setCustomOpen(false);
+    setHailDaysOpen(true);
+  }
+
+  function showCalendar() {
+    const seed = historyMode.kind === "day" ? historyMode.date : meshDate || new Date().toISOString().slice(0, 10);
+    const [year, month] = seed.split("-").map(Number);
+    if (year && month) {
+      setCalendarYear(year);
+      setCalendarMonth(month);
+    }
+    setCalendarOpen((open) => !open);
+  }
+
+  function pickStormDay(date: string) {
+    setHistoryMode({ kind: "day", date });
+    setMeshDate(date);
+    setCustomOpen(false);
+    const [year, month] = date.split("-").map(Number);
+    if (year && month) {
+      setCalendarYear(year);
+      setCalendarMonth(month);
+    }
+    setScoreDate(date);
+  }
+
+  function setHours(hours: number) {
+    showLiveWindow(hours);
   }
 
   function setStateFilter(state: string) {
@@ -585,6 +868,9 @@ export default function HailApp() {
     setPlaceLabel(hit.label);
     setPlacePoint({ lat: hit.lat, lon: hit.lon });
     setPlace(null);
+    setAddressHistory(null);
+    setScoreDate(null);
+    addressRetries.current = 0;
     setPlaceCardOpen(true);
     setFocus({ lon: hit.lon, lat: hit.lat, nonce: Date.now(), zoom: 12 });
     setSelectedId(null);
@@ -713,7 +999,14 @@ export default function HailApp() {
     try {
       const body =
         kind === "address" && placePoint && placeLabel
-          ? { label: placeLabel, lat: placePoint.lat, lon: placePoint.lon, radiusKm, hours: filter.hours }
+          ? {
+              label: placeLabel,
+              lat: placePoint.lat,
+              lon: placePoint.lon,
+              radiusKm,
+              hours: filter.hours,
+              ...(addressHistory ? { start: addressHistory.start, end: addressHistory.end, scoreDate: addressHistory.selectedDate } : {}),
+            }
           : viewBounds
             ? { label: "Map view", bounds: viewBounds, hours: filter.hours }
             : null;
@@ -780,6 +1073,20 @@ export default function HailApp() {
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
   const showMap = section === "map" || section === "field";
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
+  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel ?? "MESH");
+
+  useEffect(() => {
+    const node = chromeRef.current;
+    if (!node) return;
+    const measure = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      setChromePx((current) => (current === height ? current : height));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [showMap, calendarOpen, hailDaysOpen, showMesh, customOpen]);
 
   return (
     <AppShell
@@ -793,11 +1100,18 @@ export default function HailApp() {
       onSignOut={() => void signOut()}
     >
       {showMap ? (
-        <div className="absolute inset-0" style={showMesh ? ({ "--chrome-offset": "8.7rem" } as CSSProperties) : undefined}>
+        <div
+          className="absolute inset-0"
+          style={
+            {
+              "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
+            } as CSSProperties
+          }
+        >
           <HailMap
             theme={theme}
             points={points}
-            swaths={swaths}
+            swaths={historyActive && serverClusters ? { type: "FeatureCollection", features: [] } : swaths}
             mesh={meshCollection}
             dealers={dealerCollection}
             income={income}
@@ -818,8 +1132,18 @@ export default function HailApp() {
             draftPin={draftPin}
             pickMode={picking}
             blockSelection={reportOpen}
+            clusterPoints={!serverClusters}
             onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
             onSelectReport={(id) => {
+              if (id.startsWith("c:")) {
+                const parts = id.split(":");
+                const lat = Number(parts[1]);
+                const lon = Number(parts[2]);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                  setFocus({ lat, lon, zoom: 8, nonce: Date.now() });
+                }
+                return;
+              }
               setSelectedId(id);
               setCounty(null);
               setThreat(null);
@@ -858,7 +1182,7 @@ export default function HailApp() {
               setViewBounds(bounds);
             }}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
               <AddressSearch onPick={chooseAddress} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
@@ -889,36 +1213,126 @@ export default function HailApp() {
                 <button
                   key={item.hours}
                   type="button"
-                  aria-pressed={filter.hours === item.hours}
-                  onClick={() => setHours(item.hours)}
+                  aria-pressed={!historyActive && filter.hours === item.hours}
+                  onClick={() => showLiveWindow(item.hours)}
                 >
                   {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
                 </button>
               ))}
             </div>
+            <div className="pointer-events-auto seg" role="group" aria-label="Storm history">
+              {HISTORY_CHIPS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={historyMode.kind === "days" && historyMode.days === item.days}
+                  onClick={() => showHistoryDays(item.days)}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button type="button" aria-pressed={customOpen || historyMode.kind === "custom"} onClick={() => setCustomOpen((open) => !open)}>
+                Custom
+              </button>
+              <button type="button" aria-pressed={calendarOpen || historyMode.kind === "day"} onClick={showCalendar}>
+                Pick a day
+              </button>
+              <button type="button" aria-pressed={hailDaysOpen} onClick={() => setHailDaysOpen((open) => !open)}>
+                Hail days
+              </button>
+            </div>
+            {customOpen ? (
+              <form
+                className="pointer-events-auto glass flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 text-xs"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!customStart || !customEnd || customStart > customEnd) return;
+                  setHistoryMode({ kind: "custom", start: customStart, end: customEnd });
+                  setMeshDate("");
+                  setHailDaysOpen(true);
+                }}
+              >
+                <label className="inline-flex items-center gap-1">
+                  Start
+                  <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="rounded-lg border border-line bg-panel px-1.5 py-1" />
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  End
+                  <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="rounded-lg border border-line bg-panel px-1.5 py-1" />
+                </label>
+                <button type="submit" className="btn btn-primary press px-3 py-1 text-xs">
+                  Show range
+                </button>
+              </form>
+            ) : null}
+            {calendarOpen ? (
+              <div className="pointer-events-auto glass w-[min(22rem,100%)] rounded-2xl p-3">
+                <HailCalendar
+                  year={calendarYear}
+                  month={calendarMonth}
+                  selected={historyMode.kind === "day" ? historyMode.date : null}
+                  marks={calendarMarks}
+                  loading={calendarLoading}
+                  caption="Dots show the largest hail in the current map view. Tap a day to load that storm and its radar swath."
+                  onViewChange={(year, month) => {
+                    setCalendarYear(year);
+                    setCalendarMonth(month);
+                  }}
+                  onSelect={pickStormDay}
+                />
+              </div>
+            ) : historyMode.kind === "day" ? (
+              <div className="pointer-events-auto glass flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-xs">
+                <span className="font-semibold">{formatDay(historyMode.date)}</span>
+                <button type="button" className="font-semibold text-accent" onClick={() => setCalendarOpen(true)}>
+                  Calendar
+                </button>
+              </div>
+            ) : null}
+            {hailDaysOpen ? (
+              <div className="pointer-events-auto glass max-h-60 w-[min(24rem,100%)] overflow-auto rounded-2xl p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Hail days</p>
+                  <button type="button" className="text-xs font-semibold text-accent" onClick={() => setHailDaysOpen(false)}>
+                    Hide
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-muted">Sorted by largest hail in the map view. Tap a date to load that day's reports and radar swath.</p>
+                {hailDays.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {hailDays.slice(0, 40).map((day) => (
+                      <li key={day.date}>
+                        <button type="button" onClick={() => pickStormDay(day.date)} className="press flex w-full items-baseline justify-between gap-2 rounded-xl px-2 py-1.5 text-left hover:bg-white/40">
+                          <span className="font-semibold">{formatDay(day.date)}</span>
+                          <span className="text-xs text-muted">
+                            {day.maxHailIn != null ? `${day.maxHailIn.toFixed(2)} in` : "—"} · {day.hailCount} hail
+                            {day.meshMaxIn != null ? ` · radar ${day.meshMaxIn.toFixed(2)}` : ""}
+                            {day.windCount ? ` · ${day.windCount} wind` : ""}
+                            {day.tornadoCount ? ` · ${day.tornadoCount} tornado` : ""}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-muted">No hail reports in this view and range yet.</p>
+                )}
+              </div>
+            ) : null}
             {showMesh ? (
-              <div className="pointer-events-auto glass flex items-center gap-2 overflow-x-auto rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
+              <div className="pointer-events-auto glass flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
                 <span className="shrink-0 font-semibold">Radar</span>
+                <span className="shrink-0 font-semibold" data-radar-label>
+                  {radarCaption}
+                </span>
                 {MESH_LEGEND.map((band) => (
                   <span key={band.label} className="inline-flex shrink-0 items-center gap-1">
                     <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
                     {band.label}
                   </span>
                 ))}
-                <span className="shrink-0 text-muted">{meshLoading ? "Loading…" : (meshLabel ?? "MESH")}</span>
-                <label className="inline-flex shrink-0 items-center gap-1">
-                  <span className="sr-only">Radar date</span>
-                  <input
-                    type="date"
-                    value={meshDate}
-                    max={new Date().toISOString().slice(0, 10)}
-                    min="2015-01-01"
-                    onChange={(event) => setMeshDate(event.target.value)}
-                    className="rounded-lg border border-line bg-panel px-1.5 py-0.5 text-[11px]"
-                  />
-                </label>
                 {meshDate ? (
-                  <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => setMeshDate("")}>
+                  <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
                     Use time window
                   </button>
                 ) : null}
@@ -926,7 +1340,7 @@ export default function HailApp() {
             ) : null}
           </div>
           {stateCounts.length ? (
-            <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
+            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
               <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
                 {stateCounts.slice(0, 12).map(([code, count]) => {
                   const on = filter.state === code;
@@ -989,12 +1403,38 @@ export default function HailApp() {
           ) : null}
           {!loading && filtered.length === 0 && !reportOpen ? (
             <p className="glass pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
-              {hazards.length === 1 && hazards[0] === "hail" ? emptyWindowMessage(filter.hours) : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
+              {historyLoading
+                ? "Loading storm history…"
+                : historyActive
+                  ? historyNote ?? "No reports in this range for the current map view."
+                  : hazards.length === 1 && hazards[0] === "hail"
+                    ? emptyWindowMessage(filter.hours)
+                    : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
           {section === "map" && placeCardOpen && placeLabel && placePoint ? (
-            <div className="absolute inset-x-3 bottom-3 z-30 max-h-[48%] overflow-y-auto">
-              {place ? (
+            <div className="absolute inset-x-3 bottom-3 z-30 max-h-[min(72dvh,36rem)] overflow-y-auto">
+              {addressHistory ? (
+                <AddressHistoryCard
+                  label={placeLabel}
+                  history={addressHistory}
+                  spanId={addressSpanId}
+                  loading={placeLoading}
+                  onSpan={(id) => {
+                    addressRetries.current = 0;
+                    setScoreDate(null);
+                    setAddressSpanId(id);
+                  }}
+                  onSelectDate={(date) => pickStormDay(date)}
+                  onClose={() => setPlaceCardOpen(false)}
+                  onSave={() => void saveWatch()}
+                  onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                  onReport={() => {
+                    setSection("reports");
+                    void generateReport("address");
+                  }}
+                />
+              ) : place ? (
                 <PropertyCard
                   label={placeLabel}
                   history={place}

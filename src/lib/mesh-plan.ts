@@ -1,4 +1,5 @@
 import { TIME_WINDOWS } from "@/lib/filters";
+import { MESH_ARCHIVE_START } from "@/lib/history-coverage";
 
 const WINDOW_HOURS = new Set(TIME_WINDOWS.map((item) => item.hours));
 
@@ -74,19 +75,45 @@ export function datesCovering(hours: number, now: Date): string[] {
  * The file valid at 12:00 UTC on the next calendar day covers the US storm day.
  * Recent hours are tried on NCEP first; older days come from the Iowa State archive.
  */
+/** Pick the archive file closest to 12:00 UTC. Early days use irregular timestamps and an MRMS_ prefix. */
+export function pickMeshArchiveName(names: string[]): string | null {
+  const files = names.filter((name) => /(?:MESH|MRMS)_Max_1440min_00\.50_.*\.grib2\.gz$/i.test(name));
+  if (!files.length) return null;
+  const score = (name: string) => {
+    const match = name.match(/(\d{6})\.grib2\.gz$/i);
+    if (!match) return 1e9;
+    const hh = Number(match[1].slice(0, 2));
+    const mm = Number(match[1].slice(2, 4));
+    const ss = Number(match[1].slice(4, 6));
+    return Math.abs(hh * 3600 + mm * 60 + ss - 12 * 3600);
+  };
+  return files.slice().sort((a, b) => score(a) - score(b) || a.localeCompare(b))[0] ?? null;
+}
+
+export function meshArchivePage(convectiveDate: string): string {
+  const end = addIsoDays(convectiveDate, 1);
+  const [year, month, day] = end.split("-");
+  return `https://mtarchive.geol.iastate.edu/${year}/${month}/${day}/mrms/ncep/MESH_Max_1440min/`;
+}
+
 export function dayFetchUrls(convectiveDate: string, now = new Date()): string[] {
   const end = addIsoDays(convectiveDate, 1);
   const [year, month, day] = end.split("-");
   const ymd = `${year}${month}${day}`;
   const hours = ["120000", "180000", "060000", "000000"];
+  const prefixes = convectiveDate < "2022-10-01" ? ["MRMS_Max_1440min", "MESH_Max_1440min"] : ["MESH_Max_1440min", "MRMS_Max_1440min"];
   const endMs = Date.parse(`${end}T00:00:00Z`);
   const recent = Number.isFinite(endMs) && now.getTime() - endMs < 40 * 3600 * 1000;
   const urls: string[] = [];
   for (const hour of hours) {
-    const ncep = `https://mrms.ncep.noaa.gov/2D/MESH_Max_1440min/MRMS_MESH_Max_1440min_00.50_${ymd}-${hour}.grib2.gz`;
-    const archive = `https://mtarchive.geol.iastate.edu/${year}/${month}/${day}/mrms/ncep/MESH_Max_1440min/MESH_Max_1440min_00.50_${ymd}-${hour}.grib2.gz`;
-    if (recent) urls.push(ncep);
-    urls.push(archive);
+    if (recent) {
+      urls.push(`https://mrms.ncep.noaa.gov/2D/MESH_Max_1440min/MRMS_MESH_Max_1440min_00.50_${ymd}-${hour}.grib2.gz`);
+    }
+    for (const prefix of prefixes) {
+      urls.push(
+        `https://mtarchive.geol.iastate.edu/${year}/${month}/${day}/mrms/ncep/MESH_Max_1440min/${prefix}_00.50_${ymd}-${hour}.grib2.gz`,
+      );
+    }
   }
   return urls;
 }
@@ -98,7 +125,7 @@ export function planMesh(input: { hours?: number; date?: string | null; now?: Da
   if (date) {
     if (!isIsoDate(date)) return { error: "date must be YYYY-MM-DD" };
     if (date > today) return { error: "That radar date is in the future." };
-    if (date < "2015-01-01") return { error: "Radar hail swaths start in 2015." };
+    if (date < MESH_ARCHIVE_START) return { error: "Radar hail swaths in the Iowa State archive start on 2019-09-28." };
     if (date === today) {
       return {
         label: `Today · ${formatStormDate(date)}`,

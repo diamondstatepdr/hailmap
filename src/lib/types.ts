@@ -25,6 +25,8 @@ export interface HailReport {
   photoId?: string | null;
   /** Public path for the photo, when one was stored. */
   photoUrl?: string | null;
+  /** Set when this map dot stands for several archived reports. */
+  clusterCount?: number;
 }
 
 export interface IncomingReport {

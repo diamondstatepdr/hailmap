@@ -1,5 +1,5 @@
-const CACHE = "hailmap-shell-v1";
-const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png"];
+const CACHE = "hailmap-shell-v2";
+const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -19,7 +19,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.startsWith("/api/") || url.pathname === "/sw.js") return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -28,5 +28,67 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+  );
+});
+
+function readPush(event) {
+  const fallback = {
+    title: "HailMap",
+    body: "Hail alert",
+    url: "/",
+    tag: "",
+  };
+  if (!event.data) return fallback;
+  try {
+    const payload = event.data.json();
+    return {
+      title: typeof payload.title === "string" && payload.title ? payload.title : fallback.title,
+      body: typeof payload.body === "string" ? payload.body : fallback.body,
+      url: typeof payload.url === "string" && payload.url ? payload.url : "/",
+      tag: typeof payload.tag === "string" ? payload.tag : "",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  const payload = readPush(event);
+  event.waitUntil(
+    (async () => {
+      await self.registration.showNotification(payload.title, {
+        body: payload.body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag: payload.tag || undefined,
+        data: { url: payload.url },
+      });
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of windows) client.postMessage({ type: "hailmap-push", payload });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const client = windows.find((item) => item.url.startsWith(self.location.origin));
+      if (client && "navigate" in client) {
+        try {
+          const next = await client.navigate(target);
+          if (next && "focus" in next) return next.focus();
+        } catch {
+          /* Open or focus below. */
+        }
+      }
+      if (client && "focus" in client) {
+        client.postMessage({ type: "hailmap-open", url: target });
+        return client.focus();
+      }
+      return self.clients.openWindow(target);
+    })(),
   );
 });

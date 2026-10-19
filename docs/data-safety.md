@@ -4,7 +4,7 @@ Answer the Data safety form from this sheet. The Android package `com.hailmap.ap
 
 ## Overview
 
-- Does the app collect or share any of the required user data types? **Yes**, when someone submits a photo, signs in for Field mode, or saves a watch list. Viewing the map does not collect those fields.
+- Does the app collect or share any of the required user data types? **Yes**, when someone submits a photo, signs in for Field mode, saves a watch list, or turns on phone alerts. Viewing the map does not collect those fields.
 - Is all user data encrypted in transit? **Yes.** The release WebView loads only `https://` (`CAPACITOR_SERVER_URL`, cleartext disabled).
 - Do you provide a way for users to request data deletion? **Yes.** Email diamondstatepdr@gmail.com. Imported, webhook, and photo hail reports can be deleted. Field notes, field photos, watch-list rows, and storm reports tied to a signed-in name can be deleted the same way. Viewing the map does not create an account.
 - Privacy policy URL: `https://YOUR-RAILWAY-DOMAIN/privacy`
@@ -13,12 +13,12 @@ Answer the Data safety form from this sheet. The Android package `com.hailmap.ap
 
 | Data type | Collected | Shared | Notes |
 | --- | --- | --- | --- |
-| Location (precise or approximate) | Yes, optional | No | Field mode and “Use my location” on a community hail photo use browser geolocation. The map itself does not request location. Photo EXIF GPS is not used. |
+| Location (precise or approximate) | Yes, optional | No | Field mode, “Use my location” on a community hail photo, and Near me alerts use browser geolocation. The last fix for Near me is stored with that phone’s push subscription. The map itself does not request location. Photo EXIF GPS is not used. |
 | Personal info (name, email, phone, address) | Yes, optional | No | A display name is stored only if someone signs in with the team passcode. It is the account id for that person’s field notes and watch list. Phone and email are not collected. |
 | Financial info | No | No | County income is Census statistics, not the user's finances. |
 | Photos | Yes, optional | No | A community hail photo is public on the map. A Field-mode photo stays on that user’s pin and is not shown as an official report. Contacts, SMS, and calendar are not accessed. |
 | App activity / web history | No | No | No analytics SDK. |
-| Device or other IDs | No | No | Not collected by HailMap. |
+| Device or other IDs | Yes, optional | No | Turning on phone alerts stores the browser push endpoint and its keys so HailMap can deliver hail notifications. It is deleted when alerts are turned off or the push service reports the subscription is gone. No advertising ID. |
 | Files | No | No | A CSV/GeoJSON the user imports is uploaded to the HailMap server as hail observations. Treat the file contents as user-provided content, not as personal files stored on device. |
 
 ## Data the server stores when someone submits a report

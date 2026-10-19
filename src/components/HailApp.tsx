@@ -10,7 +10,9 @@ import type { MapFocus, MapFrame } from "@/components/HailMap";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
 import PropertyCard from "@/components/PropertyCard";
+import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import FieldSheet from "@/components/panels/FieldSheet";
+import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
 import StormsPanel from "@/components/panels/StormsPanel";
@@ -33,6 +35,7 @@ import {
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
+import { parseAlertLink } from "@/lib/alert-model";
 import { haversineKm, boundsOf } from "@/lib/geo";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -156,11 +159,57 @@ export default function HailApp() {
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportUrl, setReportUrl] = useState<string | null>(null);
   const lastStreetFix = useRef<{ lat: number; lon: number } | null>(null);
+  const pendingReport = useRef<string | null>(null);
+  const [alertDraft, setAlertDraft] = useState<{ lat: number; lon: number; label: string } | null>(null);
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
+
+  function followAlertLink(href: string) {
+    const target = parseAlertLink(href);
+    if (target.focus) {
+      setFocus({ lat: target.focus.lat, lon: target.focus.lon, zoom: target.focus.zoom, nonce: Date.now() });
+      setSection("map");
+    }
+    if (target.reportId) {
+      pendingReport.current = target.reportId;
+      setSelectedId(target.reportId);
+      setSection("map");
+    }
+    if (target.card) {
+      setPlaceLabel(target.card.label);
+      setPlacePoint({ lat: target.card.lat, lon: target.card.lon });
+      setPlace(null);
+      setPlaceCardOpen(true);
+      setSection("map");
+      if (!target.focus) {
+        setFocus({ lat: target.card.lat, lon: target.card.lon, zoom: 11, nonce: Date.now() });
+      }
+    } else if (target.section === "alerts" && !target.focus) {
+      setSection("alerts");
+    }
+  }
+
+  useEffect(() => {
+    followAlertLink(window.location.href);
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; url?: string } | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "hailmap-open" && typeof data.url === "string") followAlertLink(data.url);
+      if (data.type === "hailmap-push") window.dispatchEvent(new CustomEvent("hailmap-push"));
+    }
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+    // The deep link is read once, when the app opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!pendingReport.current) return;
+    if (reports.some((report) => report.id === pendingReport.current)) setSelectedId(pendingReport.current);
+  }, [reports]);
 
   useEffect(() => {
     setTheme(readTheme());
@@ -943,21 +992,37 @@ export default function HailApp() {
               {hazards.length === 1 && hazards[0] === "hail" ? emptyWindowMessage(filter.hours) : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
-          {section === "map" && placeCardOpen && place && placeLabel ? (
+          {section === "map" && placeCardOpen && placeLabel && placePoint ? (
             <div className="absolute inset-x-3 bottom-3 z-30 max-h-[48%] overflow-y-auto">
-              <PropertyCard
-                label={placeLabel}
-                history={place}
-                mesh={status?.mesh}
-                radar={radar}
-                radarLoading={radarLoading}
-                onClose={() => setPlaceCardOpen(false)}
-                onSave={() => void saveWatch()}
-                onReport={() => {
-                  setSection("reports");
-                  void generateReport("address");
-                }}
-              />
+              {place ? (
+                <PropertyCard
+                  label={placeLabel}
+                  history={place}
+                  mesh={status?.mesh}
+                  radar={radar}
+                  radarLoading={radarLoading}
+                  onClose={() => setPlaceCardOpen(false)}
+                  onSave={() => void saveWatch()}
+                  onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                  onReport={() => {
+                    setSection("reports");
+                    void generateReport("address");
+                  }}
+                />
+              ) : (
+                <article className="float-card p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Property</p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight">{placeLabel}</h2>
+                  <p className="mt-2 text-sm text-muted">{placeError ?? "Checking storm history…"}</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary press mt-3"
+                    onClick={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                  >
+                    Alert me here
+                  </button>
+                </article>
+              )}
             </div>
           ) : null}
           {section === "map" && area && !(placeCardOpen && place) ? (
@@ -982,9 +1047,22 @@ export default function HailApp() {
                       ? dealerError
                       : `${dealers.length} dealership${dealers.length === 1 ? "" : "s"} and auto lot${dealers.length === 1 ? "" : "s"}`}
                 </p>
-                <button type="button" className="btn btn-primary press mt-3" onClick={() => setSection("field")}>
-                  Open in field mode
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary press"
+                    onClick={() => {
+                      const center = ringCenter(area.geometry);
+                      if (!center) return;
+                      setAlertDraft({ lat: center.lat, lon: center.lon, label: area.label });
+                    }}
+                  >
+                    Alert me here
+                  </button>
+                  <button type="button" className="btn btn-secondary press" onClick={() => setSection("field")}>
+                    Open in field mode
+                  </button>
+                </div>
               </article>
             </div>
           ) : null}
@@ -1004,6 +1082,13 @@ export default function HailApp() {
                       <img src={selected.photoUrl} alt="Community hail photo" className="mt-2 max-h-40 w-full rounded-xl object-cover" />
                     ) : null}
                     {selected.remark ? <p className="mt-2 text-sm">{selected.remark}</p> : null}
+                    <button
+                      type="button"
+                      className="btn btn-primary press mt-3"
+                      onClick={() => setAlertDraft({ lat: selected.lat, lon: selected.lon, label: placeLabelOf(selected) })}
+                    >
+                      Alert me here
+                    </button>
                   </>
                 ) : null}
                 {threat ? (
@@ -1161,9 +1246,15 @@ export default function HailApp() {
             setSection("reports");
             void generateReport("address");
           }}
+          onAlert={
+            placePoint && placeLabel
+              ? () => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })
+              : undefined
+          }
           onShowMap={() => setSection("map")}
         />
       ) : null}
+      {section === "alerts" ? <AlertsPanel onOpenAlert={followAlertLink} /> : null}
       {section === "reports" ? (
         <ReportsPanel
           canUseView={Boolean(viewBounds)}
@@ -1178,6 +1269,18 @@ export default function HailApp() {
           onView={() => void generateReport("view")}
         />
       ) : null}
+      {alertDraft ? (
+        <AlertHereSheet
+          label={alertDraft.label}
+          lat={alertDraft.lat}
+          lon={alertDraft.lon}
+          onClose={() => setAlertDraft(null)}
+          onSaved={() => {
+            setAlertDraft(null);
+            setSection("alerts");
+          }}
+        />
+      ) : null}
       {authOpen ? (
         <AuthDialog
           configured={authConfigured}
@@ -1190,6 +1293,18 @@ export default function HailApp() {
       ) : null}
     </AppShell>
   );
+}
+
+function ringCenter(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): { lat: number; lon: number } | null {
+  const ring = geometry.type === "Polygon" ? geometry.coordinates[0] : geometry.coordinates[0]?.[0];
+  if (!ring?.length) return null;
+  let lon = 0;
+  let lat = 0;
+  for (const pair of ring) {
+    lon += pair[0];
+    lat += pair[1];
+  }
+  return { lon: lon / ring.length, lat: lat / ring.length };
 }
 
 function placeLabelOf(report: HailReport): string {

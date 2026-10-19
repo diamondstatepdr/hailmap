@@ -36,6 +36,7 @@ interface Props {
   onOpenWatch: (item: WatchItem) => void;
   onRemoveWatch: (id: string) => void;
   onReport: () => void;
+  onAlert?: () => void;
   onShowMap: () => void;
 }
 
@@ -109,6 +110,7 @@ export default function PropertiesPanel(props: Props) {
             onSave={props.signedIn ? props.onSave : undefined}
             saveLabel={props.signedIn ? "Save to watch list" : undefined}
             onReport={props.onReport}
+            onAlert={props.onAlert}
           />
           {!props.signedIn ? (
             <p className="text-sm text-muted">Sign in to save this address. The history above is public report data.</p>

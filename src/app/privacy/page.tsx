@@ -21,7 +21,7 @@ export default function PrivacyPage() {
       </div>
       <article className="prose-hail space-y-3">
         <h1>Privacy policy</h1>
-        <p>Effective October 9, 2026. HailMap is operated by Diamond State Hail Solutions.</p>
+        <p>Effective October 19, 2026. HailMap is operated by Diamond State Hail Solutions.</p>
         <p>
           Contact: <a href="mailto:diamondstatepdr@gmail.com">diamondstatepdr@gmail.com</a>
         </p>
@@ -82,6 +82,17 @@ export default function PrivacyPage() {
           to a webhook, or submit with a photo stay until you ask us to delete them or we remove
           the database. The database and photo files live on the server volume, not on the phone,
           except for a short-lived cache of the app shell in the browser.
+        </p>
+
+        <h2>Phone alerts</h2>
+        <p>
+          If you turn on alerts, the browser creates a push subscription. HailMap stores that
+          subscription, the areas you watch, quiet hours, and an optional last GPS fix for Near me.
+          There is no name on that record. Radar hail, spotter reports, and National Weather Service
+          warnings are checked on the server. A notification includes the place, hail size, and time,
+          and opens the map or the address card. The subscription is deleted when you turn alerts off
+          or when the push service says the browser is gone. iPhone alerts require adding HailMap to
+          the Home Screen.
         </p>
 
         <h2>Optional team sign-in</h2>

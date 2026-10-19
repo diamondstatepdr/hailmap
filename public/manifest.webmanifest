@@ -1,12 +1,16 @@
 {
+  "id": "/",
   "name": "HailMap",
   "short_name": "HailMap",
-  "description": "Live US hail, wind, and tornado reports, property storm history, and field notes.",
+  "description": "Live US hail, wind, and tornado reports, with phone alerts for the areas you watch.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "browser"],
+  "orientation": "any",
   "background_color": "#062833",
   "theme_color": "#eef3f8",
+  "categories": ["weather"],
   "icons": [
     {
       "src": "/icons/icon-192.png",

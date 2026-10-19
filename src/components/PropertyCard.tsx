@@ -1,6 +1,6 @@
 "use client";
 
-import { CloudHail, Tornado, Wind } from "lucide-react";
+import { Bell, CloudHail, Tornado, Wind } from "lucide-react";
 import type { RadarSample } from "@/lib/area-selection";
 import { formatWhen, placeLabel } from "@/lib/filters";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
@@ -16,11 +16,12 @@ interface Props {
   radarLoading?: boolean;
   onSave?: () => void;
   onReport?: () => void;
+  onAlert?: () => void;
   onClose?: () => void;
   saveLabel?: string;
 }
 
-export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onClose, saveLabel }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel }: Props) {
   const score = history.score;
   return (
     <article className="float-card p-4">
@@ -130,8 +131,14 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
         <p className="mt-3 text-sm text-muted">No hail, wind, or tornado reports in this radius and date range.</p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
+        {onAlert ? (
+          <button type="button" onClick={onAlert} className="btn btn-primary press">
+            <Bell size={16} />
+            Alert me here
+          </button>
+        ) : null}
         {onSave ? (
-          <button type="button" onClick={onSave} className="btn btn-primary press">
+          <button type="button" onClick={onSave} className="btn btn-secondary press">
             {saveLabel ?? "Save to watch list"}
           </button>
         ) : null}

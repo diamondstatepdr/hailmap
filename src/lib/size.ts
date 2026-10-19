@@ -54,6 +54,26 @@ export function parseHailSizeInches(input: unknown): number | null {
  * SPC hail CSV stores size in hundredths of an inch (175 = 1.75).
  * Decimal tokens are already inches.
  */
+/**
+ * Hail size from a warning or remark. Wind speeds and other numbers are ignored.
+ * Word sizes (quarter, golf ball) count only when the text mentions hail.
+ */
+export function hailPhraseInches(text: string): number | null {
+  if (!text || !/\bhail\b/i.test(text)) return null;
+  for (const [pattern, inches] of WORD_SIZES) {
+    if (pattern.test(text)) return inches;
+  }
+  const chunks = text.split(/[\n.;]+/);
+  for (const chunk of chunks) {
+    if (!/\bhail\b/i.test(chunk)) continue;
+    const match = chunk.match(/(\d+(?:\.\d+)?)\s*(?:inch(?:es)?|in)\b/i);
+    if (!match) continue;
+    const size = normalizeInches(Number(match[1]));
+    if (size) return size;
+  }
+  return null;
+}
+
 export function parseSpcSizeToken(raw: string): number | null {
   const text = raw.trim();
   if (!text) return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
@@ -130,6 +130,8 @@ export interface MapFrame {
   north: number;
   nonce: number;
   maxZoom?: number;
+  /** Pixel inset so the framed storm sits in the map that is not covered by the chrome or replay bar. */
+  padding?: { top: number; bottom: number; left: number; right: number };
 }
 
 const THREAT_LAYERS = new Set([
@@ -164,6 +166,8 @@ interface Props {
   showOutlook: boolean;
   showHeat?: boolean;
   heat?: GeoJSON.FeatureCollection | null;
+  /** Draw the radar swath above warning polygons and with stronger contour fill. */
+  emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
   selectedId: string | null;
@@ -202,6 +206,7 @@ export default function HailMap({
   showOutlook,
   showHeat = false,
   heat = null,
+  emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
   selectedId,
@@ -230,8 +235,9 @@ export default function HailMap({
   const interactiveLayerIds = [
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
-    showMesh && mesh?.features.length ? "mesh-fill" : "",
-    showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : "",
+    ...(emphasizeMesh
+      ? ["mesh-a-fill", "mesh-b-fill", "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
+      : [showMesh && mesh?.features.length ? "mesh-fill" : "", showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : ""]),
     showSwaths ? "swath-fill" : "",
     dealers?.features.length ? "dealer-pins" : "",
     showThreats ? "threat-warning-fill" : "",
@@ -252,18 +258,19 @@ export default function HailMap({
       frameWait.current = true;
       raw.once("idle", () => {
         frameWait.current = false;
-        if (frameRef.current?.nonce === next.nonce) applyFrame(next);
+        applyFrame(frameRef.current);
       });
       return;
     }
+    raw.stop();
     map.fitBounds(
       [
         [next.west, next.south],
         [next.east, next.north],
       ],
       {
-        padding: { top: 124, bottom: 232, left: 36, right: 48 },
-        duration: 800,
+        padding: next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 },
+        duration: 0,
         maxZoom: next.maxZoom ?? 8.2,
       },
     );
@@ -351,12 +358,12 @@ export default function HailMap({
         onSelectDealer?.(String(props.id));
         return;
       }
-      if ((feature.layer?.id === "mesh-fill" || feature.layer?.id === "mesh-pulse-fill" || feature.layer?.id === "swath-fill") && feature.geometry) {
+      if ((isRadarLayer(feature.layer?.id) || feature.layer?.id === "swath-fill") && feature.geometry) {
         const geometry = feature.geometry;
         if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") return;
         const minIn = numberProp(props.minIn);
         const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
-        const radar = feature.layer.id === "mesh-fill" || feature.layer.id === "mesh-pulse-fill";
+        const radar = isRadarLayer(feature.layer.id);
         onSelectArea?.({
           id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
           label: radar
@@ -535,51 +542,7 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {showMesh && mesh?.features.length ? (
-        <Source id="mesh" type="geojson" data={mesh}>
-          <Layer
-            id="mesh-fill"
-            type="fill"
-            paint={{
-              "fill-color": ["get", "color"] as never,
-              "fill-opacity": theme === "dark" ? 0.34 : 0.4,
-            }}
-          />
-          <Layer
-            id="mesh-line"
-            type="line"
-            paint={{
-              "line-color": ["get", "color"] as never,
-              "line-width": 1.25,
-              "line-opacity": 0.72,
-              "line-blur": 0.4,
-            }}
-            layout={{ "line-join": "round", "line-cap": "round" }}
-          />
-        </Source>
-      ) : null}
-      {showMesh && meshPulse?.features.length ? (
-        <Source id="mesh-pulse" type="geojson" data={meshPulse}>
-          <Layer
-            id="mesh-pulse-fill"
-            type="fill"
-            paint={{
-              "fill-color": ["get", "color"] as never,
-              "fill-opacity": theme === "dark" ? 0.62 : 0.7,
-            }}
-          />
-          <Layer
-            id="mesh-pulse-line"
-            type="line"
-            paint={{
-              "line-color": ["get", "color"] as never,
-              "line-width": 1.6,
-              "line-opacity": 0.95,
-            }}
-            layout={{ "line-join": "round", "line-cap": "round" }}
-          />
-        </Source>
-      ) : null}
+      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} /> : null}
       {showSwaths ? (
         <Source id="swaths" type="geojson" data={swaths}>
           <Layer
@@ -735,6 +698,7 @@ export default function HailMap({
           }}
         />
       </Source>
+      {showMesh && emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis /> : null}
       {showPoints ? (
         <Source
           id="reports"
@@ -967,6 +931,142 @@ function tornadoGlyph(): ImageData {
 function numberProp(value: unknown): number | null {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const SWATH_FADE_MS = 420;
+
+function isRadarLayer(id?: string): boolean {
+  if (!id || id.endsWith("-line")) return false;
+  return id === "mesh-fill" || id === "mesh-pulse-fill" || id.startsWith("mesh-a") || id.startsWith("mesh-b") || id.startsWith("mesh-pulse-");
+}
+
+function useCrossfade(data: GeoJSON.FeatureCollection | null): { current: 0 | 1; items: [GeoJSON.FeatureCollection, GeoJSON.FeatureCollection] } {
+  const [slots, setSlots] = useState<{ current: 0 | 1; items: [GeoJSON.FeatureCollection, GeoJSON.FeatureCollection] }>({
+    current: 0,
+    items: [data ?? EMPTY_COLLECTION, EMPTY_COLLECTION],
+  });
+  const first = useRef(true);
+  useEffect(() => {
+    const nextData = data ?? EMPTY_COLLECTION;
+    if (first.current) {
+      first.current = false;
+      setSlots({ current: 0, items: [nextData, EMPTY_COLLECTION] });
+      return;
+    }
+    setSlots((prev) => {
+      const next = prev.current === 0 ? 1 : 0;
+      const items: [GeoJSON.FeatureCollection, GeoJSON.FeatureCollection] = [prev.items[0], prev.items[1]];
+      items[next] = nextData;
+      return { current: next, items };
+    });
+  }, [data]);
+  return slots;
+}
+
+function MeshContours({
+  mesh,
+  meshPulse,
+  theme,
+  emphasis,
+}: {
+  mesh: GeoJSON.FeatureCollection | null;
+  meshPulse: GeoJSON.FeatureCollection | null;
+  theme: "light" | "dark";
+  emphasis: boolean;
+}) {
+  const meshFade = useCrossfade(mesh);
+  const pulseFade = useCrossfade(meshPulse);
+  const fill = emphasis ? (theme === "dark" ? 0.58 : 0.66) : theme === "dark" ? 0.34 : 0.4;
+  const lineWidth = emphasis ? 2.2 : 1.25;
+  const lineOpacity = emphasis ? 0.95 : 0.72;
+  const pulseFill = theme === "dark" ? 0.72 : 0.8;
+  if (!emphasis) {
+    return (
+      <>
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} />
+        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} />
+      </>
+    );
+  }
+  return (
+    <>
+      {meshFade.items.map((collection, index) => (
+        <SwathSource
+          key={`mesh-${index}`}
+          id={index === 0 ? "mesh-a" : "mesh-b"}
+          data={collection}
+          fill={meshFade.current === index ? fill : 0}
+          lineWidth={lineWidth}
+          lineOpacity={meshFade.current === index ? lineOpacity : 0}
+          blur={0.2}
+          fade
+        />
+      ))}
+      {pulseFade.items.map((collection, index) => (
+        <SwathSource
+          key={`pulse-${index}`}
+          id={index === 0 ? "mesh-pulse-a" : "mesh-pulse-b"}
+          data={collection}
+          fill={pulseFade.current === index ? pulseFill : 0}
+          lineWidth={2.4}
+          lineOpacity={pulseFade.current === index ? 0.95 : 0}
+          blur={0}
+          fade
+        />
+      ))}
+    </>
+  );
+}
+
+function SwathSource({
+  id,
+  data,
+  fill,
+  lineWidth,
+  lineOpacity,
+  blur,
+  fade = false,
+}: {
+  id: string;
+  data: GeoJSON.FeatureCollection | null;
+  fill: number;
+  lineWidth: number;
+  lineOpacity: number;
+  blur: number;
+  fade?: boolean;
+}) {
+  if (!data?.features.length && !fade) return null;
+  const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
+  return (
+    <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
+      <Layer
+        id={`${id}-fill`}
+        type="fill"
+        paint={
+          {
+            "fill-color": ["get", "color"],
+            "fill-opacity": fill,
+            ...(transition ? { "fill-opacity-transition": transition } : {}),
+          } as never
+        }
+      />
+      <Layer
+        id={`${id}-line`}
+        type="line"
+        paint={
+          {
+            "line-color": ["get", "color"],
+            "line-width": lineWidth,
+            "line-opacity": lineOpacity,
+            "line-blur": blur,
+            ...(transition ? { "line-opacity-transition": transition } : {}),
+          } as never
+        }
+        layout={{ "line-join": "round", "line-cap": "round" }}
+      />
+    </Source>
+  );
 }
 
 function subsetThreats(collection: GeoJSON.FeatureCollection | null, kinds: string[]): GeoJSON.FeatureCollection {

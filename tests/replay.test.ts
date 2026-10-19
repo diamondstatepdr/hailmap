@@ -8,6 +8,8 @@ import {
   convectiveWindow,
   dayHailCells,
   formatReplayClock,
+  formatReplayClockParts,
+  hailReportTicks,
   frameReplayBounds,
   geometryHitsBounds,
   parseArchiveNames,
@@ -52,6 +54,25 @@ describe("storm replay timing", () => {
   it("labels Fort Worth in Central time", () => {
     expect(stormTimeZone(-97.3)).toBe("America/Chicago");
     expect(formatReplayClock("2024-05-09T21:45:00.000Z", "America/Chicago")).toMatch(/4:45\s*PM/);
+    const parts = formatReplayClockParts("2024-05-09T21:45:00.000Z", "America/Chicago");
+    expect(parts?.time).toBe("4:45");
+    expect(parts?.period).toMatch(/PM/);
+    expect(parts?.zone).toMatch(/CDT|CST/);
+    expect(parts?.date).toMatch(/May 9/);
+  });
+
+  it("places hail reports as scrubber ticks and skips wind", () => {
+    const frames = ["2024-05-09T21:00:00.000Z", "2024-05-09T22:00:00.000Z", "2024-05-09T23:00:00.000Z"];
+    const ticks = hailReportTicks(frames, [
+      { occurredAt: "2024-05-09T21:00:00.000Z", hazard: "hail" },
+      { occurredAt: "2024-05-09T21:02:00.000Z", hazard: "hail" },
+      { occurredAt: "2024-05-09T22:00:00.000Z", hazard: "wind" },
+      { occurredAt: "2024-05-09T23:00:00.000Z", hazard: "hail" },
+    ]);
+    expect(ticks[0]).toBe(0);
+    expect(ticks).toContain(100);
+    expect(ticks.some((tick) => tick > 40 && tick < 60)).toBe(false);
+    expect(ticks.length).toBe(2);
   });
 });
 
@@ -96,19 +117,60 @@ describe("storm replay radar", () => {
   });
 });
 
+function spanKm(bounds: { west: number; south: number; east: number; north: number }) {
+  const mid = (bounds.north + bounds.south) / 2;
+  return {
+    latKm: (bounds.north - bounds.south) * 111.32,
+    lonKm: (bounds.east - bounds.west) * 111.32 * Math.cos((mid * Math.PI) / 180),
+  };
+}
+
 describe("storm replay map framing", () => {
-  it("widens a neighborhood around an address so the storm can move", () => {
+  it("frames a Fort Worth address at metro scale and keeps the city inside", () => {
     const bounds = frameReplayBounds({ west: -97.4, south: 32.7, east: -97.2, north: 32.8 }, { lat: 32.75, lon: -97.33 });
-    expect(bounds.west).toBeLessThan(-98.8);
-    expect(bounds.east).toBeGreaterThan(-96.4);
-    expect(bounds.south).toBeLessThan(32);
-    expect(bounds.north).toBeGreaterThan(33.4);
+    const span = spanKm(bounds);
+    expect(span.latKm).toBeGreaterThan(60);
+    expect(span.latKm).toBeLessThanOrEqual(100);
+    expect(span.lonKm).toBeGreaterThan(60);
+    expect(span.lonKm).toBeLessThanOrEqual(100);
+    expect(bounds.south).toBeLessThan(32.75);
+    expect(bounds.north).toBeGreaterThan(32.75);
+    expect(bounds.west).toBeLessThan(-97.33);
+    expect(bounds.east).toBeGreaterThan(-97.33);
+    expect(bounds.north - bounds.south).toBeLessThan(1.2);
   });
 
-  it("tightens a national view", () => {
+  it("tightens a national view to the same metro window", () => {
     const bounds = frameReplayBounds({ west: -125, south: 24, east: -66, north: 50 }, null);
-    expect(bounds.east - bounds.west).toBeLessThanOrEqual(8);
-    expect(bounds.north - bounds.south).toBeLessThanOrEqual(6.5);
+    const span = spanKm(bounds);
+    expect(span.latKm).toBeGreaterThan(60);
+    expect(span.latKm).toBeLessThanOrEqual(100);
+    expect(span.lonKm).toBeGreaterThan(60);
+    expect(span.lonKm).toBeLessThanOrEqual(100);
+  });
+
+  it("shifts a Fort Worth replay toward nearby hail without leaving the city or metro scale", () => {
+    const bounds = frameReplayBounds(null, { lat: 32.753, lon: -97.333 }, [
+      { lat: 32.36, lon: -97.66 },
+      { lat: 32.44, lon: -97.8 },
+    ]);
+    const span = spanKm(bounds);
+    expect(span.latKm).toBeGreaterThan(60);
+    expect(span.latKm).toBeLessThanOrEqual(100);
+    expect(span.lonKm).toBeLessThanOrEqual(100);
+    expect(bounds.south).toBeLessThan(32.36);
+    expect(bounds.north).toBeGreaterThan(32.753);
+    expect(bounds.west).toBeLessThan(-97.8);
+    expect(bounds.east).toBeGreaterThan(-97.333);
+  });
+
+  it("keeps a view that is already metro sized", () => {
+    const bounds = frameReplayBounds({ west: -97.7, south: 32.4, east: -96.9, north: 33.1 }, null);
+    const span = spanKm(bounds);
+    expect(span.latKm).toBeGreaterThan(70);
+    expect(span.latKm).toBeLessThan(100);
+    expect(bounds.south).toBeCloseTo(32.4, 2);
+    expect(bounds.north).toBeCloseTo(33.1, 2);
   });
 
   it("treats a warning as active only inside its polygon window", () => {

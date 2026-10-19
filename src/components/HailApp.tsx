@@ -180,6 +180,7 @@ export default function HailApp() {
   const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [chromePx, setChromePx] = useState(0);
+  const [addressClose, setAddressClose] = useState(0);
   const [hailDaysOpen, setHailDaysOpen] = useState(false);
   const [hailDays, setHailDays] = useState<HailDayView[]>([]);
   const [customOpen, setCustomOpen] = useState(false);
@@ -254,6 +255,8 @@ export default function HailApp() {
   const addressRetries = useRef(0);
   const calendarCache = useRef(new Map<string, CalendarMark[]>());
   const chromeRef = useRef<HTMLDivElement>(null);
+  const replayAnchor = useRef<{ lat: number; lon: number } | null>(null);
+  const replayFitReports = useRef(false);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
   const replay = useReplayPlayer();
@@ -854,8 +857,17 @@ export default function HailApp() {
     setScoreDate(date);
   }
 
+  function replayPadding() {
+    const top = Math.max(156, Math.ceil((chromeRef.current?.getBoundingClientRect().height ?? chromePx) + 48));
+    const bar = document.querySelector("[data-replay-bar]");
+    const bottom = Math.max(188, Math.ceil((bar?.getBoundingClientRect().height ?? 0) + 36));
+    return { top, bottom, left: 28, right: 56 };
+  }
+
   function beginReplay(date: string, center?: { lat: number; lon: number } | null) {
     const bounds = frameReplayBounds(center ? null : (viewBoundsRef.current ?? viewBounds), center ?? null);
+    replayAnchor.current = center ?? { lat: (bounds.north + bounds.south) / 2, lon: (bounds.east + bounds.west) / 2 };
+    replayFitReports.current = false;
     setSection("map");
     setPlaceCardOpen(false);
     setArea(null);
@@ -863,11 +875,12 @@ export default function HailApp() {
     setHailDaysOpen(false);
     setCustomOpen(false);
     setFiltersOpen(false);
+    setAddressClose((value) => value + 1);
     setShowMesh(true);
     setShowPoints(true);
     setShowThreats(true);
     pickStormDay(date);
-    setFrame({ ...bounds, nonce: Date.now(), maxZoom: 8.6 });
+    setFrame({ ...bounds, nonce: Date.now(), maxZoom: 12, padding: replayPadding() });
     replay.start({ date, bounds, label: formatDay(date) });
   }
 
@@ -1110,6 +1123,34 @@ export default function HailApp() {
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel ?? "MESH");
 
   useEffect(() => {
+    if (!replay.active || !replay.manifest || !replay.launch || replayFitReports.current) return;
+    const anchor = replayAnchor.current;
+    if (!anchor) return;
+    replayFitReports.current = true;
+    const bounds = frameReplayBounds(null, anchor, replay.manifest.reports);
+    const current = replay.launch.bounds;
+    const same =
+      Math.abs(current.west - bounds.west) < 0.02 &&
+      Math.abs(current.south - bounds.south) < 0.02 &&
+      Math.abs(current.east - bounds.east) < 0.02 &&
+      Math.abs(current.north - bounds.north) < 0.02;
+    if (same) return;
+    setFrame({ ...bounds, nonce: Date.now(), maxZoom: 12, padding: replayPadding() });
+    replay.start({ date: replay.manifest.date, bounds, label: replay.launch.label });
+  }, [replay.active, replay.manifest, replay.launch]);
+
+  useEffect(() => {
+    if (!replay.active) return;
+    const padding = replayPadding();
+    setFrame((current) => {
+      if (!current) return current;
+      const pad = current.padding;
+      if (pad && Math.abs(pad.top - padding.top) < 8 && Math.abs(pad.bottom - padding.bottom) < 8) return current;
+      return { ...current, padding, nonce: Date.now(), maxZoom: 12 };
+    });
+  }, [replay.active, chromePx, replay.manifest, replay.loadingManifest, replay.radarReady]);
+
+  useEffect(() => {
     const node = chromeRef.current;
     if (!node) return;
     const measure = () => {
@@ -1148,6 +1189,7 @@ export default function HailApp() {
             swaths={replay.active || (historyActive && serverClusters) ? { type: "FeatureCollection", features: [] } : swaths}
             mesh={replay.active ? replay.radar.collection : meshCollection}
             meshPulse={replay.active ? replay.radar.pulse : null}
+            emphasizeMesh={replay.active}
             dealers={dealerCollection}
             income={income}
             threats={replay.active ? (replayWarnings ?? { type: "FeatureCollection", features: [] }) : threats}
@@ -1219,7 +1261,7 @@ export default function HailApp() {
           />
           <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
-              <AddressSearch onPick={chooseAddress} />
+              <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
                 <SlidersHorizontal size={18} />
               </button>
@@ -1243,18 +1285,23 @@ export default function HailApp() {
                   </button>
                 );
               })}
-              <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
-              {TIME_WINDOWS.map((item) => (
-                <button
-                  key={item.hours}
-                  type="button"
-                  aria-pressed={!historyActive && filter.hours === item.hours}
-                  onClick={() => showLiveWindow(item.hours)}
-                >
-                  {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
-                </button>
-              ))}
+              {replay.active ? null : (
+                <>
+                  <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
+                  {TIME_WINDOWS.map((item) => (
+                    <button
+                      key={item.hours}
+                      type="button"
+                      aria-pressed={!historyActive && filter.hours === item.hours}
+                      onClick={() => showLiveWindow(item.hours)}
+                    >
+                      {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
+            {replay.active ? null : (
             <div className="pointer-events-auto seg" role="group" aria-label="Storm history">
               {HISTORY_CHIPS.map((item) => (
                 <button
@@ -1276,6 +1323,7 @@ export default function HailApp() {
                 Hail days
               </button>
             </div>
+            )}
             {customOpen ? (
               <form
                 className="pointer-events-auto glass flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 text-xs"
@@ -1324,7 +1372,7 @@ export default function HailApp() {
                   <p className="mt-2 text-[11px] leading-snug text-muted">Tap a day, then Replay, to watch that storm move.</p>
                 )}
               </div>
-            ) : historyMode.kind === "day" ? (
+            ) : historyMode.kind === "day" && !replay.active ? (
               <div className="pointer-events-auto glass flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-xs">
                 <span className="font-semibold">{formatDay(historyMode.date)}</span>
                 <button type="button" className="btn btn-primary press px-2.5 py-1 text-xs" onClick={() => beginReplay(historyMode.date)}>
@@ -1368,17 +1416,19 @@ export default function HailApp() {
             ) : null}
             {showMesh ? (
               <div className="pointer-events-auto glass flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
-                <span className="shrink-0 font-semibold">Radar</span>
-                <span className="shrink-0 font-semibold" data-radar-label>
-                  {radarCaption}
-                </span>
+                <span className="shrink-0 font-semibold">{replay.active ? "Hail size" : "Radar"}</span>
+                {replay.active ? null : (
+                  <span className="shrink-0 font-semibold" data-radar-label>
+                    {radarCaption}
+                  </span>
+                )}
                 {MESH_LEGEND.map((band) => (
                   <span key={band.label} className="inline-flex shrink-0 items-center gap-1">
                     <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
                     {band.label}
                   </span>
                 ))}
-                {meshDate ? (
+                {meshDate && !replay.active ? (
                   <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
                     Use time window
                   </button>
@@ -1386,7 +1436,7 @@ export default function HailApp() {
               </div>
             ) : null}
           </div>
-          {stateCounts.length ? (
+          {stateCounts.length && !replay.active ? (
             <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
               <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
                 {stateCounts.slice(0, 12).map(([code, count]) => {
@@ -1459,7 +1509,7 @@ export default function HailApp() {
                     : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
-          {section === "map" && placeCardOpen && placeLabel && placePoint ? (
+          {section === "map" && placeCardOpen && !replay.active && placeLabel && placePoint ? (
             <div className="absolute inset-x-3 bottom-3 z-30 max-h-[min(72dvh,36rem)] overflow-y-auto">
               {addressHistory ? (
                 <AddressHistoryCard
@@ -1518,20 +1568,18 @@ export default function HailApp() {
               label={replay.launch?.label ?? "Storm replay"}
               at={replay.at}
               timeZone={replay.manifest?.timeZone ?? "America/Chicago"}
+              frames={replay.manifest?.frames ?? []}
+              reports={replay.manifest?.reports ?? []}
               playing={replay.playing}
               speed={replay.speed}
               step={replay.step}
               index={replay.index}
               count={replay.manifest?.frames.length ?? 0}
               loading={replay.loadingManifest || (replay.radarLoading && !replay.radarReady)}
-              note={
-                replay.manifestError ??
-                (replay.loadingManifest
-                  ? "Loading reports and warnings…"
-                  : !replay.radarReady
-                    ? "Loading the radar scan for this time."
-                    : replay.radar.note || replay.manifest?.warningNote || replay.manifest?.radarNote || null)
+              loadingLabel={
+                replay.loadingManifest ? "Lining up the storm" : replay.radarLoading && !replay.radarReady ? "Fetching radar" : null
               }
+              note={replay.manifestError ?? (!replay.loadingManifest ? replay.manifest?.warningNote ?? null : null)}
               onTogglePlay={replay.togglePlay}
               onStep={replay.move}
               onScrub={replay.scrub}
@@ -1581,7 +1629,7 @@ export default function HailApp() {
               </article>
             </div>
           ) : null}
-          {section === "map" && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
+          {section === "map" && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
               <article className="float-card p-4">
                 {selected ? (

@@ -64,14 +64,59 @@ export function stormTimeZone(lon: number): string {
 }
 
 export function formatReplayClock(iso: string, timeZone: string): string {
+  const parts = formatReplayClockParts(iso, timeZone);
+  if (!parts) return iso;
+  return `${parts.time} ${parts.period} ${parts.zone}`.replace(/\s+/g, " ").trim();
+}
+
+export interface ReplayClockParts {
+  time: string;
+  period: string;
+  zone: string;
+  date: string;
+}
+
+/** Split local storm time so the player can set the clock apart from the date and zone. */
+export function formatReplayClockParts(iso: string, timeZone: string): ReplayClockParts | null {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-US", {
+  if (Number.isNaN(date.getTime())) return null;
+  const clock = new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
-    timeZoneName: "short",
+    hourCycle: "h12",
     timeZone,
-  }).format(date);
+  }).formatToParts(date);
+  const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "short", hour: "numeric", timeZone })
+    .formatToParts(date)
+    .find((part) => part.type === "timeZoneName")?.value ?? "";
+  const hour = clock.find((part) => part.type === "hour")?.value ?? "";
+  const minute = clock.find((part) => part.type === "minute")?.value ?? "00";
+  const period = clock.find((part) => part.type === "dayPeriod")?.value ?? "";
+  const day = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone }).format(date);
+  return { time: `${hour}:${minute}`, period, zone, date: day };
+}
+
+/**
+ * Positions, 0–100, for hail reports along a replay scrubber.
+ * Marks closer than about 1% of the timeline collapse into one tick.
+ */
+export function hailReportTicks(frames: string[], reports: Array<{ occurredAt: string; hazard?: string }>): number[] {
+  if (frames.length < 2) return [];
+  const start = Date.parse(frames[0]);
+  const end = Date.parse(frames[frames.length - 1]);
+  const span = end - start;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || span <= 0) return [];
+  const marks: number[] = [];
+  const kept: number[] = [];
+  for (const report of reports) {
+    if (report.hazard && report.hazard !== "hail") continue;
+    const time = Date.parse(report.occurredAt);
+    if (!Number.isFinite(time) || time < start || time > end) continue;
+    if (kept.some((stamp) => Math.abs(stamp - time) < 12 * 60 * 1000)) continue;
+    kept.push(time);
+    marks.push(Math.round(((time - start) / span) * 1000) / 10);
+  }
+  return marks;
 }
 
 /**
@@ -178,43 +223,67 @@ export function collectionAtTime(collection: FeatureCollection, atMs: number): F
   return { type: "FeatureCollection", features: featuresAtTime(collection.features, atMs) };
 }
 
+const KM_PER_LAT = 111.32;
+/** Searched-city replay window: metro scale, about 60–100 km across. */
+const REPLAY_METRO_KM = 96;
+
+function kmPerLon(lat: number): number {
+  return KM_PER_LAT * Math.cos((lat * Math.PI) / 180);
+}
+
+function boxAround(center: { lat: number; lon: number }, latKm: number, lonKm = latKm): ReplayBounds {
+  const dLat = latKm / KM_PER_LAT / 2;
+  const dLon = lonKm / Math.max(kmPerLon(center.lat), 1) / 2;
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return {
+    west: round(center.lon - dLon),
+    south: round(center.lat - dLat),
+    east: round(center.lon + dLon),
+    north: round(center.lat + dLat),
+  };
+}
+
+function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const latKm = (a.lat - b.lat) * KM_PER_LAT;
+  const lonKm = (a.lon - b.lon) * kmPerLon((a.lat + b.lat) / 2);
+  return Math.hypot(latKm, lonKm);
+}
+
 /**
- * Bounds for a replay. A neighborhood view is widened so the swath can move across the metro.
- * A national view is tightened around its center, or around an address.
+ * Bounds for a replay. An address, a neighborhood, and a national view all land on a metro
+ * window around the searched point so the storm core is on screen instead of a multi-state map.
+ * A view that is already about 70–100 km across is left alone.
+ * When storm reports are passed, the window shifts toward them but keeps the searched point on screen.
  */
-export function frameReplayBounds(view: ReplayBounds | null, center?: { lat: number; lon: number } | null): ReplayBounds {
+export function frameReplayBounds(
+  view: ReplayBounds | null,
+  center?: { lat: number; lon: number } | null,
+  points?: Array<{ lat: number; lon: number }>,
+): ReplayBounds {
   const lat = center?.lat ?? (view ? (view.north + view.south) / 2 : 39);
   const lon = center?.lon ?? (view ? (view.east + view.west) / 2 : -97);
-  let south = view?.south ?? lat - 1.3;
-  let north = view?.north ?? lat + 1.3;
-  let west = view?.west ?? lon - 1.6;
-  let east = view?.east ?? lon + 1.6;
-  const minLat = center ? 2.6 : 2.2;
-  const minLon = center ? 3.2 : 2.8;
-  if (north - south < minLat) {
-    south = lat - minLat / 2;
-    north = lat + minLat / 2;
-  }
-  if (east - west < minLon) {
-    west = lon - minLon / 2;
-    east = lon + minLon / 2;
-  }
-  const maxLat = 6.5;
-  const maxLon = 8;
-  if (north - south > maxLat) {
-    south = lat - maxLat / 2;
-    north = lat + maxLat / 2;
-  }
-  if (east - west > maxLon) {
-    west = lon - maxLon / 2;
-    east = lon + maxLon / 2;
-  }
-  return {
-    west: Math.round(west * 1000) / 1000,
-    south: Math.round(south * 1000) / 1000,
-    east: Math.round(east * 1000) / 1000,
-    north: Math.round(north * 1000) / 1000,
-  };
+  if (center || !view) return boxAround(biasTowardReports(lat, lon, points), REPLAY_METRO_KM);
+  const latKm = (view.north - view.south) * KM_PER_LAT;
+  const lonKm = (view.east - view.west) * kmPerLon(lat);
+  if (latKm < 70 || lonKm < 70 || latKm > 100 || lonKm > 100) return boxAround({ lat, lon }, REPLAY_METRO_KM);
+  return boxAround({ lat, lon }, latKm, lonKm);
+}
+
+function biasTowardReports(lat: number, lon: number, points?: Array<{ lat: number; lon: number }>): { lat: number; lon: number } {
+  const anchor = { lat, lon };
+  const nearby = (points ?? []).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon) && distanceKm(anchor, point) <= 75);
+  if (!nearby.length) return anchor;
+  const meanLat = nearby.reduce((sum, point) => sum + point.lat, 0) / nearby.length;
+  const meanLon = nearby.reduce((sum, point) => sum + point.lon, 0) / nearby.length;
+  let midLat = (lat + meanLat) / 2;
+  let midLon = (lon + meanLon) / 2;
+  const halfLat = REPLAY_METRO_KM / KM_PER_LAT / 2;
+  const halfLon = REPLAY_METRO_KM / Math.max(kmPerLon(midLat), 1) / 2;
+  const keepLat = halfLat * 0.72;
+  const keepLon = halfLon * 0.72;
+  midLat = Math.min(lat + keepLat, Math.max(lat - keepLat, midLat));
+  midLon = Math.min(lon + keepLon, Math.max(lon - keepLon, midLon));
+  return { lat: midLat, lon: midLon };
 }
 
 export function parseReplayQuery(params: URLSearchParams): { date: string; bounds: ReplayBounds } | { error: string } {

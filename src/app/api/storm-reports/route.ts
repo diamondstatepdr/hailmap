@@ -5,8 +5,12 @@ import { TIME_WINDOWS } from "@/lib/filters";
 import { haversineKm, validLatLon } from "@/lib/geo";
 import { getMapReports } from "@/lib/ingest";
 import { getLiveThreats } from "@/lib/live-threats";
+import { renderReportSnapshot } from "@/lib/map-snapshot";
+import { radarSampleFor, radarSwathsNear } from "@/lib/mesh-cache";
+import { planMesh } from "@/lib/mesh-plan";
 import { buildPlaceHistory, swathEvidence } from "@/lib/place";
 import { buildStormReport } from "@/lib/storm-report";
+import { mergeWarnings, nearbyWarnings, warningsFromThreats } from "@/lib/warnings-nearby";
 import { clientIp } from "@/lib/photos";
 import type { HailReport } from "@/lib/types";
 
@@ -86,11 +90,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [map, threats] = await Promise.all([
+    const now = Date.now();
+    const plan = planMesh({ hours, now: new Date(now) });
+    const radarPlan = "error" in plan ? null : plan;
+    const [map, threats, radar, historyWarnings] = await Promise.all([
       getMapReports({ fresh: hours <= 1 }),
       getLiveThreats().catch(() => null),
+      radarPlan
+        ? radarSampleFor(radarPlan, centerLat, centerLon, new Date(now)).catch((error) => {
+            console.error("[hailmap] report mesh", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null),
+      nearbyWarnings({
+        lat: centerLat,
+        lon: centerLon,
+        startIso: new Date(now - hours * 3600 * 1000).toISOString(),
+        endIso: new Date(now).toISOString(),
+        threats: null,
+      }).catch(() => null),
     ]);
-    const now = Date.now();
     const cutoff = now - hours * 3600 * 1000;
     const windowReports = map.reports.filter((report) => {
       const time = Date.parse(report.occurredAt);
@@ -112,6 +131,26 @@ export async function POST(request: Request) {
       warningStatus: threats && threats.status.nws !== "error" ? "ok" : "unavailable",
       swath,
     });
+    const swathFeatures = radarPlan
+      ? await radarSwathsNear(radarPlan, centerLat, centerLon, new Date(now)).catch(() => null)
+      : null;
+    const listedForMap =
+      kind === "area"
+        ? pool.map((report) => ({ lon: report.lon, lat: report.lat, hazard: report.hazard }))
+        : history.reports.map((report) => ({ lon: report.lon, lat: report.lat, hazard: report.hazard }));
+    const snapshotSvg = await renderReportSnapshot({
+      lat: centerLat,
+      lon: centerLon,
+      reports: listedForMap,
+      swaths: swathFeatures?.features ?? [],
+    }).catch(() => null);
+    const windowStart = now - hours * 3600 * 1000;
+    const historical = historyWarnings?.warnings ?? [];
+    const active = warningsFromThreats(threats?.collection, centerLat, centerLon);
+    const activeNearby = {
+      status: historyWarnings?.status ?? "unavailable",
+      warnings: mergeWarnings([historical, active], windowStart, now),
+    };
     const user = readSession(request);
     const photos = user
       ? kind === "area" && bounds
@@ -139,6 +178,15 @@ export async function POST(request: Request) {
           : history.reports,
       photos,
       meshStatus: map.sourceStatus?.mesh ?? "skipped",
+      radar: radar,
+      nearbyWarnings: activeNearby.warnings,
+      nearbyWarningNote:
+        activeNearby.status === "unavailable"
+          ? "Archived NWS warnings could not be checked. Active alerts are listed above when the warning feed responded."
+          : activeNearby.warnings.length
+            ? null
+            : "No severe thunderstorm or tornado warning was found for this point in the window.",
+      snapshotSvg,
     });
     saveStormReport(user?.id ?? null, label, document, id);
     return Response.json({ report: document, url: `/reports/${id}` }, { status: 201 });

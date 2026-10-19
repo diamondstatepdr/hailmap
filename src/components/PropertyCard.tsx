@@ -1,6 +1,7 @@
 "use client";
 
 import { CloudHail, Tornado, Wind } from "lucide-react";
+import type { RadarSample } from "@/lib/area-selection";
 import { formatWhen, placeLabel } from "@/lib/filters";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
@@ -11,13 +12,15 @@ interface Props {
   label: string;
   history: PlaceHistory;
   mesh?: string | null;
+  radar?: RadarSample | null;
+  radarLoading?: boolean;
   onSave?: () => void;
   onReport?: () => void;
   onClose?: () => void;
   saveLabel?: string;
 }
 
-export default function PropertyCard({ label, history, mesh, onSave, onReport, onClose, saveLabel }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onClose, saveLabel }: Props) {
   const score = history.score;
   return (
     <article className="float-card p-4">
@@ -46,8 +49,22 @@ export default function PropertyCard({ label, history, mesh, onSave, onReport, o
         <Fact label="Tornado" value={history.strongestTornado ?? "None in range"} />
         <Fact label="Nearest report" value={history.nearestKm != null ? `${history.nearestKm.toFixed(1)} km` : "None"} />
         <Fact label="Hail swath" value={history.swathHit ? "Covers this point" : "Does not cover this point"} />
-        <Fact label="Reports" value={String(history.reports.length)} />
+        <Fact
+          label="Radar hail"
+          value={radarLoading ? "Checking…" : radar?.maxIn != null ? `${radar.maxIn.toFixed(2)} in` : "None in range"}
+        />
       </dl>
+      {radar?.days.length ? (
+        <ul className="mt-3 space-y-1 text-sm">
+          {radar.days.map((day) => (
+            <li key={`${day.label}-${day.date ?? "window"}`} className="flex items-baseline justify-between gap-3">
+              <span className="text-muted">{day.label}</span>
+              <span className="font-semibold">{day.maxIn != null ? `${day.maxIn.toFixed(2)} in` : "—"}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {radar?.note ? <p className="mt-2 text-xs leading-relaxed text-muted">{radar.note}</p> : null}
       {history.reports.length ? (
         <div className="mt-4">
           <Sparkline times={history.reports.map((report) => report.occurredAt)} hours={history.hours} />
@@ -84,8 +101,8 @@ export default function PropertyCard({ label, history, mesh, onSave, onReport, o
           <p className="mt-1 text-sm text-muted">No active severe watch or warning covers this point.</p>
         )}
       </div>
-      {mesh === "skipped" ? (
-        <p className="mt-3 text-xs text-muted">Radar MESH is off until HAILMAP_MESH_URL is set. Nothing is filled in for it.</p>
+      {mesh === "skipped" && !radar ? (
+        <p className="mt-3 text-xs text-muted">Optional MESH points stay off until HAILMAP_MESH_URL is set. Radar swaths still load from NOAA.</p>
       ) : null}
       {history.reports.length ? (
         <ul className="mt-3 max-h-44 space-y-1.5 overflow-auto">

@@ -687,7 +687,18 @@ html.dark .hazard-tornado {
   opacity: 0.8;
 }
 
+.report-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #e7eef5;
+}
+
 @media print {
+  @page {
+    size: letter;
+    margin: 0.55in;
+  }
   .no-print {
     display: none !important;
   }
@@ -700,6 +711,15 @@ html.dark .hazard-tornado {
     border-radius: 0;
     box-shadow: none;
     max-width: none;
+  }
+  .report-sheet h2,
+  .report-sheet tr,
+  .report-sheet li,
+  .stat-tile {
+    break-inside: avoid;
+  }
+  .report-map {
+    break-inside: avoid;
   }
 }
 

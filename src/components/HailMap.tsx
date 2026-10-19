@@ -12,6 +12,7 @@ import Map, {
   type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
+import type { AreaSelection } from "@/lib/area-selection";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -116,6 +117,7 @@ export interface MapFrame {
   east: number;
   north: number;
   nonce: number;
+  maxZoom?: number;
 }
 
 const THREAT_LAYERS = new Set([
@@ -137,10 +139,13 @@ interface Props {
   theme: "light" | "dark";
   points: GeoJSON.FeatureCollection;
   swaths: GeoJSON.FeatureCollection;
+  mesh?: GeoJSON.FeatureCollection | null;
+  dealers?: GeoJSON.FeatureCollection | null;
   income: GeoJSON.FeatureCollection | null;
   threats: GeoJSON.FeatureCollection | null;
   showPoints: boolean;
   showSwaths: boolean;
+  showMesh?: boolean;
   showIncome: boolean;
   showThreats: boolean;
   showOutlook: boolean;
@@ -159,6 +164,8 @@ interface Props {
   onSelectFieldPin?: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
   onSelectThreat: (info: ThreatInfo) => void;
+  onSelectArea?: (area: AreaSelection) => void;
+  onSelectDealer?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }
 
@@ -166,10 +173,13 @@ export default function HailMap({
   theme,
   points,
   swaths,
+  mesh = null,
+  dealers = null,
   income,
   threats,
   showPoints,
   showSwaths,
+  showMesh = false,
   showIncome,
   showThreats,
   showOutlook,
@@ -188,6 +198,8 @@ export default function HailMap({
   onSelectFieldPin,
   onSelectCounty,
   onSelectThreat,
+  onSelectArea,
+  onSelectDealer,
   onViewChange,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
@@ -199,6 +211,9 @@ export default function HailMap({
   const interactiveLayerIds = [
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
+    showMesh && mesh?.features.length ? "mesh-fill" : "",
+    showSwaths ? "swath-fill" : "",
+    dealers?.features.length ? "dealer-pins" : "",
     showThreats ? "threat-warning-fill" : "",
     showThreats ? "threat-watch-fill" : "",
     showThreats ? "threat-statement-fill" : "",
@@ -229,7 +244,7 @@ export default function HailMap({
       {
         padding: { top: 124, bottom: 232, left: 36, right: 48 },
         duration: 800,
-        maxZoom: 8.2,
+        maxZoom: next.maxZoom ?? 8.2,
       },
     );
   }
@@ -310,6 +325,30 @@ export default function HailMap({
       }
       if (feature.layer?.id === "hail-points" && props.id) {
         onSelectReport(String(props.id));
+        return;
+      }
+      if (feature.layer?.id === "dealer-pins" && props.id) {
+        onSelectDealer?.(String(props.id));
+        return;
+      }
+      if ((feature.layer?.id === "mesh-fill" || feature.layer?.id === "swath-fill") && feature.geometry) {
+        const geometry = feature.geometry;
+        if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") return;
+        const minIn = numberProp(props.minIn);
+        const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
+        const radar = feature.layer.id === "mesh-fill";
+        onSelectArea?.({
+          id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
+          label: radar
+            ? `Radar hail ${props.label ?? ""}`.trim()
+            : maxIn != null
+              ? `Report swath · ${maxIn.toFixed(2)} in`
+              : "Report swath",
+          source: radar ? "mesh" : "reports",
+          minIn,
+          maxIn,
+          geometry,
+        });
         return;
       }
       if (feature.layer?.id && THREAT_LAYERS.has(feature.layer.id)) {
@@ -461,6 +500,27 @@ export default function HailMap({
             paint={{
               "fill-color": ["get", "fill"] as never,
               "fill-opacity": theme === "dark" ? 0.38 : 0.45,
+            }}
+          />
+        </Source>
+      ) : null}
+      {showMesh && mesh?.features.length ? (
+        <Source id="mesh" type="geojson" data={mesh}>
+          <Layer
+            id="mesh-fill"
+            type="fill"
+            paint={{
+              "fill-color": ["get", "color"] as never,
+              "fill-opacity": theme === "dark" ? 0.5 : 0.58,
+            }}
+          />
+          <Layer
+            id="mesh-line"
+            type="line"
+            paint={{
+              "line-color": ["get", "color"] as never,
+              "line-width": 1.4,
+              "line-opacity": 0.95,
             }}
           />
         </Source>
@@ -720,6 +780,20 @@ export default function HailMap({
           />
         </Source>
       ) : null}
+      {dealers?.features.length ? (
+        <Source id="dealers" type="geojson" data={dealers}>
+          <Layer
+            id="dealer-pins"
+            type="circle"
+            paint={{
+              "circle-color": "#0c6278",
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 8, 14, 11],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            }}
+          />
+        </Source>
+      ) : null}
       {fieldPins?.features.length ? (
         <Source id="field-pins" type="geojson" data={fieldPins}>
           <Layer
@@ -804,6 +878,11 @@ function tornadoGlyph(): ImageData {
     ctx.lineTo(32, 54);
     ctx.stroke();
   });
+}
+
+function numberProp(value: unknown): number | null {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function subsetThreats(collection: GeoJSON.FeatureCollection | null, kinds: string[]): GeoJSON.FeatureCollection {

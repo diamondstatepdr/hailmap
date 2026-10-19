@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import { hailPhraseInches } from "@/lib/size";
 import type { FeedStatus } from "@/lib/types";
 
 export type ThreatKind = "outlook" | "significant" | "watch" | "warning" | "statement";
@@ -15,6 +16,10 @@ export interface ThreatProperties {
   fill: string;
   stroke: string;
   rank: number;
+  /** True when the source text or hail parameter mentions hail. */
+  mentionsHail: boolean;
+  /** Measured or stated hail size, inches. Null when hail is mentioned without a size. */
+  hailIn: number | null;
 }
 
 export type ThreatFeature = Feature<Polygon | MultiPolygon, ThreatProperties>;
@@ -211,6 +216,7 @@ export function alertsToFeatures(payload: unknown): ThreatFeature[] {
     const geometry = toPolygon(feature.geometry);
     if (!geometry) continue;
     const params = asRecord(props.parameters) ?? {};
+    const hail = hailFacts(`${headline}\n${description}`, params);
     const colors = THREAT_LEGEND.find((item) => item.event === event);
     parsed.push(
       featureOf(geometry, {
@@ -225,6 +231,8 @@ export function alertsToFeatures(payload: unknown): ThreatFeature[] {
         fill: colors?.fill ?? "#64748b",
         stroke: colors?.fill ?? "#64748b",
         rank: kind === "warning" ? 30 : kind === "statement" ? 20 : 10,
+        mentionsHail: hail.mentionsHail,
+        hailIn: hail.hailIn,
       }),
     );
   }
@@ -254,6 +262,8 @@ export function outlookToFeatures(payload: unknown, now = Date.now()): ThreatFea
         fill: hexColor(props.fill) || level.fill,
         stroke: hexColor(props.stroke) || level.stroke,
         rank: level.rank,
+        mentionsHail: true,
+        hailIn: OUTLOOK_HAIL_IN[level.category] ?? 1,
       }),
     );
   }
@@ -285,6 +295,8 @@ export function significantToFeatures(
         fill: SIGNIFICANT_COLOR,
         stroke: SIGNIFICANT_COLOR,
         rank: 8,
+        mentionsHail: product === "hail",
+        hailIn: product === "hail" ? 2 : null,
       }),
     );
   }
@@ -357,6 +369,30 @@ function alertHazard(
   else if (hail) sentence = `${capitalize(hail)} is expected.`;
   else if (wind) sentence = `${capitalize(wind)} are expected.`;
   return joinHazard(sentence.replace(/\.$/, ""), noted);
+}
+
+const OUTLOOK_HAIL_IN: Record<string, number> = {
+  marginal: 0.75,
+  slight: 1,
+  enhanced: 1.5,
+  moderate: 2,
+  high: 2.5,
+};
+
+function hailFacts(textValue: string, params: Record<string, unknown>): { mentionsHail: boolean; hailIn: number | null } {
+  const fromParam = inchesFromHailParam(paramValue(params, "maxHailSize"));
+  const fromText = hailPhraseInches(textValue);
+  const mentionsHail = fromParam != null || /\bhail\b/i.test(textValue);
+  return { mentionsHail, hailIn: mentionsHail ? (fromParam ?? fromText) : null };
+}
+
+function inchesFromHailParam(raw: string): number | null {
+  if (!raw) return null;
+  const match = raw.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const size = Number(match[1]);
+  if (!Number.isFinite(size) || size <= 0 || size > 8) return null;
+  return Math.round(size * 100) / 100;
 }
 
 function joinHazard(base: string, note: string): string {

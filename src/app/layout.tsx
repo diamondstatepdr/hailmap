@@ -12,7 +12,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "HailMap",
-  description: "Live US hail, wind, and tornado reports, property storm history, and field notes.",
+  description: "Live US hail, wind, and tornado reports, property storm history, field notes, and phone hail alerts.",
   applicationName: "HailMap",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -26,6 +26,9 @@ export const metadata: Metadata = {
     capable: true,
     title: "HailMap",
     statusBarStyle: "default",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
   },
 };
 

@@ -4,6 +4,8 @@ Nationwide live map of United States hail, wind, and tornado reports. Reports co
 
 The map opens on the last 7 days. SPC and IEM local storm reports are stored as NWS or spotter confidence, including public and mPING reports that an NWS office published. Community confidence is for file import, the community webhook, and in-app photo reports. SPC files used are `*_rpts_hail.csv`, `*_rpts_wind.csv`, and `*_rpts_torn.csv`. IEM local storm reports keep hail, thunderstorm and non-thunderstorm wind, and tornado types. Other LSR types are ignored.
 
+Phone alerts use the Web Push API. A service worker asks the browser for a subscription, and the server checks radar hail, spotter reports, and NWS warnings every few minutes. Watch areas belong to that subscription, not to a team account. Add HailMap to the iPhone Home Screen (iOS 16.4 or newer) before turning alerts on. The same worker and VAPID keys work in Android Chrome and inside a Play Store Trusted Web Activity.
+
 HailMap does not scrape social networks. Spotter observations arrive through the spotter webhook. Community observations arrive through the community webhook, CSV/GeoJSON import, or a photo report submitted in the app.
 
 ## Local run
@@ -40,6 +42,9 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | `HAILMAP_USER_AGENT` | Contact string for the NWS API, the Census geocoder, and Nominatim. |
 | `HAILMAP_TEAM_PASSCODE` | Shared passcode for Field notes, damage photos, and the watch list. Unset disables sign-in. |
 | `HAILMAP_AUTH_SECRET` | Signs the session cookie. Falls back to the team passcode when unset. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Optional Web Push keys. When unset, the first boot writes `vapid.json` in the data directory. |
+| `VAPID_SUBJECT` | `mailto:` or `https:` contact on each push. Defaults to the project mailbox. |
+| `HAILMAP_ALERT_INTERVAL_MS` | Alert loop interval. Default 3 minutes, clamped between 2 and 5. |
 | `CAPACITOR_SERVER_URL` | HTTPS origin loaded by the Android WebView. |
 
 ## HTTP API
@@ -58,6 +63,13 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/place?lat=&lon=&radiusKm=&hours=` — property storm history and damage probability. `hours` is a map window (0.75, 1, 6, 24, 72, 168). `radiusKm` is 1–80.
 - `GET /api/auth/session`, `POST /api/auth/session`, `DELETE /api/auth/session` — team sign-in. Body `{ "name", "passcode" }`.
 - `GET /api/watch`, `POST /api/watch`, `DELETE /api/watch/[id]` — per-user address watch list.
+- `GET /api/alerts/vapid` — public VAPID key for the browser Push API.
+- `POST /api/alerts/subscribe`, `DELETE /api/alerts/subscribe` — save or remove this phone's push subscription. No account. Later calls send `x-hailmap-device`.
+- `GET /api/alerts/state`, `PATCH /api/alerts/settings` — watch areas, inbox, quiet hours, and the last GPS fix used by Near me.
+- `GET /api/alerts/areas`, `POST /api/alerts/areas`, `PATCH /api/alerts/areas/[id]`, `DELETE /api/alerts/areas/[id]` — a saved address or map point with a 5/10/25/50 mile radius, a whole state, or Near me. Each area has a hail-size threshold and toggles for radar hail, spotter reports, NWS hail warnings, and an optional SPC outlook.
+- `POST /api/alerts/test` — send one test notification to this phone.
+- `GET /api/alerts/health` — VAPID source, subscription counts, and the last alert-loop run.
+- `GET /api/alerts/replay?date=YYYY-MM-DD&lat=&lon=&radiusMi=&state=&minSizeIn=` — what the engine would have sent for a past convective day. It does not send pushes.
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
 - `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot.

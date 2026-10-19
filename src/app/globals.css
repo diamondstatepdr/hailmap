@@ -339,9 +339,10 @@ html.dark .maplibregl-ctrl-attrib a {
   gap: 0.15rem;
   padding: 0.35rem 0.15rem 0.2rem;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 650;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .tab-icon {

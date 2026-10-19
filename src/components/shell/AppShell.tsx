@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CloudHail, FileText, House, Map, Moon, Navigation, SunMedium } from "lucide-react";
+import { Bell, CloudHail, FileText, House, Map, Moon, Navigation, SunMedium } from "lucide-react";
 import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
-export type AppSection = "map" | "storms" | "properties" | "field" | "reports";
+export type AppSection = "map" | "storms" | "properties" | "field" | "reports" | "alerts";
 
 const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map }> = [
   { id: "map", label: "Map", hint: "Live map", icon: Map },
@@ -13,6 +13,7 @@ const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map
   { id: "properties", label: "Addresses", hint: "Property history", icon: House },
   { id: "field", label: "Field", hint: "Drive mode", icon: Navigation },
   { id: "reports", label: "Reports", hint: "Shareable reports", icon: FileText },
+  { id: "alerts", label: "Alerts", hint: "Phone alerts", icon: Bell },
 ];
 
 interface Props {
@@ -101,7 +102,7 @@ export default function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">{children}</div>
         <nav
-          className="grid grid-cols-5 border-t border-line bg-panel/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(16,36,56,0.06)] backdrop-blur-md md:hidden"
+          className="grid grid-cols-6 border-t border-line bg-panel/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(16,36,56,0.06)] backdrop-blur-md md:hidden"
           aria-label="Sections"
         >
           {NAV.map((item) => {

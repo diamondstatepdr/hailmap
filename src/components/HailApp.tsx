@@ -1209,7 +1209,7 @@ export default function HailApp() {
             draftPin={draftPin}
             pickMode={picking}
             blockSelection={reportOpen}
-            clusterPoints={!serverClusters}
+            clusterPoints={!replay.active && !serverClusters}
             onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
             onSelectReport={(id) => {
               if (id.startsWith("c:")) {

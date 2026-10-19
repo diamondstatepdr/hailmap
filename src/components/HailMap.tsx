@@ -263,6 +263,11 @@ export default function HailMap({
       return;
     }
     raw.stop();
+    // A search flyTo leaves padding on the camera. fitBounds adds that padding
+    // again, which on a phone shrinks the storm to a statewide view.
+    if (raw.getContainer().clientWidth < 768) {
+      raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    }
     map.fitBounds(
       [
         [next.west, next.south],

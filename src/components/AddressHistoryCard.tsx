@@ -159,7 +159,7 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="font-semibold">
                     {event.label}
-                    {event.lossCandidate ? <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-accent">Date of loss</span> : null}
+                    {event.date === history.selectedDate ? <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-accent">Date of loss</span> : null}
                   </span>
                   <span className="text-sm font-semibold">{sizeLine(event.meshMaxIn, event.spotterMaxIn)}</span>
                 </span>

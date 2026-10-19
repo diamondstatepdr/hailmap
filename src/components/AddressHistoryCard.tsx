@@ -42,13 +42,14 @@ interface Props {
   loading?: boolean;
   onSpan: (id: string) => void;
   onSelectDate: (date: string) => void;
+  onReplay?: (date: string) => void;
   onSave?: () => void;
   onReport?: () => void;
   onAlert?: () => void;
   onClose?: () => void;
 }
 
-export default function AddressHistoryCard({ label, history, spanId, loading, onSpan, onSelectDate, onSave, onReport, onAlert, onClose }: Props) {
+export default function AddressHistoryCard({ label, history, spanId, loading, onSpan, onSelectDate, onReplay, onSave, onReport, onAlert, onClose }: Props) {
   const score = history.score;
   const opened = useMemo(() => {
     let best = history.selectedDate ?? history.events[0]?.date ?? history.end;
@@ -145,11 +146,11 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
       {history.events.length ? (
         <ol className="mt-2 max-h-52 space-y-1.5 overflow-auto">
           {history.events.map((event) => (
-            <li key={event.date}>
+            <li key={event.date} className="flex items-stretch gap-1.5">
               <button
                 type="button"
                 onClick={() => onSelectDate(event.date)}
-                className={`press w-full rounded-xl px-3 py-2 text-left ${event.date === history.selectedDate ? "bg-accent/10 ring-1 ring-accent" : ""}`}
+                className={`press min-w-0 flex-1 rounded-xl px-3 py-2 text-left ${event.date === history.selectedDate ? "bg-accent/10 ring-1 ring-accent" : ""}`}
                 style={{ background: event.date === history.selectedDate ? undefined : "var(--panel-2)" }}
               >
                 <span className="flex items-baseline justify-between gap-2">
@@ -166,6 +167,11 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
                   {event.warnings.length ? ` · ${event.warnings.length} warning${event.warnings.length === 1 ? "" : "s"}` : ""}
                 </span>
               </button>
+              {onReplay ? (
+                <button type="button" className="btn btn-primary press shrink-0 self-center px-2.5 py-2 text-xs" onClick={() => onReplay(event.date)}>
+                  Replay
+                </button>
+              ) : null}
             </li>
           ))}
         </ol>

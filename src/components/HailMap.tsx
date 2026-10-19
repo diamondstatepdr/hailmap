@@ -152,6 +152,7 @@ interface Props {
   points: GeoJSON.FeatureCollection;
   swaths: GeoJSON.FeatureCollection;
   mesh?: GeoJSON.FeatureCollection | null;
+  meshPulse?: GeoJSON.FeatureCollection | null;
   dealers?: GeoJSON.FeatureCollection | null;
   income: GeoJSON.FeatureCollection | null;
   threats: GeoJSON.FeatureCollection | null;
@@ -189,6 +190,7 @@ export default function HailMap({
   points,
   swaths,
   mesh = null,
+  meshPulse = null,
   dealers = null,
   income,
   threats,
@@ -229,6 +231,7 @@ export default function HailMap({
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
     showMesh && mesh?.features.length ? "mesh-fill" : "",
+    showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : "",
     showSwaths ? "swath-fill" : "",
     dealers?.features.length ? "dealer-pins" : "",
     showThreats ? "threat-warning-fill" : "",
@@ -348,12 +351,12 @@ export default function HailMap({
         onSelectDealer?.(String(props.id));
         return;
       }
-      if ((feature.layer?.id === "mesh-fill" || feature.layer?.id === "swath-fill") && feature.geometry) {
+      if ((feature.layer?.id === "mesh-fill" || feature.layer?.id === "mesh-pulse-fill" || feature.layer?.id === "swath-fill") && feature.geometry) {
         const geometry = feature.geometry;
         if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") return;
         const minIn = numberProp(props.minIn);
         const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
-        const radar = feature.layer.id === "mesh-fill";
+        const radar = feature.layer.id === "mesh-fill" || feature.layer.id === "mesh-pulse-fill";
         onSelectArea?.({
           id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
           label: radar
@@ -550,6 +553,28 @@ export default function HailMap({
               "line-width": 1.25,
               "line-opacity": 0.72,
               "line-blur": 0.4,
+            }}
+            layout={{ "line-join": "round", "line-cap": "round" }}
+          />
+        </Source>
+      ) : null}
+      {showMesh && meshPulse?.features.length ? (
+        <Source id="mesh-pulse" type="geojson" data={meshPulse}>
+          <Layer
+            id="mesh-pulse-fill"
+            type="fill"
+            paint={{
+              "fill-color": ["get", "color"] as never,
+              "fill-opacity": theme === "dark" ? 0.62 : 0.7,
+            }}
+          />
+          <Layer
+            id="mesh-pulse-line"
+            type="line"
+            paint={{
+              "line-color": ["get", "color"] as never,
+              "line-width": 1.6,
+              "line-opacity": 0.95,
             }}
             layout={{ "line-join": "round", "line-cap": "round" }}
           />

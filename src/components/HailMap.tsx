@@ -167,6 +167,7 @@ interface Props {
   onSelectArea?: (area: AreaSelection) => void;
   onSelectDealer?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }
 
 export default function HailMap({
@@ -201,6 +202,7 @@ export default function HailMap({
   onSelectArea,
   onSelectDealer,
   onViewChange,
+  onPreviewBounds,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const frameRef = useRef(frame);
@@ -393,14 +395,25 @@ export default function HailMap({
       }}
       interactiveLayerIds={interactiveLayerIds}
       onClick={onClick}
-      onMoveEnd={(event) => {
+      onMove={(event) => {
         const box = event.target.getBounds();
-        onViewChange?.({
+        onPreviewBounds?.({
           west: box.getWest(),
           south: box.getSouth(),
           east: box.getEast(),
           north: box.getNorth(),
         });
+      }}
+      onMoveEnd={(event) => {
+        const box = event.target.getBounds();
+        const bounds = {
+          west: box.getWest(),
+          south: box.getSouth(),
+          east: box.getEast(),
+          north: box.getNorth(),
+        };
+        onPreviewBounds?.(bounds);
+        onViewChange?.(bounds);
       }}
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();
@@ -511,7 +524,7 @@ export default function HailMap({
             type="fill"
             paint={{
               "fill-color": ["get", "color"] as never,
-              "fill-opacity": theme === "dark" ? 0.5 : 0.58,
+              "fill-opacity": theme === "dark" ? 0.34 : 0.4,
             }}
           />
           <Layer
@@ -519,9 +532,11 @@ export default function HailMap({
             type="line"
             paint={{
               "line-color": ["get", "color"] as never,
-              "line-width": 1.4,
-              "line-opacity": 0.95,
+              "line-width": 1.25,
+              "line-opacity": 0.72,
+              "line-blur": 0.4,
             }}
+            layout={{ "line-join": "round", "line-cap": "round" }}
           />
         </Source>
       ) : null}

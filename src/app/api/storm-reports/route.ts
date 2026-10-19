@@ -130,6 +130,7 @@ export async function POST(request: Request) {
       warnings: threats?.collection ?? null,
       warningStatus: threats && threats.status.nws !== "error" ? "ok" : "unavailable",
       swath,
+      radarMaxIn: radar?.maxIn ?? null,
     });
     const swathFeatures = radarPlan
       ? await radarSwathsNear(radarPlan, centerLat, centerLon, new Date(now)).catch(() => null)

@@ -82,6 +82,27 @@ function simplifyRing(points: Array<[number, number]>, tolerance: number): Array
   return [...simplified, simplified[0]];
 }
 
+/** Round stair-step grid corners into a smooth closed ring. */
+function chaikinClosed(points: Array<[number, number]>, iterations: number): Array<[number, number]> {
+  let ring = points;
+  for (let pass = 0; pass < iterations; pass += 1) {
+    const open = ring.slice(0, -1);
+    if (open.length < 3) return points;
+    const next: Array<[number, number]> = [];
+    for (let i = 0; i < open.length; i += 1) {
+      const start = open[i];
+      const end = open[(i + 1) % open.length];
+      next.push([start[0] * 0.75 + end[0] * 0.25, start[1] * 0.75 + end[1] * 0.25]);
+      next.push([start[0] * 0.25 + end[0] * 0.75, start[1] * 0.25 + end[1] * 0.75]);
+    }
+    const rounded = next.map(
+      (point) => [Math.round(point[0] * 1e5) / 1e5, Math.round(point[1] * 1e5) / 1e5] as [number, number],
+    );
+    ring = [...rounded, rounded[0]];
+  }
+  return ring;
+}
+
 function traceRings(cells: MeshCell[], minIn: number, shape: MeshGridShape): Ring[] {
   const inside = new Set<string>();
   for (const cell of cells) {
@@ -170,11 +191,11 @@ export function cellsToSwaths(
   properties: { product: string; validTime: string | null; label: string },
 ): FeatureCollection {
   const features: Feature[] = [];
-  const tolerance = Math.max(shape.step * 0.6, 0.012);
+  const tolerance = Math.max(shape.step * 0.55, 0.008);
   for (const band of MESH_LEGEND) {
     const rings = traceRings(cells, band.minIn, shape).map((ring) => ({
       ...ring,
-      points: simplifyRing(ring.points, tolerance),
+      points: chaikinClosed(simplifyRing(ring.points, tolerance), 2),
     }));
     const outers = rings.filter((ring) => ring.area > 0 && ring.points.length >= 4);
     const holes = rings.filter((ring) => ring.area < 0 && ring.points.length >= 4);

@@ -129,8 +129,8 @@ export default function FieldSheet({
             <p className="truncate text-sm font-semibold">{areaLabel ?? "Tap a hail swath, or search the map"}</p>
           </div>
         </div>
-        <button type="button" onClick={onSearchArea} className="btn btn-secondary press mt-2 w-full text-sm">
-          Search the visible map
+        <button type="button" onClick={onSearchArea} disabled={dealerLoading} className="btn btn-secondary press mt-2 w-full text-sm disabled:opacity-60">
+          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Search the visible map"}
         </button>
         {dealerLoading ? <p className="mt-2 text-xs text-muted">Searching OpenStreetMap…</p> : null}
         {dealerError ? <p className="mt-2 text-xs text-muted">{dealerError}</p> : null}

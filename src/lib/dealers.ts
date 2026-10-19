@@ -7,10 +7,13 @@ import { haversineKm, pointInGeometry, ringSpanKm } from "@/lib/geo";
 import { userAgent } from "@/lib/ingest";
 
 const MIRRORS = [
-  "https://lz4.overpass-api.de/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
+  "https://overpass.osm.ch/api/interpreter",
+  "https://lz4.overpass-api.de/api/interpreter",
   "https://overpass-api.de/api/interpreter",
 ];
+
+const MIRROR_TIMEOUT_MS = 12000;
 
 const VEHICLE_NAME =
   /dealer|motors|auto mall|autoplex|car lot|toyota|honda|ford|chevrolet|chevy|nissan|hyundai|kia|bmw|mercedes|volkswagen|subaru|mazda|jeep|gmc|buick|cadillac|lexus|acura|audi|volvo|chrysler|dodge|lincoln|mitsubishi|ram\b/i;
@@ -53,7 +56,7 @@ export function geometryBounds(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon)
 
 export function overpassQuery(bounds: { west: number; south: number; east: number; north: number }): string {
   const box = `${bounds.south},${bounds.west},${bounds.north},${bounds.east}`;
-  return `[out:json][timeout:25];
+  return `[out:json][timeout:12];
 (
   nwr["shop"="car"](${box});
   nwr["shop"="truck"](${box});
@@ -132,7 +135,7 @@ async function queryMirror(query: string): Promise<OverpassElement[]> {
           Accept: "application/json",
         },
         body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(40000),
+        signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
         cache: "no-store",
       });
       if (!response.ok) {
@@ -146,7 +149,7 @@ async function queryMirror(query: string): Promise<OverpassElement[]> {
       console.error("[hailmap] dealers", mirror, lastError);
     }
   }
-  throw new Error(lastError);
+  throw new Error(`Dealer search failed (${lastError}). Try again in a moment.`);
 }
 
 export async function findDealers(input: {

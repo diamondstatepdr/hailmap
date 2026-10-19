@@ -16,11 +16,12 @@ import { efRank, hazardOf, type Hazard } from "@/lib/hazard";
  * 4. Keep the strongest report. Extra nearby reports add a small density bonus.
  * 5. A hail swath that covers the point adds coverage. If no hail report is
  *    inside the radius, the swath's max size is the hail evidence instead.
- * 6. Active warnings are not scored. A county-wide warning is not a
+ * 6. Radar MESH at the address is added on the same hail-size scale. One inch
+ *    or larger is above Low. Two inches or larger is High. It blends with
+ *    spotter, wind, and tornado points, capped at 100.
+ * 7. Active warnings are not scored. A county-wide warning is not a
  *    measurement at the address. The card still lists them.
- * 7. Map the 0–100 score to Low, Moderate, High, or Very High.
- *
- * Missing radar (no HAILMAP_MESH_URL) simply contributes no MESH reports.
+ * 8. Map the 0–100 score to Low, Moderate, High, or Very High.
  */
 export const DAMAGE_LEVELS = ["Low", "Moderate", "High", "Very High"] as const;
 export type DamageLevel = (typeof DAMAGE_LEVELS)[number];
@@ -62,6 +63,8 @@ export interface ScoreOptions {
   radiusKm: number;
   now?: number;
   swath?: SwathEvidence | null;
+  /** NOAA MRMS MESH maximum at this address inside the selected window. */
+  radarMaxIn?: number | null;
 }
 
 const CONFIDENCE_WEIGHT: Record<Confidence, number> = {
@@ -243,21 +246,33 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
     }
   }
 
-  const score = Math.max(0, Math.min(100, bestPoints + densityPoints + swathPoints));
+  let radarPoints = 0;
+  const radarIn = options.radarMaxIn;
+  if (radarIn != null && radarIn >= 0.5) {
+    radarPoints = hailSizePoints(radarIn);
+    factors.push({
+      id: "radar",
+      label: `Radar hail ${radarIn.toFixed(2)} in`,
+      points: radarPoints,
+      detail: `NOAA MRMS MESH estimates ${radarIn.toFixed(2)} in at this address in the selected window. That size is blended with spotter, wind, and tornado reports. It is a radar estimate, not a stone measured on the ground.`,
+    });
+  }
+
+  const score = Math.max(0, Math.min(100, bestPoints + densityPoints + swathPoints + radarPoints));
   const level = levelForScore(score);
   if (!factors.length) {
     factors.push({
       id: "none",
       label: "No reports in range",
       points: 0,
-      detail: `No hail, wind, or tornado reports within ${radiusKm} km in this date range.`,
+      detail: `No hail, wind, tornado, or radar hail at or above 0.50 in within ${radiusKm} km in this date range.`,
     });
   }
 
   const summary =
     score === 0
       ? "Low because nothing in this radius and date range supports a damage score. That is not a roof inspection."
-      : `${level} (${score}/100) from hail size, wind, tornado rating, distance, source confidence, density, swath coverage, and recency. Not a roof inspection or an insurance determination.`;
+      : `${level} (${score}/100) from radar hail size, spotter reports, wind, tornado rating, distance, and recency. Radar hail of 1 in or more rates above Low, and 2 in or more rates High or Very High, before other reports are added. Not a roof inspection or an insurance determination.`;
 
   return { score, level, factors, summary };
 }

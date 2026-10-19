@@ -137,6 +137,8 @@ describe("MESH contours", () => {
     expect(bands).toContain(2);
     const severe = collection.features.find((feature) => feature.properties?.minIn === 2);
     expect(severe?.properties?.maxIn).toBe(2.4);
+    const ring = severe?.geometry.type === "Polygon" ? severe.geometry.coordinates[0] : [];
+    expect(ring.length).toBeGreaterThan(5);
     const indexed = indexCells(cells, shape);
     expect(sampleIndexed(indexed, shape, 40.03, -99.97)).toBe(2.4);
     expect(sampleIndexed(indexed, shape, 41, -90)).toBeNull();

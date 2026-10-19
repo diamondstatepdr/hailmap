@@ -79,6 +79,9 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Map</h2>
           <p className="mt-1 text-sm text-muted">Address marker, radar hail swaths, and nearby reports.</p>
           <div className="report-map mt-3 overflow-hidden rounded-2xl border border-line" dangerouslySetInnerHTML={{ __html: mapSvg }} />
+          {report.snapshotSvg ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-muted">© OpenStreetMap contributors · NOAA MRMS MESH</p>
+          ) : null}
 
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>
           <p className="mt-1 text-sm text-muted">

@@ -110,7 +110,7 @@ Set `HAILMAP_AUTH_SECRET` in production so the cookie key is not the passcode it
 
 The score is documented in `src/lib/probability.ts`. It is not a trained model, a roof inspection, or an insurance decision.
 
-Each nearby report gets points from hail size, wind speed, or tornado rating, then multiplied by distance, recency, and source confidence (NWS 1, spotter 0.85, MESH 0.65, community 0.4). The strongest report is kept. Extra reports within 10 km add up to 12 points. A hail swath over the point adds coverage points. Active warnings are listed and are not scored, because a county warning is not a measurement at the address. Missing MESH data adds nothing.
+Each nearby report gets points from hail size, wind speed, or tornado rating, then multiplied by distance, recency, and source confidence (NWS 1, spotter 0.85, MESH 0.65, community 0.4). The strongest report is kept. Extra reports within 10 km add up to 12 points. A hail swath over the point adds coverage points. NOAA MRMS MESH at the address is added on the same hail-size scale: 1 in or larger is above Low, and 2 in or larger is High, then blended with the spotter, wind, and tornado points. Active warnings are listed and are not scored, because a county warning is not a measurement at the address. Missing radar data adds nothing.
 
 Bands: 0–17 Low, 18–39 Moderate, 40–64 High, 65–100 Very High. The optional Damage areas layer scores the same model on a coarse grid.
 
@@ -130,7 +130,7 @@ Field mode can list car dealerships and named auto lots inside a tapped hail swa
 
 ## Radar hail
 
-MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The damage score is unchanged: radar size is shown beside it, not folded into the points.
+MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address.
 
 ## Tests
 

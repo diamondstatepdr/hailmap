@@ -27,7 +27,7 @@ function chooseZoom(west: number, south: number, east: number, north: number, wi
 
 async function tilePng(zoom: number, x: number, y: number): Promise<Buffer | null> {
   const safeX = ((x % 2 ** zoom) + 2 ** zoom) % 2 ** zoom;
-  const file = path.join(dataDir(), "tiles", String(zoom), String(safeX), `${y}.png`);
+  const file = path.join(dataDir(), "tiles", "osm", String(zoom), String(safeX), `${y}.png`);
   if (fs.existsSync(file)) {
     try {
       return fs.readFileSync(file);
@@ -35,7 +35,7 @@ async function tilePng(zoom: number, x: number, y: number): Promise<Buffer | nul
       /* refetch */
     }
   }
-  const url = `https://basemaps.cartocdn.com/light_all/${zoom}/${safeX}/${y}.png`;
+  const url = `https://tile.openstreetmap.org/${zoom}/${safeX}/${y}.png`;
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": userAgent(), Accept: "image/png" },
@@ -187,7 +187,5 @@ export async function renderReportSnapshot(input: {
       ${dots}
       ${marker}
     </g>
-    <rect x="${(viewLeft + 10).toFixed(1)}" y="${(viewTop + 10).toFixed(1)}" width="250" height="22" rx="11" fill="#ffffff" fill-opacity="0.92"/>
-    <text x="${(viewLeft + 22).toFixed(1)}" y="${(viewTop + 25).toFixed(1)}" fill="#5c6d82" font-family="Inter, Segoe UI, sans-serif" font-size="11">© OpenStreetMap © CARTO · MRMS MESH</text>
   </svg>`;
 }

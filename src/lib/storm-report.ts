@@ -250,7 +250,7 @@ export function buildStormReport(input: {
       input.bounds,
     ),
     disclaimer:
-      "Radar hail size is an MRMS MESH estimate for the grid cell covering this point, not a stone measured on the roof or the vehicle. Field photos and notes are user documentation. They are not National Weather Service reports. Damage probability is a transparent score from nearby official reports, not a roof inspection or an insurance determination.",
+      "Radar hail size is an MRMS MESH estimate for the grid cell covering this point, not a stone measured on the roof or the vehicle. That estimate is included in the damage score and blended with spotter, wind, and tornado reports. Field photos and notes are user documentation. They are not National Weather Service reports. Damage probability is a transparent score, not a roof inspection or an insurance determination.",
   };
 }
 

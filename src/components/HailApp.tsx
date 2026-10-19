@@ -150,6 +150,7 @@ export default function HailApp() {
   const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const viewBoundsRef = useRef<ViewBounds | null>(null);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -596,13 +597,26 @@ export default function HailApp() {
     setSelectedDealerId(null);
     try {
       const near = userLocation ?? placePoint;
-      const response = await fetch("/api/dealers", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ geometry: selection.geometry, near }),
-      });
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 55000);
+      let response: Response;
+      try {
+        response = await fetch("/api/dealers", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ geometry: selection.geometry, near }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error("Dealer search timed out. Try again.");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
+      }
       const payload = (await response.json()) as { dealers?: DealerPin[]; note?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Could not search dealerships");
+      if (!response.ok) throw new Error(payload.error ?? "Could not search dealerships. Try again.");
       setDealers(payload.dealers ?? []);
       setDealerNote(payload.note ?? null);
     } catch (reason) {
@@ -614,8 +628,9 @@ export default function HailApp() {
   }
 
   function searchVisibleArea() {
-    if (!viewBounds) return;
-    const { west, south, east, north } = viewBounds;
+    const bounds = viewBoundsRef.current ?? viewBounds;
+    if (!bounds) return;
+    const { west, south, east, north } = bounds;
     const span = haversineKm(south, west, north, east);
     if (span > 500) {
       setDealerError("Zoom in to a hail area first. Dealer search stays under about 500 km.");
@@ -786,7 +801,13 @@ export default function HailApp() {
               const dealer = dealers.find((item) => item.id === id);
               if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
             }}
-            onViewChange={setViewBounds}
+            onPreviewBounds={(bounds) => {
+              viewBoundsRef.current = bounds;
+            }}
+            onViewChange={(bounds) => {
+              viewBoundsRef.current = bounds;
+              setViewBounds(bounds);
+            }}
           />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clusterReports, shouldCluster } from "@/lib/history-cluster";
-import { groupEvents, isLossCandidate, lossCandidates, defaultScoreDate, type AddressEvent } from "@/lib/history-place";
+import { groupEvents, isLossCandidate, lossCandidates, defaultScoreDate, rangeMaxHail, type AddressEvent } from "@/lib/history-place";
 import { hailCalendarBand, monthCells } from "@/lib/hail-calendar";
 import { lastDays, parseSpan } from "@/lib/history-range";
 import { MESH_ARCHIVE_START } from "@/lib/history-coverage";
@@ -80,7 +80,7 @@ describe("history ranges and clusters", () => {
 });
 
 describe("address events", () => {
-  it("marks date-of-loss candidates and scores the newest event by default", () => {
+  it("scores the strongest hail day and does not mark wind-only days as pending radar", () => {
     const rows = [
       row("2024-05-08", "hail", 2.5),
       row("2025-04-02", "wind", null, 70),
@@ -90,7 +90,11 @@ describe("address events", () => {
     expect(events.map((event) => event.date)).toEqual(["2025-04-02", "2024-05-08", "2023-06-01"]);
     expect(events.find((event) => event.date === "2024-05-08")?.lossCandidate).toBe(true);
     expect(events.find((event) => event.date === "2023-06-01")?.lossCandidate).toBe(false);
-    expect(defaultScoreDate(events)).toBe("2025-04-02");
+    expect(events.find((event) => event.date === "2025-04-02")?.meshStatus).toBe("no-hail");
+    expect(events.find((event) => event.date === "2023-06-01")?.meshStatus).toBe("pending");
+    expect(defaultScoreDate(events)).toBe("2024-05-08");
+    expect(defaultScoreDate(events)).toBe(lossCandidates(events)[0]?.date);
+    expect(rangeMaxHail(events)).toBe(2.5);
     expect(lossCandidates(events).map((event) => event.date)).toEqual(["2024-05-08", "2025-04-02"]);
     expect(isLossCandidate({ spotterMaxIn: 0.75, meshMaxIn: 1.25, windMaxMph: null, tornadoCount: 0 })).toBe(true);
   });

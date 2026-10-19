@@ -278,6 +278,21 @@ html.dark .maplibregl-ctrl-attrib a {
   display: none;
 }
 
+.cal-nav {
+  display: inline-flex;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.cal-nav:disabled {
+  opacity: 0.3;
+}
+
 .seg button {
   flex: none;
   border-radius: 999px;

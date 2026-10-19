@@ -9,6 +9,11 @@ import { renderReportSnapshot } from "@/lib/map-snapshot";
 import { radarSampleFor, radarSwathsNear } from "@/lib/mesh-cache";
 import { planMesh } from "@/lib/mesh-plan";
 import { buildPlaceHistory, swathEvidence } from "@/lib/place";
+import { buildAddressHistory, lossCandidates } from "@/lib/history-place";
+import { historyRowToReport } from "@/lib/history-query";
+import { daysInSpan, parseSpan, spanLabel } from "@/lib/history-range";
+import { selectHistory } from "@/lib/history-db";
+import { ensureDailySpan, ensureHistoryIndex } from "@/lib/spc-archive";
 import { buildStormReport } from "@/lib/storm-report";
 import { mergeWarnings, nearbyWarnings, warningsFromThreats } from "@/lib/warnings-nearby";
 import { clientIp } from "@/lib/photos";
@@ -63,8 +68,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Expected a JSON body" }, { status: 400 });
   }
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const historySpan = typeof record.start === "string" && typeof record.end === "string" ? parseSpan(record.start, record.end) : null;
+  if (historySpan && "error" in historySpan) return Response.json({ error: historySpan.error }, { status: 400 });
   const hours = Number(record.hours ?? 168);
-  if (!WINDOW_HOURS.has(hours)) return Response.json({ error: "hours must be a map time window" }, { status: 400 });
+  if (!historySpan && !WINDOW_HOURS.has(hours)) return Response.json({ error: "hours must be a map time window" }, { status: 400 });
+  const scoreDate = typeof record.scoreDate === "string" ? record.scoreDate : null;
   const bounds = asBounds(record.bounds);
   const lat = Number(record.lat);
   const lon = Number(record.lon);
@@ -90,6 +98,103 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (historySpan && kind === "address") {
+      const built = await buildAddressHistory({
+        lat: centerLat,
+        lon: centerLon,
+        radiusKm,
+        span: historySpan,
+        scoreDate,
+      });
+      const candidates = lossCandidates(built.events).slice(0, 40);
+      const listed = built.events.flatMap((event) => event.reports).slice(0, 120);
+      const meshDays = built.events
+        .filter((event) => event.meshStatus === "ok" || event.meshStatus === "empty")
+        .slice(0, 40)
+        .map((event) => ({
+          date: event.date,
+          label: event.label,
+          maxIn: event.meshMaxIn,
+          validTime: null,
+          product: "MESH_Max_1440min",
+          status: event.meshMaxIn == null ? ("empty" as const) : ("ok" as const),
+        }));
+      const id = randomUUID();
+      const document = buildStormReport({
+        id,
+        title: label,
+        kind,
+        label,
+        lat: centerLat,
+        lon: centerLon,
+        radiusKm,
+        bounds: null,
+        hours: daysInSpan(historySpan) * 24,
+        rangeLabel: spanLabel(historySpan),
+        scoreDate: built.selectedDate ? built.events.find((event) => event.date === built.selectedDate)?.label ?? built.selectedDate : null,
+        lossCandidates: candidates.map((event) => ({
+          date: event.date,
+          label: event.label,
+          spotterMaxIn: event.spotterMaxIn,
+          meshMaxIn: event.meshMaxIn,
+          windMaxMph: event.windMaxMph,
+          tornado: event.tornado,
+          hailCount: event.hailCount,
+          windCount: event.windCount,
+          tornadoCount: event.tornadoCount,
+        })),
+        history: built.history,
+        listed,
+        radar: {
+          maxIn: built.history.score ? built.events.find((event) => event.date === built.selectedDate)?.meshMaxIn ?? null : null,
+          days: meshDays,
+          note: "NOAA MRMS MESH at this point for hail dates in the span. Past days are cached. Days still marked pending fill in on the next report.",
+        },
+        nearbyWarnings: built.events.flatMap((event) => event.warnings).slice(0, 80),
+        nearbyWarningNote: built.warningNote,
+        snapshotSvg: null,
+      });
+      saveStormReport(readSession(request)?.id ?? null, label, document, id);
+      return Response.json({ report: document, url: `/reports/${id}` }, { status: 201 });
+    }
+    if (historySpan && kind === "area" && bounds) {
+      await ensureHistoryIndex();
+      await ensureDailySpan(historySpan.start, historySpan.end, 12);
+      const rows = selectHistory(historySpan, bounds, "", 400);
+      const listed = rows.map((row) => historyRowToReport(row));
+      const newestDate = rows.reduce((max, row) => (row.stormDate > max ? row.stormDate : max), "");
+      const dayRows = newestDate ? rows.filter((row) => row.stormDate === newestDate) : rows;
+      const newestMs = dayRows.reduce((max, row) => Math.max(max, Date.parse(row.occurredAt) || 0), 0);
+      const history = buildPlaceHistory({
+        lat: centerLat,
+        lon: centerLon,
+        radiusKm,
+        hours: 36,
+        now: newestMs > 0 ? newestMs + 3 * 3600 * 1000 : Date.now(),
+        reports: dayRows.map((row) => historyRowToReport(row)),
+        warningStatus: "unavailable",
+      });
+      const id = randomUUID();
+      const document = buildStormReport({
+        id,
+        title: label,
+        kind,
+        label,
+        lat: centerLat,
+        lon: centerLon,
+        radiusKm: null,
+        bounds,
+        hours: daysInSpan(historySpan) * 24,
+        rangeLabel: spanLabel(historySpan),
+        scoreDate: newestDate || null,
+        history,
+        listed,
+        nearbyWarnings: [],
+        nearbyWarningNote: "Warning polygons are listed on address reports.",
+      });
+      saveStormReport(readSession(request)?.id ?? null, label, document, id);
+      return Response.json({ report: document, url: `/reports/${id}` }, { status: 201 });
+    }
     const now = Date.now();
     const plan = planMesh({ hours, now: new Date(now) });
     const radarPlan = "error" in plan ? null : plan;

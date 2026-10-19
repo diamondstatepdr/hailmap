@@ -70,6 +70,18 @@ const pointColor = [
     "#881337",
     "EF5",
     "#4c0519",
+    "F0",
+    "#fb7185",
+    "F1",
+    "#e11d48",
+    "F2",
+    "#be123c",
+    "F3",
+    "#9f1239",
+    "F4",
+    "#881337",
+    "F5",
+    "#4c0519",
     "#e11d48",
   ],
   ["==", ["get", "hazard"], "wind"],
@@ -168,6 +180,8 @@ interface Props {
   onSelectDealer?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  /** When false, points are already aggregated and MapLibre should not cluster them again. */
+  clusterPoints?: boolean;
 }
 
 export default function HailMap({
@@ -203,6 +217,7 @@ export default function HailMap({
   onSelectDealer,
   onViewChange,
   onPreviewBounds,
+  clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const frameRef = useRef(frame);
@@ -696,7 +711,14 @@ export default function HailMap({
         />
       </Source>
       {showPoints ? (
-        <Source id="reports" type="geojson" data={points} cluster clusterRadius={52} clusterMaxZoom={5}>
+        <Source
+          id="reports"
+          type="geojson"
+          data={points}
+          cluster={clusterPoints}
+          clusterRadius={clusterPoints ? 52 : undefined}
+          clusterMaxZoom={clusterPoints ? 5 : undefined}
+        >
           <Layer
             id="hail-cluster-halo"
             type="circle"
@@ -747,7 +769,17 @@ export default function HailMap({
             filter={["!", ["has", "point_count"]]}
             paint={{
               "circle-color": pointColor as never,
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 7, 6, 10, 10, 13],
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                3,
+                ["+", 7, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
+                6,
+                ["+", 10, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
+                10,
+                ["+", 13, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
+              ] as never,
               "circle-stroke-color": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
@@ -766,6 +798,18 @@ export default function HailMap({
               ] as never,
               "circle-opacity": 0.98,
             }}
+          />
+          <Layer
+            id="history-cluster-count"
+            type="symbol"
+            filter={[">", ["coalesce", ["get", "clusterCount"], 0], 1]}
+            layout={{
+              "text-field": ["to-string", ["get", "clusterCount"]],
+              "text-size": 11,
+              "text-font": ["Noto Sans Bold"],
+              "text-allow-overlap": true,
+            }}
+            paint={{ "text-color": "#ffffff" }}
           />
           <Layer
             id="hail-point-shine"

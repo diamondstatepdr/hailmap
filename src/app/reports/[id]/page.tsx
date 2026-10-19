@@ -23,7 +23,9 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
   const report = stored.payload;
   const photos = report.photos.filter((photo) => /^\/api\/photos\/[0-9a-f-]+$/i.test(photo.url));
   const windowLabel =
-    report.hours === 0.75 ? "45 minutes" : report.hours < 24 ? `${report.hours} hours` : `${report.hours / 24} days`;
+    report.rangeLabel ??
+    (report.hours === 0.75 ? "45 minutes" : report.hours < 24 ? `${report.hours} hours` : `${report.hours / 24} days`);
+  const candidates = report.lossCandidates ?? [];
   const meshDays = report.meshDays ?? [];
   const nearby = report.nearbyWarnings ?? [];
   const mapSvg = report.snapshotSvg || report.svg;
@@ -50,8 +52,12 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
         <div className="px-5 py-6 sm:px-8">
           <h1 className="text-3xl font-semibold tracking-tight text-ink">{report.title}</h1>
           <p className="mt-2 text-sm text-muted">
-            Generated {formatWhen(report.createdAt)} · {report.kind === "area" ? "Selected area" : "Address"} · last {windowLabel}
+            Generated {formatWhen(report.createdAt)} · {report.kind === "area" ? "Selected area" : "Address"} ·{" "}
+            {report.rangeLabel ? windowLabel : `last ${windowLabel}`}
           </p>
+          {report.scoreDate ? (
+            <p className="mt-1 text-sm font-semibold text-ink">Damage score is for {report.scoreDate}, the selected storm. Older dates stay in the history below.</p>
+          ) : null}
           <p className="mt-1 text-sm text-muted">
             {report.place.lat.toFixed(4)}, {report.place.lon.toFixed(4)}
             {report.place.radiusKm ? ` · ${report.place.radiusKm} km radius` : " · reports inside the box"}
@@ -81,6 +87,39 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
           <div className="report-map mt-3 overflow-hidden rounded-2xl border border-line" dangerouslySetInnerHTML={{ __html: mapSvg }} />
           {report.snapshotSvg ? (
             <p className="mt-1 text-[11px] leading-relaxed text-muted">© OpenStreetMap contributors · NOAA MRMS MESH</p>
+          ) : null}
+
+          {candidates.length ? (
+            <>
+              <h2 className="mt-8 text-lg font-semibold tracking-tight">Date of loss candidates</h2>
+              <p className="mt-1 text-sm text-muted">
+                Days with at least 1.00 in of hail (spotter or radar), a 58 mph wind report, or a tornado inside the radius. The largest hail days are listed first.
+              </p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                      <th className="py-2 pr-3 font-semibold">Storm date</th>
+                      <th className="py-2 pr-3 font-semibold">Radar</th>
+                      <th className="py-2 pr-3 font-semibold">Spotter</th>
+                      <th className="py-2 pr-3 font-semibold">Wind</th>
+                      <th className="py-2 font-semibold">Tornado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((day) => (
+                      <tr key={day.date} className="border-b border-line">
+                        <td className="py-2 pr-3 font-semibold">{day.label}</td>
+                        <td className="py-2 pr-3">{day.meshMaxIn != null ? `${day.meshMaxIn.toFixed(2)} in` : "—"}</td>
+                        <td className="py-2 pr-3">{day.spotterMaxIn != null ? `${day.spotterMaxIn.toFixed(2)} in` : "—"}</td>
+                        <td className="py-2 pr-3">{day.windMaxMph != null ? `${day.windMaxMph} mph` : "—"}</td>
+                        <td className="py-2">{day.tornado ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : null}
 
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>

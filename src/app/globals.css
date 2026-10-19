@@ -91,6 +91,12 @@ button {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset));
 }
 
+@media (max-width: 767px) {
+  .map-state-jumps.is-covered {
+    display: none;
+  }
+}
+
 .map-banner {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset) + 2.35rem);
 }

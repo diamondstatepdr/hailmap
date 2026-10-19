@@ -176,6 +176,7 @@ export default function HailApp() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
   const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [chromePx, setChromePx] = useState(0);
   const [hailDaysOpen, setHailDaysOpen] = useState(false);
   const [hailDays, setHailDays] = useState<HailDayView[]>([]);
   const [customOpen, setCustomOpen] = useState(false);
@@ -249,6 +250,7 @@ export default function HailApp() {
   historyActiveRef.current = historyActive;
   const addressRetries = useRef(0);
   const calendarCache = useRef(new Map<string, CalendarMark[]>());
+  const chromeRef = useRef<HTMLDivElement>(null);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
 
@@ -1071,6 +1073,20 @@ export default function HailApp() {
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
   const showMap = section === "map" || section === "field";
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
+  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel ?? "MESH");
+
+  useEffect(() => {
+    const node = chromeRef.current;
+    if (!node) return;
+    const measure = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      setChromePx((current) => (current === height ? current : height));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [showMap, calendarOpen, hailDaysOpen, showMesh, customOpen]);
 
   return (
     <AppShell
@@ -1084,7 +1100,14 @@ export default function HailApp() {
       onSignOut={() => void signOut()}
     >
       {showMap ? (
-        <div className="absolute inset-0" style={{ "--chrome-offset": calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem" } as CSSProperties}>
+        <div
+          className="absolute inset-0"
+          style={
+            {
+              "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
+            } as CSSProperties
+          }
+        >
           <HailMap
             theme={theme}
             points={points}
@@ -1159,7 +1182,7 @@ export default function HailApp() {
               setViewBounds(bounds);
             }}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
               <AddressSearch onPick={chooseAddress} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
@@ -1297,15 +1320,17 @@ export default function HailApp() {
               </div>
             ) : null}
             {showMesh ? (
-              <div className="pointer-events-auto glass flex items-center gap-2 overflow-x-auto rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
+              <div className="pointer-events-auto glass flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
                 <span className="shrink-0 font-semibold">Radar</span>
+                <span className="shrink-0 font-semibold" data-radar-label>
+                  {radarCaption}
+                </span>
                 {MESH_LEGEND.map((band) => (
                   <span key={band.label} className="inline-flex shrink-0 items-center gap-1">
                     <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
                     {band.label}
                   </span>
                 ))}
-                <span className="shrink-0 text-muted">{meshLoading ? "Loading…" : (meshLabel ?? "MESH")}</span>
                 {meshDate ? (
                   <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
                     Use time window
@@ -1315,7 +1340,7 @@ export default function HailApp() {
             ) : null}
           </div>
           {stateCounts.length ? (
-            <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
+            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
               <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
                 {stateCounts.slice(0, 12).map(([code, count]) => {
                   const on = filter.state === code;

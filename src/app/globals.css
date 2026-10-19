@@ -91,6 +91,92 @@ button {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset));
 }
 
+.state-strip {
+  pointer-events: auto;
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.state-toggle {
+  height: 2.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  padding: 0 0.95rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+}
+
+.state-chip-row {
+  display: none;
+  max-width: 100%;
+  gap: 0.35rem;
+  overflow-x: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  padding: 0.35rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  scrollbar-width: none;
+}
+
+.state-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.state-chip-row.is-open {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .state-chip-row {
+    display: flex;
+  }
+}
+
+.map-detail {
+  position: relative;
+  touch-action: none;
+}
+
+.map-detail-grip {
+  width: 2.5rem;
+  height: 0.28rem;
+  margin: -0.15rem auto 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.detail-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 1;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 0.95rem;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+}
+
+.map-detail-body {
+  padding-right: 3.25rem;
+}
+
 @media (max-width: 767px) {
   .map-state-jumps.is-covered {
     display: none;

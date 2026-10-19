@@ -180,6 +180,7 @@ interface Props {
   onSelectDealer?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  onBackgroundClick?: () => void;
   /** When false, points are already aggregated and MapLibre should not cluster them again. */
   clusterPoints?: boolean;
 }
@@ -217,6 +218,7 @@ export default function HailMap({
   onSelectDealer,
   onViewChange,
   onPreviewBounds,
+  onBackgroundClick,
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
@@ -382,6 +384,7 @@ export default function HailMap({
         return;
       }
     }
+    onBackgroundClick?.();
   }
 
   return (

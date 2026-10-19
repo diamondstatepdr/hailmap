@@ -34,6 +34,7 @@ import {
   windowPhrase,
 } from "@/lib/filters";
 import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
+import MapDetailSheet from "@/components/MapDetailSheet";
 import { HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
@@ -172,6 +173,7 @@ export default function HailApp() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNote, setHistoryNote] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [statesOpen, setStatesOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
   const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
@@ -815,6 +817,13 @@ export default function HailApp() {
     setHailDaysOpen(true);
   }
 
+  function closeMapDetail() {
+    setSelectedId(null);
+    setThreat(null);
+    setCounty(null);
+    setArea(null);
+  }
+
   function showCalendar() {
     const seed = historyMode.kind === "day" ? historyMode.date : meshDate || new Date().toISOString().slice(0, 10);
     const [year, month] = seed.split("-").map(Number);
@@ -1088,6 +1097,16 @@ export default function HailApp() {
     return () => observer.disconnect();
   }, [showMap, calendarOpen, hailDaysOpen, showMesh, customOpen]);
 
+  const mapDetailOpen = section === "map" && Boolean(selected || threat || county || area);
+  useEffect(() => {
+    if (!mapDetailOpen || alertDraft || filtersOpen || authOpen || reportOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMapDetail();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen]);
+
   return (
     <AppShell
       section={section}
@@ -1181,6 +1200,7 @@ export default function HailApp() {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
             }}
+            onBackgroundClick={closeMapDetail}
           />
           <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
@@ -1341,21 +1361,31 @@ export default function HailApp() {
           </div>
           {stateCounts.length ? (
             <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
-              <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
-                {stateCounts.slice(0, 12).map(([code, count]) => {
-                  const on = filter.state === code;
-                  return (
-                    <button
-                      key={code}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setStateFilter(on ? "" : code)}
-                      className={`press shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
-                    >
-                      {code} {count}
-                    </button>
-                  );
-                })}
+              <div className="state-strip">
+                <button
+                  type="button"
+                  className="state-toggle press md:hidden"
+                  aria-expanded={statesOpen}
+                  onClick={() => setStatesOpen((open) => !open)}
+                >
+                  {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
+                </button>
+                <div className={`state-chip-row ${statesOpen ? "is-open" : ""}`} role="toolbar" aria-label="Jump to a state">
+                  {stateCounts.slice(0, 12).map(([code, count]) => {
+                    const on = filter.state === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setStateFilter(on ? "" : code)}
+                        className={`press shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
+                      >
+                        {code} {count}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : null}
@@ -1467,18 +1497,13 @@ export default function HailApp() {
           ) : null}
           {section === "map" && area && !(placeCardOpen && place) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
-              <article className="float-card p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-                      {area.source === "mesh" ? "Radar hail swath" : area.source === "view" ? "Map area" : "Report swath"}
-                    </p>
-                    <p className="mt-1 text-lg font-semibold tracking-tight">{area.label}</p>
-                    {area.maxIn != null ? <p className="text-sm text-muted">Peak about {area.maxIn.toFixed(2)} in</p> : null}
-                  </div>
-                  <button type="button" className="btn btn-secondary press px-3 py-1.5 text-xs" onClick={() => setArea(null)}>
-                    Close
-                  </button>
+              <MapDetailSheet label={area.source === "mesh" ? "Radar hail" : "Map area"} onClose={closeMapDetail}>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                    {area.source === "mesh" ? "Radar hail swath" : area.source === "view" ? "Map area" : "Report swath"}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight">{area.label}</p>
+                  {area.maxIn != null ? <p className="text-sm text-muted">Peak about {area.maxIn.toFixed(2)} in</p> : null}
                 </div>
                 <p className="mt-2 text-sm text-muted">
                   {dealerLoading
@@ -1503,12 +1528,12 @@ export default function HailApp() {
                     Open in field mode
                   </button>
                 </div>
-              </article>
+              </MapDetailSheet>
             </div>
           ) : null}
           {section === "map" && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
-              <article className="float-card p-4">
+              <MapDetailSheet label={selected ? "Storm report" : threat ? "Warning" : "County"} onClose={closeMapDetail}>
                 {selected ? (
                   <>
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
@@ -1545,7 +1570,7 @@ export default function HailApp() {
                       : "is not in the ACS cache"}
                   </p>
                 ) : null}
-              </article>
+              </MapDetailSheet>
             </div>
           ) : null}
           {section === "field" ? (

@@ -1,5 +1,5 @@
 import { readJson, requireDevice } from "@/lib/alert-http";
-import { parseClock } from "@/lib/alert-model";
+import { isIanaTimeZone, parseClock } from "@/lib/alert-model";
 import { updateDeviceSettings } from "@/lib/alert-store";
 import { validLatLon } from "@/lib/geo";
 
@@ -16,6 +16,10 @@ export async function PATCH(request: Request) {
   const quietEnd = "quietEnd" in body ? (body.quietEnd == null || body.quietEnd === "" ? null : String(body.quietEnd)) : undefined;
   if (quietStart && parseClock(quietStart) == null) return Response.json({ error: "quietStart must be HH:MM" }, { status: 400 });
   if (quietEnd && parseClock(quietEnd) == null) return Response.json({ error: "quietEnd must be HH:MM" }, { status: 400 });
+  const timeZone = typeof body.timeZone === "string" ? body.timeZone.trim() : undefined;
+  if (timeZone !== undefined && !isIanaTimeZone(timeZone)) {
+    return Response.json({ error: "timeZone must be an IANA zone such as America/Chicago" }, { status: 400 });
+  }
   let lat: number | null | undefined;
   let lon: number | null | undefined;
   if ("lat" in body || "lon" in body) {
@@ -28,7 +32,7 @@ export async function PATCH(request: Request) {
   const device = updateDeviceSettings(auth.device.id, {
     quietStart,
     quietEnd,
-    timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
+    timeZone,
     lat,
     lon,
   });

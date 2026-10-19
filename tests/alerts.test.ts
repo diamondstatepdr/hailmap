@@ -13,7 +13,7 @@ import {
   type HailCandidate,
   type WatchTarget,
 } from "@/lib/alert-match";
-import { formatInches, inQuietHours, parseAlertLink } from "@/lib/alert-model";
+import { formatInches, inQuietHours, parseAlertLink, timeZoneName } from "@/lib/alert-model";
 import { stateOf } from "@/lib/state-locate";
 import { alertsToFeatures } from "@/lib/threats";
 import type { ThreatFeature } from "@/lib/threats";
@@ -292,6 +292,11 @@ describe("quiet hours and deep links", () => {
     expect(inQuietHours(evening, "22:00", "07:00", "America/Chicago")).toBe(true);
     expect(inQuietHours(morning, "22:00", "07:00", "America/Chicago")).toBe(false);
     expect(inQuietHours(evening, null, null, "America/Chicago")).toBe(false);
+    expect(timeZoneName("America/Chicago")).toBe("Central");
+    expect(timeZoneName("America/New_York")).toBe("Eastern");
+    expect(timeZoneName("America/Denver")).toBe("Mountain");
+    expect(timeZoneName("America/Phoenix")).toBe("Mountain");
+    expect(timeZoneName("America/Los_Angeles")).toBe("Pacific");
   });
 
   it("reads a notification deep link", () => {

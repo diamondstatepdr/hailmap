@@ -133,6 +133,33 @@ export function parseClock(value: string | null | undefined): number | null {
   return hour * 60 + minute;
 }
 
+/** Friendly US name for a phone zone, such as "Central" for America/Chicago. */
+export function timeZoneName(timeZone: string | null | undefined): string {
+  if (!timeZone) return "";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longGeneric",
+    }).formatToParts(new Date());
+    const raw = parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+    const name = raw.replace(/\s+(Standard|Daylight)\s+Time$/, "").replace(/\s+Time$/, "").trim();
+    if (!name || /^GMT/i.test(name)) return timeZone === "UTC" || timeZone === "Etc/UTC" || timeZone === "Etc/GMT" ? "UTC" : name;
+    return name;
+  } catch {
+    return "";
+  }
+}
+
+export function isIanaTimeZone(value: string | null | undefined): value is string {
+  if (!value || !value.trim()) return false;
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: value.trim() });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function inQuietHours(now: Date, start: string | null, end: string | null, timeZone: string): boolean {
   const startMin = parseClock(start);
   const endMin = parseClock(end);

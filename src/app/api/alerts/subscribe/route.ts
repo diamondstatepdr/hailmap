@@ -1,4 +1,5 @@
 import { requireDevice } from "@/lib/alert-http";
+import { isIanaTimeZone } from "@/lib/alert-model";
 import { allowedPushEndpoint, deleteDevice, saveSubscription } from "@/lib/alert-store";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const auth = typeof keys?.auth === "string" ? keys.auth : "";
   if (!endpoint || !p256dh || !auth) return Response.json({ error: "A push subscription is required" }, { status: 400 });
   if (!allowedPushEndpoint(endpoint)) return Response.json({ error: "That push service is not supported" }, { status: 400 });
-  const timeZone = typeof record.timeZone === "string" ? record.timeZone : null;
+  const timeZone = typeof record.timeZone === "string" && isIanaTimeZone(record.timeZone) ? record.timeZone.trim() : null;
   const device = saveSubscription({ endpoint, p256dh, auth, timeZone });
   return Response.json({ deviceKey: device.deviceKey, subscriptionId: device.id });
 }

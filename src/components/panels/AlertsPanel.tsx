@@ -9,7 +9,9 @@ import {
   DEFAULT_PREFS,
   US_STATES,
   formatInches,
+  isIanaTimeZone,
   stateName,
+  timeZoneName,
   type WatchKind,
 } from "@/lib/alert-model";
 
@@ -99,12 +101,25 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
       setReady(true);
       return;
     }
+    const phoneZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let settings = payload.settings ?? null;
+    if (settings && isIanaTimeZone(phoneZone) && settings.timeZone !== phoneZone) {
+      const saved = await fetch("/api/alerts/settings", {
+        method: "PATCH",
+        headers: deviceHeaders(),
+        body: JSON.stringify({ timeZone: phoneZone }),
+      });
+      if (saved.ok) {
+        const updated = (await saved.json()) as { settings?: Settings };
+        settings = updated.settings ?? { ...settings, timeZone: phoneZone };
+      }
+    }
     setSubscribed(true);
-    setSettings(payload.settings ?? null);
+    setSettings(settings);
     setAreas(payload.areas ?? []);
     setInbox(payload.inbox ?? []);
-    setQuietStart(payload.settings?.quietStart ?? "");
-    setQuietEnd(payload.settings?.quietEnd ?? "");
+    setQuietStart(settings?.quietStart ?? "");
+    setQuietEnd(settings?.quietEnd ?? "");
     setReady(true);
   }
 
@@ -255,6 +270,8 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
     }
   }
 
+  const quietZone = timeZoneName(settings?.timeZone);
+
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8">
       <header className="mb-5 max-w-3xl">
@@ -309,7 +326,10 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
         {subscribed ? (
           <section className="rounded-[1.25rem] border border-line bg-panel p-4">
             <h2 className="text-base font-semibold tracking-tight">Quiet hours</h2>
-            <p className="mt-1 text-sm text-muted">No pings in this window. The hail still shows up in the inbox. Times use {settings?.timeZone || "this phone's time zone"}.</p>
+            <p className="mt-1 text-sm text-muted">
+              No pings in this window. The hail still shows up in the inbox. Times use your phone&apos;s time zone
+              {quietZone ? ` (${quietZone})` : ""}.
+            </p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="text-sm">
                 <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">From</span>

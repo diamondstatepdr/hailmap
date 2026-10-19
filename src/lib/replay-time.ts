@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import type { MeshCell, MeshGridShape } from "@/lib/mesh-contour";
+import { normalizeMapBounds, wrapLongitude } from "@/lib/geo";
 import { addIsoDays, isIsoDate } from "@/lib/mesh-plan";
 
 export interface ReplayBounds {
@@ -279,18 +280,45 @@ function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: numb
  * A view that is already about 70–100 km across is left alone.
  * When storm reports are passed, the window shifts toward them but keeps the searched point on screen.
  */
+function finitePlace(lat: number | undefined, lon: number | undefined): { lat: number; lon: number } | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat: Math.max(-85, Math.min(85, lat as number)), lon: wrapLongitude(lon as number) };
+}
+
+function meanPlace(points?: Array<{ lat: number; lon: number }>): { lat: number; lon: number } | null {
+  const usable = (points ?? []).map((point) => finitePlace(point.lat, point.lon)).filter((point): point is { lat: number; lon: number } => point != null);
+  if (!usable.length) return null;
+  return {
+    lat: usable.reduce((sum, point) => sum + point.lat, 0) / usable.length,
+    lon: usable.reduce((sum, point) => sum + point.lon, 0) / usable.length,
+  };
+}
+
+const FALLBACK_PLACE = { lat: 39.2, lon: -97.5 };
+
 export function frameReplayBounds(
   view: ReplayBounds | null,
   center?: { lat: number; lon: number } | null,
   points?: Array<{ lat: number; lon: number }>,
 ): ReplayBounds {
-  const lat = center?.lat ?? (view ? (view.north + view.south) / 2 : 39);
-  const lon = center?.lon ?? (view ? (view.east + view.west) / 2 : -97);
-  if (center || !view) return boxAround(biasTowardReports(lat, lon, points), REPLAY_METRO_KM);
-  const latKm = (view.north - view.south) * KM_PER_LAT;
-  const lonKm = (view.east - view.west) * kmPerLon(lat);
-  if (latKm < 70 || lonKm < 70 || latKm > 100 || lonKm > 100) return boxAround({ lat, lon }, REPLAY_METRO_KM);
-  return boxAround({ lat, lon }, latKm, lonKm);
+  const explicit = finitePlace(center?.lat, center?.lon);
+  const fromView =
+    view && [view.west, view.south, view.east, view.north].every((value) => Number.isFinite(value))
+      ? finitePlace((view.north + view.south) / 2, (view.east + view.west) / 2)
+      : null;
+  const anchor = explicit ?? fromView ?? meanPlace(points) ?? FALLBACK_PLACE;
+  const safeView = view ? normalizeMapBounds(view) : null;
+  let framed: ReplayBounds;
+  if (explicit || !safeView) {
+    framed = boxAround(biasTowardReports(anchor.lat, anchor.lon, points), REPLAY_METRO_KM);
+  } else {
+    const latKm = (safeView.north - safeView.south) * KM_PER_LAT;
+    const lonKm = (safeView.east - safeView.west) * Math.max(kmPerLon(anchor.lat), 1);
+    framed = latKm < 70 || lonKm < 70 || latKm > 100 || lonKm > 100
+      ? boxAround({ lat: anchor.lat, lon: anchor.lon }, REPLAY_METRO_KM)
+      : boxAround({ lat: anchor.lat, lon: anchor.lon }, latKm, lonKm);
+  }
+  return normalizeMapBounds(framed) ?? boxAround(FALLBACK_PLACE, REPLAY_METRO_KM);
 }
 
 function biasTowardReports(lat: number, lon: number, points?: Array<{ lat: number; lon: number }>): { lat: number; lon: number } {
@@ -317,8 +345,10 @@ export function parseReplayQuery(params: URLSearchParams): { date: string; bound
   const south = Number(params.get("south"));
   const east = Number(params.get("east"));
   const north = Number(params.get("north"));
-  if (![west, south, east, north].every(Number.isFinite)) return { error: "west, south, east, and north are required" };
-  if (south >= north || west >= east || south < -85 || north > 85) return { error: "Those map bounds are not usable." };
-  if (north - south > 20 || east - west > 25) return { error: "Zoom in before replaying. Radar frames stay inside a regional view." };
-  return { date, bounds: { west, south, east, north } };
+  const bounds = normalizeMapBounds({ west, south, east, north });
+  if (!bounds) return { error: "Zoom in a little to load storms for this view." };
+  if (bounds.north - bounds.south > 20 || bounds.east - bounds.west > 25) {
+    return { error: "Zoom in before replaying. Radar frames stay inside a regional view." };
+  }
+  return { date, bounds };
 }

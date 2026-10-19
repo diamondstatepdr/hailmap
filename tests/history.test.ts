@@ -3,6 +3,7 @@ import { clusterReports, shouldCluster } from "@/lib/history-cluster";
 import { groupEvents, isLossCandidate, lossCandidates, defaultScoreDate, rangeMaxHail, type AddressEvent } from "@/lib/history-place";
 import { hailCalendarBand, monthCells } from "@/lib/hail-calendar";
 import { lastDays, parseSpan } from "@/lib/history-range";
+import { parseHistoryBounds } from "@/lib/history-query";
 import { MESH_ARCHIVE_START } from "@/lib/history-coverage";
 import { pickMeshArchiveName, planMesh } from "@/lib/mesh-plan";
 import { parseSvrgisCsv, spcCstToIso } from "@/lib/spc-archive";
@@ -11,6 +12,23 @@ const hailCsv = `om,yr,mo,dy,date,time,tz,st,stf,stn,mag,inj,fat,loss,closs,slat
 2505081830-01,2024,05,08,2024-05-08,18:30:00,3,TX,48,0,2.75,0,0,0,0,32.7800,-96.8000,32.7800,-96.8000,0,0,0,0,0,113,0,0,0
 1,1955,1,17,1955-01-17,16:39:00,3,TX,48,1,0.75,0,0,0,0,32.2000,-101.5000,0,0,0,0,0,0,0,227,0,0,0
 `;
+
+describe("history map bounds", () => {
+  it("folds a zoomed-out phone view into the world instead of returning a raw error", () => {
+    const parsed = parseHistoryBounds(new URLSearchParams({ west: "-234", south: "25", east: "40", north: "50" }));
+    expect("error" in parsed).toBe(false);
+    if ("error" in parsed) return;
+    expect(parsed.west).toBeGreaterThanOrEqual(-180);
+    expect(parsed.east).toBeLessThanOrEqual(180);
+    expect(parsed.south).toBeLessThan(parsed.north);
+    expect(JSON.stringify(parsed)).not.toContain("outside the world");
+  });
+
+  it("asks the user to zoom in when the bounds are not numbers", () => {
+    const parsed = parseHistoryBounds(new URLSearchParams({ west: "nope", south: "1", east: "2", north: "3" }));
+    expect(parsed).toEqual({ error: "Zoom in a little to load storms for this view." });
+  });
+});
 
 describe("SPC severe database", () => {
   it("reads hail size in inches and stores Central Standard Time as UTC", () => {

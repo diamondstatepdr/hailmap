@@ -324,6 +324,8 @@ export async function replayRadarFrame(input: {
   };
 }
 
+const openingWarmed = new Set<string>();
+
 /** Download the convective-day baseline so the first frame spends less time waiting. */
 export function warmReplayBaseline(date: string) {
   if (date < MESH_ARCHIVE_START) return;
@@ -331,4 +333,25 @@ export function warmReplayBaseline(date: string) {
   void gridAt(date, "MESH_Max_1440min", start, 3 * 3600 * 1000).catch((error) => {
     console.error("[hailmap] replay warm", error instanceof Error ? error.message : error);
   });
+}
+
+/**
+ * Pull the opening scans into the grid cache before the player asks.
+ * The files are shared across bounds, so a phone that refits the metro
+ * still hits this cache instead of starting the archive download over.
+ */
+export function warmReplayOpening(date: string, frames: string[]) {
+  if (date < MESH_ARCHIVE_START) return;
+  for (const at of frames.slice(0, 4)) {
+    const atMs = Date.parse(at);
+    const key = `${date}|${at}`;
+    if (!Number.isFinite(atMs) || openingWarmed.has(key)) continue;
+    openingWarmed.add(key);
+    void gridAt(date, "MESH_Max_1440min", atMs, 40 * 60 * 1000).catch((error) => {
+      console.error("[hailmap] replay warm", error instanceof Error ? error.message : error);
+    });
+    void gridAt(date, "MESH", atMs, 12 * 60 * 1000).catch((error) => {
+      console.error("[hailmap] replay warm", error instanceof Error ? error.message : error);
+    });
+  }
 }

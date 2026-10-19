@@ -37,6 +37,30 @@ export function replayFrames(startIso: string, endIso: string, stepMinutes = 15)
   return frames.length ? frames : [new Date(last).toISOString()];
 }
 
+/** Playhead plus the next few steps, so the swath is already cached when the clock moves. */
+export function prefetchFrameTimes(frames: string[], index: number, stepMinutes: 15 | 60, ahead = 3): string[] {
+  if (!frames.length) return [];
+  const start = Math.max(0, Math.min(index, frames.length - 1));
+  const stride = stepMinutes === 60 ? 4 : 1;
+  const times: string[] = [];
+  for (let offset = 0; offset <= ahead; offset += 1) {
+    const frameIndex = start + offset * stride;
+    if (frameIndex >= frames.length) break;
+    times.push(frames[frameIndex]);
+  }
+  return times;
+}
+
+/** Latest frame at or before the playhead whose radar is already stored. -1 when none are. */
+export function loadedFrameIndex(frames: string[], index: number, loaded: (at: string) => boolean): number {
+  if (!frames.length) return -1;
+  const start = Math.max(0, Math.min(index, frames.length - 1));
+  for (let cursor = start; cursor >= 0; cursor -= 1) {
+    if (loaded(frames[cursor])) return cursor;
+  }
+  return -1;
+}
+
 /** Shrink a window to the events inside it, with padding, and keep it inside the convective day. */
 export function activeWindow(
   eventTimes: number[],

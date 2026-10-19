@@ -12,7 +12,9 @@ import {
   hailReportTicks,
   frameReplayBounds,
   geometryHitsBounds,
+  loadedFrameIndex,
   parseArchiveNames,
+  prefetchFrameTimes,
   replayFrames,
   stormTimeZone,
   warningActive,
@@ -73,6 +75,21 @@ describe("storm replay timing", () => {
     expect(ticks).toContain(100);
     expect(ticks.some((tick) => tick > 40 && tick < 60)).toBe(false);
     expect(ticks.length).toBe(2);
+  });
+
+  it("prefetches the playhead and the next three steps", () => {
+    const frames = ["a", "b", "c", "d", "e", "f", "g"];
+    expect(prefetchFrameTimes(frames, 1, 15)).toEqual(["b", "c", "d", "e"]);
+    expect(prefetchFrameTimes(frames, 5, 15)).toEqual(["f", "g"]);
+    expect(prefetchFrameTimes(frames, 0, 60)).toEqual(["a", "e"]);
+  });
+
+  it("keeps the visible frame on the latest loaded swath at or before the playhead", () => {
+    const frames = ["a", "b", "c", "d"];
+    const ready = new Set(["a", "b"]);
+    expect(loadedFrameIndex(frames, 3, (at) => ready.has(at))).toBe(1);
+    expect(loadedFrameIndex(frames, 1, (at) => ready.has(at))).toBe(1);
+    expect(loadedFrameIndex(frames, 0, () => false)).toBe(-1);
   });
 });
 

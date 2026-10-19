@@ -18,7 +18,7 @@ import {
   stormTimeZone,
   type ReplayBounds,
 } from "@/lib/replay-time";
-import { warmReplayBaseline } from "@/lib/replay-archive";
+import { warmReplayBaseline, warmReplayOpening } from "@/lib/replay-archive";
 
 export interface ReplayWarningProps {
   id: string;
@@ -196,6 +196,7 @@ export async function replayManifest(input: { date: string; bounds: ReplayBounds
   ];
   const span = activeWindow(times, window);
   const frames = replayFrames(span.start, span.end, 15);
+  warmReplayOpening(input.date, frames);
   const timeZone = stormTimeZone((input.bounds.west + input.bounds.east) / 2);
   return {
     date: input.date,

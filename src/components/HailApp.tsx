@@ -1575,9 +1575,13 @@ export default function HailApp() {
               step={replay.step}
               index={replay.index}
               count={replay.manifest?.frames.length ?? 0}
-              loading={replay.loadingManifest || (replay.radarLoading && !replay.radarReady)}
+              loading={replay.loadingManifest || (Boolean(replay.manifest?.frames.length) && !replay.radarReady)}
               loadingLabel={
-                replay.loadingManifest ? "Lining up the storm" : replay.radarLoading && !replay.radarReady ? "Fetching radar" : null
+                replay.loadingManifest
+                  ? "Lining up the storm"
+                  : replay.manifest?.frames.length && !replay.radarReady
+                    ? "Fetching radar"
+                    : null
               }
               note={replay.manifestError ?? (!replay.loadingManifest ? replay.manifest?.warningNote ?? null : null)}
               onTogglePlay={replay.togglePlay}

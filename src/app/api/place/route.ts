@@ -1,8 +1,10 @@
+import { TIME_WINDOWS } from "@/lib/filters";
+import { validLatLon } from "@/lib/geo";
 import { getMapReports } from "@/lib/ingest";
 import { getLiveThreats } from "@/lib/live-threats";
+import { radarSampleFor } from "@/lib/mesh-cache";
+import { planMesh } from "@/lib/mesh-plan";
 import { buildPlaceHistory } from "@/lib/place";
-import { validLatLon } from "@/lib/geo";
-import { TIME_WINDOWS } from "@/lib/filters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +31,13 @@ export async function GET(request: Request) {
   const parsed = parsePlaceQuery(new URL(request.url));
   if ("error" in parsed) return Response.json({ error: parsed.error }, { status: 400 });
   try {
-    const [reports, threats] = await Promise.all([
+    const plan = planMesh({ hours: parsed.hours });
+    const [reports, threats, radar] = await Promise.all([
       getMapReports({ fresh: parsed.hours <= 1 }),
       getLiveThreats().catch(() => null),
+      "error" in plan
+        ? Promise.resolve(null)
+        : radarSampleFor(plan, parsed.lat, parsed.lon).catch(() => null),
     ]);
     const history = buildPlaceHistory({
       lat: parsed.lat,
@@ -41,6 +47,7 @@ export async function GET(request: Request) {
       reports: reports.reports,
       warnings: threats?.collection ?? null,
       warningStatus: threats && threats.status.nws !== "error" ? "ok" : "unavailable",
+      radarMaxIn: radar?.maxIn ?? null,
     });
     return Response.json(
       { ...history, mesh: reports.sourceStatus?.mesh ?? null, syncedAt: reports.syncedAt },

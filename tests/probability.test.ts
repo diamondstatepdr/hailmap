@@ -106,6 +106,30 @@ describe("damage probability", () => {
     expect(score.level).toBe("Low");
     expect(score.factors[0].id).toBe("none");
   });
+
+  it("folds radar MESH into the score and explains it", () => {
+    const inch = scoreDamage({ lat: 35, lon: -97, radiusKm: 15, now: NOW, reports: [], radarMaxIn: 1 });
+    expect(inch.score).toBe(34);
+    expect(inch.level).toBe("Moderate");
+    expect(inch.summary).not.toMatch(/nothing in this radius/i);
+    expect(inch.factors.some((factor) => factor.id === "radar")).toBe(true);
+
+    const severe = scoreDamage({ lat: 35, lon: -97, radiusKm: 15, now: NOW, reports: [], radarMaxIn: 2 });
+    expect(severe.score).toBe(62);
+    expect(severe.level).toBe("High");
+
+    const blended = scoreDamage({
+      lat: 35.22,
+      lon: -97.44,
+      radiusKm: 15,
+      now: NOW,
+      reports: [hail({ hazard: "wind", sizeIn: null, windMph: 75 })],
+      radarMaxIn: 2,
+    });
+    expect(blended.score).toBeGreaterThan(severe.score);
+    expect(blended.factors.some((factor) => factor.id === "radar")).toBe(true);
+    expect(blended.factors.some((factor) => factor.id === "wind")).toBe(true);
+  });
 });
 
 describe("property history", () => {

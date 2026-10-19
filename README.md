@@ -1,6 +1,6 @@
 # HailMap
 
-Nationwide live map of United States hail, wind, and tornado reports. Reports come from the National Weather Service, the Storm Prediction Center, and Iowa Environmental Mesonet local storm reports. Nearby reports of the same hazard are fused, with confidence ordered **NWS > spotter > MESH > community**. Hail size colors hail markers. Wind markers use a wind glyph and a speed color. Tornado markers use a funnel glyph and an EF color when the office published one. Clusters of hail within about 45 km and 3 hours become a buffered hail swath. Wind and tornado reports do not become swaths. Counties can be shaded by Census ACS median household income.
+Nationwide live map of United States hail, wind, and tornado reports. Reports come from the National Weather Service, the Storm Prediction Center, and Iowa Environmental Mesonet local storm reports. Nearby reports of the same hazard are fused, with confidence ordered **NWS > spotter > MESH > community**. Hail size colors hail markers. Wind markers use a wind glyph and a speed color. Tornado markers use a funnel glyph and an EF color when the office published one. Clusters of hail within about 45 km and 3 hours become a buffered report swath. Wind and tornado reports do not become swaths. A separate radar layer draws NOAA MRMS MESH swaths (estimated hail size) for the last hour, the last 24 hours, the last 3 or 7 days, or a selected past date. Counties can be shaded by Census ACS median household income.
 
 The map opens on the last 7 days. SPC and IEM local storm reports are stored as NWS or spotter confidence, including public and mPING reports that an NWS office published. Community confidence is for file import, the community webhook, and in-app photo reports. SPC files used are `*_rpts_hail.csv`, `*_rpts_wind.csv`, and `*_rpts_torn.csv`. IEM local storm reports keep hail, thunderstorm and non-thunderstorm wind, and tornado types. Other LSR types are ignored.
 
@@ -32,7 +32,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | --- | --- |
 | `HAILMAP_DATA_DIR` | SQLite directory. Use `/data` on Railway. |
 | `CENSUS_API_KEY` | Optional. Refreshes county median household income (ACS B19013). |
-| `HAILMAP_MESH_URL` | Optional GeoJSON of MRMS MESH hail. Ingested at confidence `mesh`. |
+| `HAILMAP_MESH_URL` | Optional GeoJSON of extra MESH points, ingested at confidence `mesh`. The radar swath layer does not use it. |
 | `HAILMAP_WEBHOOK_SECRET` | Required in production for `/api/webhooks/spotter` and `/api/webhooks/community`. Photo reports do not use this secret. |
 | `HAILMAP_PHOTO_HOURLY_LIMIT` | Public photo reports per hashed client IP per hour. Default 8. |
 | `HAILMAP_PHOTO_DAILY_LIMIT` | Public photo reports per hashed client IP per day. Default 30. |
@@ -48,6 +48,9 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `POST /api/reports` — public photo report. Multipart fields: `photo`, `lat`, `lon`, `sizeIn`, optional `remark`, `occurredAt`, `location`, `county`, `state`. Always stored as community. Rate-limited per hashed IP.
 - `GET /api/photos/[id]` — the stored image. `id` is the file id without an extension.
 - `GET /api/swaths` — GeoJSON swaths from those reports
+- `GET /api/mesh?hours=` or `GET /api/mesh?date=YYYY-MM-DD` — NOAA MRMS MESH hail swaths. `hours` follows the map windows (last hour for Live, 1 hour, and 6 hours; last 24 hours; daily composite for 3 and 7 days). A date uses that day’s 24-hour maximum. Results are cached under `$HAILMAP_DATA_DIR/mesh`.
+- `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
+- `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap
 - `GET /api/income` — county polygons with ACS median household income
 - `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway
@@ -57,7 +60,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/watch`, `POST /api/watch`, `DELETE /api/watch/[id]` — per-user address watch list.
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
-- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser.
+- `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot.
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
 
@@ -107,7 +110,7 @@ Set `HAILMAP_AUTH_SECRET` in production so the cookie key is not the passcode it
 
 The score is documented in `src/lib/probability.ts`. It is not a trained model, a roof inspection, or an insurance decision.
 
-Each nearby report gets points from hail size, wind speed, or tornado rating, then multiplied by distance, recency, and source confidence (NWS 1, spotter 0.85, MESH 0.65, community 0.4). The strongest report is kept. Extra reports within 10 km add up to 12 points. A hail swath over the point adds coverage points. Active warnings are listed and are not scored, because a county warning is not a measurement at the address. Missing MESH data adds nothing.
+Each nearby report gets points from hail size, wind speed, or tornado rating, then multiplied by distance, recency, and source confidence (NWS 1, spotter 0.85, MESH 0.65, community 0.4). The strongest report is kept. Extra reports within 10 km add up to 12 points. A hail swath over the point adds coverage points. NOAA MRMS MESH at the address is added on the same hail-size scale: 1 in or larger is above Low, and 2 in or larger is High, then blended with the spotter, wind, and tornado points. Active warnings are listed and are not scored, because a county warning is not a measurement at the address. Missing radar data adds nothing.
 
 Bands: 0–17 Low, 18–39 Moderate, 40–64 High, 65–100 Very High. The optional Damage areas layer scores the same model on a coarse grid.
 
@@ -121,7 +124,13 @@ Roof and property records are not in this build. `src/lib/seams.ts` records that
 
 ## Map
 
-Light theme is the default. Dark is a toggle and is remembered on the device. On a phone, Map, Storms, Addresses, Field, and Reports sit in a bottom bar. On a wide screen they sit in a side rail. Filters open in a sheet. Layer switches control reports, hail swaths, damage areas, NWS severe threats, the SPC Day 1 outlook, and the income choropleth. Threats and the outlook are on by default and draw underneath markers. State borders and names stay on the map. The site is a mobile PWA (`public/manifest.webmanifest`).
+Light theme is the default. Dark is a toggle and is remembered on the device. On a phone, Map, Storms, Addresses, Field, and Reports sit in a bottom bar. On a wide screen they sit in a side rail. Filters open in a sheet. Layer switches control reports, radar hail (MRMS MESH), report swaths, damage areas, NWS severe threats, the SPC Day 1 outlook, and the income choropleth. Radar hail, threats, and the outlook are on by default. Radar hail draws underneath markers, with a size legend at 0.75, 1, 1.5, and 2 inches or larger. A date field loads a past convective day from the Iowa State MRMS archive. State borders and names stay on the map. The site is a mobile PWA (`public/manifest.webmanifest`).
+
+Field mode can list car dealerships and named auto lots inside a tapped hail swath, or inside the visible map, using OpenStreetMap. Pins show the name, address, and distance.
+
+## Radar hail
+
+MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address.
 
 ## Tests
 

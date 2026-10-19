@@ -39,7 +39,7 @@ export default function ReportsPanel({
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Printable</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Reports</h1>
         <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
-          A printable storm report with the map sketch, nearby reports, damage probability, and your field photos if you are signed in.
+          A printable storm report with radar hail size, nearby warnings, a map snapshot, damage probability, and your field photos if you are signed in.
         </p>
       </header>
       <div className="grid max-w-3xl gap-3 sm:grid-cols-2">

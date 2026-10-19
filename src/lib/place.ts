@@ -91,6 +91,7 @@ export function buildPlaceHistory(input: {
   warningStatus?: "ok" | "unavailable";
   /** When set, swath coverage is not recomputed from `reports`. */
   swath?: { hit: boolean; maxSizeIn: number | null };
+  radarMaxIn?: number | null;
 }): PlaceHistory {
   const now = input.now ?? Date.now();
   const cutoff = now - input.hours * 3600 * 1000;
@@ -128,6 +129,7 @@ export function buildPlaceHistory(input: {
     now,
     reports: nearby,
     swath,
+    radarMaxIn: input.radarMaxIn,
   });
 
   return {

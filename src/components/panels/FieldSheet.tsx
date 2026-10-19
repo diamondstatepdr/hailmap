@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Navigation } from "lucide-react";
+import { CarFront, Navigation } from "lucide-react";
+import type { DealerPin } from "@/lib/area-selection";
 import { FIELD_DAMAGE_TYPES, PIN_STATUSES, pinStatusLabel, type PinStatus } from "@/lib/field";
 import type { PlaceHistory } from "@/lib/place";
 
@@ -21,6 +22,14 @@ interface Props {
   signedIn: boolean;
   pins: FieldPinView[];
   selectedPinId: string | null;
+  areaLabel: string | null;
+  dealers: DealerPin[];
+  dealerLoading: boolean;
+  dealerNote: string | null;
+  dealerError: string | null;
+  selectedDealerId: string | null;
+  onSearchArea: () => void;
+  onSelectDealer: (id: string) => void;
   onSignIn: () => void;
   onMark: (status: PinStatus, note: string) => void;
   onSelectPin: (id: string) => void;
@@ -43,6 +52,14 @@ export default function FieldSheet({
   signedIn,
   pins,
   selectedPinId,
+  areaLabel,
+  dealers,
+  dealerLoading,
+  dealerNote,
+  dealerError,
+  selectedDealerId,
+  onSearchArea,
+  onSelectDealer,
   onSignIn,
   onMark,
   onSelectPin,
@@ -70,7 +87,7 @@ export default function FieldSheet({
   }
 
   return (
-    <div className="sheet max-h-[46dvh] overflow-y-auto px-4 pb-3 pt-1">
+    <div className="sheet max-h-[62dvh] overflow-y-auto px-4 pb-3 pt-1">
       <div className="sheet-handle" />
       <div className="mt-2 flex items-center gap-2">
         <span className="hazard-badge h-8 w-8 hazard-wind">
@@ -102,6 +119,43 @@ export default function FieldSheet({
       ) : (
         <p className="mt-2 text-sm text-muted">Score appears when your location is known.</p>
       )}
+      <div className="mt-3 rounded-2xl border border-line bg-panel-2 p-3" style={{ background: "var(--panel-2)" }}>
+        <div className="flex items-center gap-2">
+          <span className="hazard-badge h-8 w-8 hazard-hail">
+            <CarFront size={15} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Dealerships</p>
+            <p className="truncate text-sm font-semibold">{areaLabel ?? "Tap a hail swath, or search the map"}</p>
+          </div>
+        </div>
+        <button type="button" onClick={onSearchArea} disabled={dealerLoading} className="btn btn-secondary press mt-2 w-full text-sm disabled:opacity-60">
+          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Search the visible map"}
+        </button>
+        {dealerLoading ? <p className="mt-2 text-xs text-muted">Searching OpenStreetMap…</p> : null}
+        {dealerError ? <p className="mt-2 text-xs text-muted">{dealerError}</p> : null}
+        {dealers.length ? (
+          <ul className="mt-2 max-h-36 space-y-1 overflow-auto">
+            {dealers.map((dealer) => (
+              <li key={dealer.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectDealer(dealer.id)}
+                  className={`w-full rounded-xl px-2 py-1.5 text-left ${selectedDealerId === dealer.id ? "bg-panel font-semibold" : ""}`}
+                >
+                  <span className="block text-sm">{dealer.name}</span>
+                  <span className="block text-xs text-muted">
+                    {dealer.kind === "lot" ? "Auto lot" : "Dealership"} · {dealer.distanceKm.toFixed(1)} km
+                  </span>
+                  <span className="block text-xs text-muted">{dealer.address}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : dealerNote && !dealerLoading ? (
+          <p className="mt-2 text-xs text-muted">{dealerNote}</p>
+        ) : null}
+      </div>
       <div className="mt-3">
         <p className="text-xs font-semibold text-muted">Nearby reported places</p>
         {places.length ? (

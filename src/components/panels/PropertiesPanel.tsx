@@ -3,6 +3,7 @@
 import { House, MapPinned } from "lucide-react";
 import AddressSearch, { type AddressHit } from "@/components/AddressSearch";
 import PropertyCard from "@/components/PropertyCard";
+import type { RadarSample } from "@/lib/area-selection";
 import { TIME_WINDOWS } from "@/lib/filters";
 import { laterPhase } from "@/lib/seams";
 import type { PlaceHistory } from "@/lib/place";
@@ -27,6 +28,8 @@ interface Props {
   loading: boolean;
   error: string | null;
   mesh: string | null;
+  radar: RadarSample | null;
+  radarLoading: boolean;
   signedIn: boolean;
   watch: WatchItem[];
   onSave: () => void;
@@ -101,6 +104,8 @@ export default function PropertiesPanel(props: Props) {
             label={props.label}
             history={props.history}
             mesh={props.mesh}
+            radar={props.radar}
+            radarLoading={props.radarLoading}
             onSave={props.signedIn ? props.onSave : undefined}
             saveLabel={props.signedIn ? "Save to watch list" : undefined}
             onReport={props.onReport}

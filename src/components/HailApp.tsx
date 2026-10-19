@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CloudHail, Moon, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
@@ -16,6 +16,8 @@ import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
+import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection";
+import { MESH_LEGEND } from "@/lib/mesh-legend";
 import {
   applyReportFilter,
   emptyWindowMessage,
@@ -98,6 +100,20 @@ export default function HailApp() {
   const [showThreats, setShowThreats] = useState(true);
   const [showOutlook, setShowOutlook] = useState(true);
   const [showHeat, setShowHeat] = useState(false);
+  const [showMesh, setShowMesh] = useState(true);
+  const [meshDate, setMeshDate] = useState("");
+  const [meshCollection, setMeshCollection] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [meshLabel, setMeshLabel] = useState<string | null>(null);
+  const [meshNote, setMeshNote] = useState<string | null>(null);
+  const [meshLoading, setMeshLoading] = useState(false);
+  const [area, setArea] = useState<AreaSelection | null>(null);
+  const [dealers, setDealers] = useState<DealerPin[]>([]);
+  const [dealerNote, setDealerNote] = useState<string | null>(null);
+  const [dealerError, setDealerError] = useState<string | null>(null);
+  const [dealerLoading, setDealerLoading] = useState(false);
+  const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
+  const [radar, setRadar] = useState<RadarSample | null>(null);
+  const [radarLoading, setRadarLoading] = useState(false);
   const [income, setIncome] = useState<GeoJSON.FeatureCollection | null>(null);
   const [incomeError, setIncomeError] = useState(false);
   const [threats, setThreats] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -134,11 +150,15 @@ export default function HailApp() {
   const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const viewBoundsRef = useRef<ViewBounds | null>(null);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportUrl, setReportUrl] = useState<string | null>(null);
   const lastStreetFix = useRef<{ lat: number; lon: number } | null>(null);
+  const placePointRef = useRef(placePoint);
+  placePointRef.current = placePoint;
+  const meshFrameKey = useRef<string | null>(null);
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
 
@@ -293,6 +313,73 @@ export default function HailApp() {
     };
   }, [placePoint, radiusKm, filter.hours, reloadKey]);
 
+  useEffect(() => {
+    if (!placePoint) {
+      setRadar(null);
+      return;
+    }
+    let cancelled = false;
+    setRadarLoading(true);
+    const params = new URLSearchParams({
+      lat: String(placePoint.lat),
+      lon: String(placePoint.lon),
+      hours: String(filter.hours),
+    });
+    if (meshDate) params.set("date", meshDate);
+    fetch(`/api/mesh/at?${params}`)
+      .then(async (response) => {
+        const payload = (await response.json()) as RadarSample & { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Radar hail is unavailable");
+        if (!cancelled) setRadar(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setRadar(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRadarLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [placePoint, filter.hours, meshDate]);
+
+  useEffect(() => {
+    if (!showMesh) return;
+    const controller = new AbortController();
+    setMeshLoading(true);
+    const params = new URLSearchParams();
+    if (meshDate) params.set("date", meshDate);
+    else params.set("hours", String(filter.hours));
+    fetch(`/api/mesh?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          collection?: GeoJSON.FeatureCollection;
+          label?: string;
+          note?: string;
+          bounds?: { west: number; south: number; east: number; north: number } | null;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(payload.error ?? "Radar hail is unavailable");
+        setMeshCollection(payload.collection ?? { type: "FeatureCollection", features: [] });
+        setMeshLabel(payload.label ?? null);
+        setMeshNote(payload.note ?? null);
+        const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
+        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current) {
+          meshFrameKey.current = key;
+          setFrame({ ...payload.bounds, nonce: Date.now(), maxZoom: 9.5 });
+        }
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        setMeshNote("Radar hail is unavailable right now.");
+        setMeshCollection({ type: "FeatureCollection", features: [] });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMeshLoading(false);
+      });
+    return () => controller.abort();
+  }, [showMesh, filter.hours, meshDate]);
+
   const fieldHours = useRef(filter.hours);
   useEffect(() => {
     if (section !== "field") {
@@ -374,6 +461,19 @@ export default function HailApp() {
     () => (showHeat ? damageHeatGrid(filtered, { swaths }) : null),
     [showHeat, filtered, swaths],
   );
+  const dealerCollection = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: dealers.map((dealer) => ({
+        type: "Feature",
+        id: dealer.id,
+        geometry: { type: "Point", coordinates: [dealer.lon, dealer.lat] },
+        properties: { id: dealer.id, name: dealer.name, kind: dealer.kind },
+      })),
+    }),
+    [dealers],
+  );
+
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
@@ -489,6 +589,75 @@ export default function HailApp() {
     setPins(list.pins ?? []);
   }
 
+  async function loadDealers(selection: AreaSelection) {
+    setArea(selection);
+    setDealerLoading(true);
+    setDealerError(null);
+    setDealerNote(null);
+    setSelectedDealerId(null);
+    try {
+      const near = userLocation ?? placePoint;
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 55000);
+      let response: Response;
+      try {
+        response = await fetch("/api/dealers", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ geometry: selection.geometry, near }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error("Dealer search timed out. Try again.");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
+      }
+      const payload = (await response.json()) as { dealers?: DealerPin[]; note?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not search dealerships. Try again.");
+      setDealers(payload.dealers ?? []);
+      setDealerNote(payload.note ?? null);
+    } catch (reason) {
+      setDealers([]);
+      setDealerError(reason instanceof Error ? reason.message : "Could not search dealerships");
+    } finally {
+      setDealerLoading(false);
+    }
+  }
+
+  function searchVisibleArea() {
+    const bounds = viewBoundsRef.current ?? viewBounds;
+    if (!bounds) return;
+    const { west, south, east, north } = bounds;
+    const span = haversineKm(south, west, north, east);
+    if (span > 500) {
+      setDealerError("Zoom in to a hail area first. Dealer search stays under about 500 km.");
+      setDealers([]);
+      return;
+    }
+    void loadDealers({
+      id: "view",
+      label: "Visible map",
+      source: "view",
+      minIn: null,
+      maxIn: null,
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [west, south],
+            [east, south],
+            [east, north],
+            [west, north],
+            [west, south],
+          ],
+        ],
+      },
+    });
+  }
+
   async function generateReport(kind: "address" | "view") {
     setReportBusy(true);
     setReportError(null);
@@ -575,15 +744,18 @@ export default function HailApp() {
       onSignOut={() => void signOut()}
     >
       {showMap ? (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0" style={showMesh ? ({ "--chrome-offset": "8.7rem" } as CSSProperties) : undefined}>
           <HailMap
             theme={theme}
             points={points}
             swaths={swaths}
+            mesh={meshCollection}
+            dealers={dealerCollection}
             income={income}
             threats={threats}
             showPoints={showPoints}
             showSwaths={showSwaths}
+            showMesh={showMesh}
             showIncome={showIncome}
             showThreats={showThreats}
             showOutlook={showOutlook}
@@ -617,7 +789,25 @@ export default function HailApp() {
               setSelectedId(null);
               setCounty(null);
             }}
-            onViewChange={setViewBounds}
+            onSelectArea={(selection) => {
+              setSelectedId(null);
+              setThreat(null);
+              setCounty(null);
+              void loadDealers(selection);
+            }}
+            onSelectDealer={(id) => {
+              setSelectedDealerId(id);
+              setSection("field");
+              const dealer = dealers.find((item) => item.id === id);
+              if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+            }}
+            onPreviewBounds={(bounds) => {
+              viewBoundsRef.current = bounds;
+            }}
+            onViewChange={(bounds) => {
+              viewBoundsRef.current = bounds;
+              setViewBounds(bounds);
+            }}
           />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
@@ -657,6 +847,34 @@ export default function HailApp() {
                 </button>
               ))}
             </div>
+            {showMesh ? (
+              <div className="pointer-events-auto glass flex items-center gap-2 overflow-x-auto rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
+                <span className="shrink-0 font-semibold">Radar</span>
+                {MESH_LEGEND.map((band) => (
+                  <span key={band.label} className="inline-flex shrink-0 items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
+                    {band.label}
+                  </span>
+                ))}
+                <span className="shrink-0 text-muted">{meshLoading ? "Loading…" : (meshLabel ?? "MESH")}</span>
+                <label className="inline-flex shrink-0 items-center gap-1">
+                  <span className="sr-only">Radar date</span>
+                  <input
+                    type="date"
+                    value={meshDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    min="2015-01-01"
+                    onChange={(event) => setMeshDate(event.target.value)}
+                    className="rounded-lg border border-line bg-panel px-1.5 py-0.5 text-[11px]"
+                  />
+                </label>
+                {meshDate ? (
+                  <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => setMeshDate("")}>
+                    Use time window
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           {stateCounts.length ? (
             <div className="map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16">
@@ -731,6 +949,8 @@ export default function HailApp() {
                 label={placeLabel}
                 history={place}
                 mesh={status?.mesh}
+                radar={radar}
+                radarLoading={radarLoading}
                 onClose={() => setPlaceCardOpen(false)}
                 onSave={() => void saveWatch()}
                 onReport={() => {
@@ -740,7 +960,35 @@ export default function HailApp() {
               />
             </div>
           ) : null}
-          {section === "map" && !(placeCardOpen && place) && (selected || threat || county) ? (
+          {section === "map" && area && !(placeCardOpen && place) ? (
+            <div className="absolute inset-x-3 bottom-3 z-30">
+              <article className="float-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                      {area.source === "mesh" ? "Radar hail swath" : area.source === "view" ? "Map area" : "Report swath"}
+                    </p>
+                    <p className="mt-1 text-lg font-semibold tracking-tight">{area.label}</p>
+                    {area.maxIn != null ? <p className="text-sm text-muted">Peak about {area.maxIn.toFixed(2)} in</p> : null}
+                  </div>
+                  <button type="button" className="btn btn-secondary press px-3 py-1.5 text-xs" onClick={() => setArea(null)}>
+                    Close
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-muted">
+                  {dealerLoading
+                    ? "Looking up dealerships in this area…"
+                    : dealerError
+                      ? dealerError
+                      : `${dealers.length} dealership${dealers.length === 1 ? "" : "s"} and auto lot${dealers.length === 1 ? "" : "s"}`}
+                </p>
+                <button type="button" className="btn btn-primary press mt-3" onClick={() => setSection("field")}>
+                  Open in field mode
+                </button>
+              </article>
+            </div>
+          ) : null}
+          {section === "map" && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
               <article className="float-card p-4">
                 {selected ? (
@@ -786,6 +1034,18 @@ export default function HailApp() {
                 signedIn={Boolean(user)}
                 pins={pins}
                 selectedPinId={selectedPinId}
+                areaLabel={area?.label ?? null}
+                dealers={dealers}
+                dealerLoading={dealerLoading}
+                dealerNote={dealerNote}
+                dealerError={dealerError}
+                selectedDealerId={selectedDealerId}
+                onSearchArea={searchVisibleArea}
+                onSelectDealer={(id) => {
+                  setSelectedDealerId(id);
+                  const dealer = dealers.find((item) => item.id === id);
+                  if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+                }}
                 onSignIn={() => setAuthOpen(true)}
                 onMark={(statusPin, note) => void markPin(statusPin, note)}
                 onSelectPin={(id) => {
@@ -808,6 +1068,7 @@ export default function HailApp() {
               onToggleConfidence={toggleConfidence}
               showPoints={showPoints}
               showSwaths={showSwaths}
+              showMesh={showMesh}
               showThreats={showThreats}
               showOutlook={showOutlook}
               showIncome={showIncome}
@@ -815,6 +1076,7 @@ export default function HailApp() {
               onToggle={(key) => {
                 if (key === "points") setShowPoints((value) => !value);
                 if (key === "swaths") setShowSwaths((value) => !value);
+                if (key === "mesh") setShowMesh((value) => !value);
                 if (key === "threats") setShowThreats((value) => !value);
                 if (key === "outlook") setShowOutlook((value) => !value);
                 if (key === "income") setShowIncome((value) => !value);
@@ -885,6 +1147,8 @@ export default function HailApp() {
           loading={placeLoading}
           error={placeError}
           mesh={status?.mesh ?? null}
+          radar={radar}
+          radarLoading={radarLoading}
           signedIn={Boolean(user)}
           watch={watch}
           onSave={() => void saveWatch()}

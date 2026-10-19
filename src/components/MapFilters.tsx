@@ -16,7 +16,8 @@ interface Props {
   showOutlook: boolean;
   showIncome: boolean;
   showHeat: boolean;
-  onToggle: (key: "points" | "swaths" | "threats" | "outlook" | "income" | "heat") => void;
+  showMesh: boolean;
+  onToggle: (key: "points" | "swaths" | "mesh" | "threats" | "outlook" | "income" | "heat") => void;
   incomeError: boolean;
   threatError: boolean;
   threatStatus: ThreatsResponse["status"] | null;
@@ -81,14 +82,15 @@ export default function MapFilters(props: Props) {
           <p className="mb-2 text-sm font-medium">Map layers</p>
           <div className="flex flex-wrap gap-2">
             <Toggle on={props.showPoints} label="Reports" onClick={() => props.onToggle("points")} />
-            <Toggle on={props.showSwaths} label="Hail swaths" onClick={() => props.onToggle("swaths")} />
+            <Toggle on={props.showMesh} label="Radar hail" onClick={() => props.onToggle("mesh")} />
+            <Toggle on={props.showSwaths} label="Report swaths" onClick={() => props.onToggle("swaths")} />
             <Toggle on={props.showHeat} label="Damage areas" onClick={() => props.onToggle("heat")} />
             <Toggle on={props.showThreats} label="Threats" onClick={() => props.onToggle("threats")} />
             <Toggle on={props.showOutlook} label="Outlook" onClick={() => props.onToggle("outlook")} />
             <Toggle on={props.showIncome} label="County income" onClick={() => props.onToggle("income")} />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
-            Damage areas use the same score as an address, on a coarse grid. Hail swaths group nearby hail reports.
+            Radar hail is NOAA MRMS MESH, estimated hail size where stones fell. Report swaths still group nearby hail reports. Damage areas use the same score as an address, on a coarse grid.
             {props.showIncome && props.incomeError ? " Income data is unavailable right now." : ""}
             {props.showThreats && (props.threatError || props.threatStatus?.nws === "error")
               ? " Watches and warnings are unavailable right now."
@@ -96,7 +98,7 @@ export default function MapFilters(props: Props) {
             {props.showOutlook && (props.threatError || props.threatStatus?.spc === "error")
               ? " The Day 1 outlook is unavailable right now."
               : ""}
-            {props.status?.mesh === "skipped" ? " Radar MESH is off until HAILMAP_MESH_URL is set." : ""}
+            {props.status?.mesh === "skipped" ? " Extra MESH points stay off until HAILMAP_MESH_URL is set." : ""}
           </p>
           {props.showOutlook ? (
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">

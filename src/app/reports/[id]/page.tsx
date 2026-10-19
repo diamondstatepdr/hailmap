@@ -24,6 +24,9 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
   const photos = report.photos.filter((photo) => /^\/api\/photos\/[0-9a-f-]+$/i.test(photo.url));
   const windowLabel =
     report.hours === 0.75 ? "45 minutes" : report.hours < 24 ? `${report.hours} hours` : `${report.hours / 24} days`;
+  const meshDays = report.meshDays ?? [];
+  const nearby = report.nearbyWarnings ?? [];
+  const mapSvg = report.snapshotSvg || report.svg;
 
   return (
     <main className="report-paper min-h-screen px-3 py-6 sm:px-6 print:px-0 print:py-0">
@@ -65,15 +68,69 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
           </section>
 
           <dl className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-            <Stat label="Reports" value={String(report.stats.reportCount)} />
-            <Stat label="Max hail" value={report.stats.maxHailIn != null ? `${report.stats.maxHailIn.toFixed(2)} in` : "—"} />
+            <Stat label="Radar max hail" value={report.meshMaxIn != null ? `${report.meshMaxIn.toFixed(2)} in` : "—"} />
+            <Stat label="Spotter max hail" value={report.stats.maxHailIn != null ? `${report.stats.maxHailIn.toFixed(2)} in` : "—"} />
             <Stat label="Max wind" value={report.stats.maxWindMph != null ? `${report.stats.maxWindMph} mph` : "—"} />
             <Stat label="Tornado" value={report.stats.strongestTornado ?? "—"} />
+            <Stat label="Reports" value={String(report.stats.reportCount)} />
             <Stat label="Nearest" value={report.stats.nearestKm != null ? `${report.stats.nearestKm.toFixed(1)} km` : "—"} />
-            <Stat label="Hail swath" value={report.stats.swathHit ? "Covers this point" : "No"} />
           </dl>
 
-          <div className="mt-6 overflow-hidden rounded-2xl border border-line" dangerouslySetInnerHTML={{ __html: report.svg }} />
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">Map</h2>
+          <p className="mt-1 text-sm text-muted">Address marker, radar hail swaths, and nearby reports.</p>
+          <div className="report-map mt-3 overflow-hidden rounded-2xl border border-line" dangerouslySetInnerHTML={{ __html: mapSvg }} />
+          {report.snapshotSvg ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-muted">© OpenStreetMap contributors · NOAA MRMS MESH</p>
+          ) : null}
+
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>
+          <p className="mt-1 text-sm text-muted">
+            NOAA MRMS MESH at this address. Sizes are estimates for the radar grid cell, not a ground survey.
+          </p>
+          {meshDays.length ? (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                    <th className="py-2 pr-3 font-semibold">Storm date</th>
+                    <th className="py-2 pr-3 font-semibold">Radar max</th>
+                    <th className="py-2 font-semibold">Product</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {meshDays.map((day) => (
+                    <tr key={`${day.label}-${day.date ?? "window"}`} className="border-b border-line">
+                      <td className="py-2 pr-3">{day.label}</td>
+                      <td className="py-2 pr-3 font-semibold">{day.maxIn != null ? `${day.maxIn.toFixed(2)} in` : "None at this point"}</td>
+                      <td className="py-2 text-muted">{day.product.replaceAll("_", " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted">{report.meshNote ?? "Radar hail was not included."}</p>
+          )}
+          {meshDays.length && report.meshNote ? <p className="mt-2 text-xs leading-relaxed text-muted">{report.meshNote}</p> : null}
+
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">NWS warnings nearby</h2>
+          {report.nearbyWarningNote ? <p className="mt-2 text-sm text-muted">{report.nearbyWarningNote}</p> : null}
+          {nearby.length ? (
+            <ul className="mt-2 space-y-2 text-sm">
+              {nearby.map((warning) => (
+                <li key={warning.id} className="rounded-xl border border-line px-3 py-2">
+                  <span className="font-semibold">{warning.event}</span>
+                  <span className="mt-0.5 block text-muted">
+                    {warning.kind}
+                    {warning.office ? ` · ${warning.office}` : ""}
+                    {warning.area ? ` · ${warning.area}` : ""}
+                  </span>
+                  {warning.issued ? <span className="block text-xs text-muted">Issued {formatWhen(warning.issued)}</span> : null}
+                  {warning.until ? <span className="block text-xs text-muted">Until {formatWhen(warning.until)}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           {report.timeline.length ? (
             <div className="mt-6">
@@ -172,8 +229,6 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
           ) : (
             <p className="mt-2 text-sm text-muted">No field photos were attached for this account.</p>
           )}
-
-          {report.meshNote ? <p className="mt-6 text-sm text-muted">{report.meshNote}</p> : null}
 
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Sources</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">

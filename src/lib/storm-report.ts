@@ -1,3 +1,5 @@
+import type { RadarDay } from "@/lib/area-selection";
+import type { NearbyWarning } from "@/lib/warnings-nearby";
 import { haversineKm } from "@/lib/geo";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { DamageScore } from "@/lib/probability";
@@ -31,6 +33,11 @@ export interface StormReportDocument {
   warnings: PlaceWarning[];
   warningNote: string | null;
   meshNote: string | null;
+  meshMaxIn: number | null;
+  meshDays: RadarDay[];
+  nearbyWarnings: NearbyWarning[];
+  nearbyWarningNote: string | null;
+  snapshotSvg: string | null;
   timeline: Array<{
     id: string;
     hazard: string;
@@ -148,6 +155,10 @@ export function buildStormReport(input: {
   listed: Array<HailReport & { distanceKm?: number }>;
   photos?: FieldPin[];
   meshStatus?: string | null;
+  radar?: { maxIn: number | null; days: RadarDay[]; note: string | null } | null;
+  nearbyWarnings?: NearbyWarning[];
+  nearbyWarningNote?: string | null;
+  snapshotSvg?: string | null;
   now?: string;
 }): StormReportDocument {
   const createdAt = input.createdAt ?? input.now ?? new Date().toISOString();
@@ -155,6 +166,8 @@ export function buildStormReport(input: {
   const sources = new Set<string>();
   for (const report of listed) sources.add(SOURCE_NAMES[report.source] ?? report.source);
   if (input.history.warnings.length) sources.add("National Weather Service active watches and warnings");
+  if (input.radar) sources.add("NOAA MRMS Maximum Expected Size of Hail (MESH)");
+  if (input.nearbyWarnings?.length) sources.add("Iowa Environmental Mesonet archive of NWS warnings");
   sources.add("Damage probability model documented in HailMap (not a trained model)");
 
   const photos = (input.photos ?? []).flatMap((pin) =>
@@ -172,8 +185,10 @@ export function buildStormReport(input: {
     }),
   );
 
-  const meshNote =
-    input.meshStatus === "skipped" || input.meshStatus == null
+  const meshDays = input.radar?.days ?? [];
+  const meshNote = input.radar
+    ? input.radar.note
+    : input.meshStatus === "skipped" || input.meshStatus == null
       ? "Radar MESH is not included. Set HAILMAP_MESH_URL to ingest an official MESH feed."
       : input.meshStatus === "error"
         ? "The MESH feed was unavailable when this report was built."
@@ -211,6 +226,11 @@ export function buildStormReport(input: {
           ? null
           : "No active severe watch or warning covers this point.",
     meshNote,
+    meshMaxIn: input.radar?.maxIn ?? null,
+    meshDays,
+    nearbyWarnings: input.nearbyWarnings ?? [],
+    nearbyWarningNote: input.nearbyWarningNote ?? null,
+    snapshotSvg: input.snapshotSvg ?? null,
     timeline: listed.slice(0, 80).map((report) => ({
       id: report.id,
       hazard: hazardLabel(hazardOf(report.hazard)),
@@ -230,7 +250,7 @@ export function buildStormReport(input: {
       input.bounds,
     ),
     disclaimer:
-      "Field photos and notes are user documentation. They are not National Weather Service reports. Damage probability is a transparent score from nearby official reports, not a roof inspection.",
+      "Radar hail size is an MRMS MESH estimate for the grid cell covering this point, not a stone measured on the roof or the vehicle. That estimate is included in the damage score and blended with spotter, wind, and tornado reports. Field photos and notes are user documentation. They are not National Weather Service reports. Damage probability is a transparent score, not a roof inspection or an insurance determination.",
   };
 }
 

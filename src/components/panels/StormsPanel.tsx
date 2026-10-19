@@ -72,7 +72,7 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
         <Feed label="SPC" value={status?.spc ?? "checking"} />
         <Feed label="IEM" value={status?.iem ?? "checking"} />
         <Feed label="NWS" value={status?.nws ?? "checking"} />
-        <Feed label="MESH" value={status?.mesh === "skipped" ? "off until HAILMAP_MESH_URL is set" : (status?.mesh ?? "checking")} />
+        <Feed label="MESH" value={status?.mesh === "skipped" ? "radar swaths on · point feed off" : (status?.mesh ?? "checking")} />
         {syncedAt ? <span className="self-center">Updated {formatWhen(syncedAt)}</span> : null}
         {filter.state ? <span className="self-center">State {filter.state}</span> : null}
       </div>

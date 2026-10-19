@@ -21,7 +21,7 @@ export interface AddressEvent {
   tornado: string | null;
   tornadoCount: number;
   meshMaxIn: number | null;
-  meshStatus: "ok" | "empty" | "pending" | "outside-archive" | "error";
+  meshStatus: "ok" | "empty" | "pending" | "outside-archive" | "error" | "no-hail";
   warnings: NearbyWarning[];
   reports: Array<ReturnType<typeof historyRowToReport> & { distanceKm: number }>;
   lossCandidate: boolean;
@@ -35,6 +35,8 @@ export interface AddressHistory {
   end: string;
   pendingDays: number;
   events: AddressEvent[];
+  /** Largest spotter or radar hail in the span, independent of the scored day. */
+  maxHailIn: number | null;
   selectedDate: string | null;
   score: PlaceHistory["score"];
   history: PlaceHistory;
@@ -144,7 +146,8 @@ export function groupEvents(
       }
     }
     const radar = mesh.get(date);
-    const meshStatus = date < MESH_ARCHIVE_START ? "outside-archive" : (radar?.status ?? "pending");
+    const meshStatus: AddressEvent["meshStatus"] =
+      hailCount === 0 ? "no-hail" : date < MESH_ARCHIVE_START ? "outside-archive" : (radar?.status ?? "pending");
     const meshMaxIn = radar?.maxIn ?? null;
     const dayWarnings = warnings.filter((warning) => convectiveDateOf(warning.issued) === date);
     const event: AddressEvent = {
@@ -169,9 +172,21 @@ export function groupEvents(
   return events;
 }
 
+/** Largest spotter or radar hail anywhere in the span. */
+export function rangeMaxHail(events: AddressEvent[]): number | null {
+  let max: number | null = null;
+  for (const event of events) {
+    for (const value of [event.spotterMaxIn, event.meshMaxIn]) {
+      if (value == null || !Number.isFinite(value)) continue;
+      max = max == null ? value : Math.max(max, value);
+    }
+  }
+  return max;
+}
+
+/** The strongest date-of-loss day, which is the largest hail day when one exists. */
 export function defaultScoreDate(events: AddressEvent[]): string | null {
-  if (!events.length) return null;
-  return events[0]?.date ?? null;
+  return lossCandidates(events)[0]?.date ?? events[0]?.date ?? null;
 }
 
 export function scoreForEvent(input: {
@@ -256,6 +271,7 @@ export async function buildAddressHistory(input: {
     }
   }
   const events = groupEvents(rows, warningResult.warnings, mesh);
+  const maxHailIn = rangeMaxHail(events);
   const selectedDate = input.scoreDate && events.some((event) => event.date === input.scoreDate) ? input.scoreDate : defaultScoreDate(events);
   const selected = events.find((event) => event.date === selectedDate);
   const history = scoreForEvent({
@@ -273,6 +289,7 @@ export async function buildAddressHistory(input: {
     end: input.span.end,
     pendingDays,
     events,
+    maxHailIn,
     selectedDate,
     score: history.score,
     history,

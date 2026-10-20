@@ -34,6 +34,8 @@ interface Props {
   onClose: () => void;
   attribution: string | null;
   needsDay: boolean;
+  /** Miles are only shown when they are measured from the tech or a searched address. */
+  distanceFrom: "you" | "search" | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -119,7 +121,7 @@ export default function HoneyPanel(props: Props) {
                     <span className="honey-meta">
                       {KIND_LABEL[spot.kind] ?? "Stop"} · {spot.hailIn.toFixed(2)} in
                       {count != null ? ` · ${count.toLocaleString("en-US")} ${countLabel}` : ""}
-                      {spot.distanceKm != null ? ` · ${miles(spot.distanceKm)}` : ""}
+                      {spot.distanceKm != null && props.distanceFrom ? ` · ${miles(spot.distanceKm)} from ${props.distanceFrom}` : ""}
                     </span>
                     <span className="honey-source">{spot.sourceLabel}</span>
                   </span>

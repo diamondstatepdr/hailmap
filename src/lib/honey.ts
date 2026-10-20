@@ -60,6 +60,9 @@ export interface HoneyPlace {
   name: string | null;
   city: string | null;
   neighborhood: string | null;
+  street?: string | null;
+  /** Compass offset from a large city, used only when no neighborhood or street exists. */
+  area?: string | null;
   lat: number;
   lon: number;
   vehicles: number;
@@ -330,6 +333,10 @@ function clusterTitle(members: ScoredPlace[]): { name: string; kind: TargetKind 
     return { name, kind: named.kind };
   }
   if (neighborhood) return { name: neighborhood, kind };
+  const street = ranked.find((member) => member.street)?.street;
+  if (street) return { name: street, kind };
+  const area = ranked.find((member) => member.area)?.area;
+  if (area) return { name: area, kind };
   const city = ranked.find((member) => member.city)?.city;
   if (city) return { name: city, kind };
   return { name: kind === "homes" ? "Neighborhood" : "Hail pocket", kind };

@@ -153,6 +153,12 @@ function neighborhoodOf(tags: Record<string, string>): string | null {
   return name || null;
 }
 
+function streetOf(tags: Record<string, string>): string | null {
+  const street = (tags["addr:street"] || "").trim();
+  if (!street || street.length > 42 || /^(parking|lot|garage)$/i.test(street)) return null;
+  return street;
+}
+
 function classify(tags: Record<string, string>, area: number): { kind: TargetKind; vehicles: number; homes: number; basis: "area" | "default" } | null {
   if (tags.highway || tags.railway || tags.waterway) return null;
   const name = (tags.name || tags.brand || tags.operator || "").trim();
@@ -214,6 +220,7 @@ export function targetsFromElements(elements: OverpassElement[], bounds?: HoneyB
       name: name || null,
       city: cityOf(tags),
       neighborhood: neighborhoodOf(tags),
+      street: streetOf(tags),
       lat: point.lat,
       lon: point.lon,
       vehicles: classified.vehicles,

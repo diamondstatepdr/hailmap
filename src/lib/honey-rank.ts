@@ -166,7 +166,7 @@ function nearestLabels(
   lat: number,
   lon: number,
   places: PlaceLabel[],
-): { neighborhood: string | null; city: string | null; cityDistance: number | null } {
+): { neighborhood: string | null; city: string | null; cityDistance: number | null; cityNorth: number | null; cityEast: number | null } {
   let neighborhood: { name: string; distance: number } | null = null;
   let city: { name: string; distance: number } | null = null;
   for (const place of places) {
@@ -181,7 +181,31 @@ function nearestLabels(
       neighborhood = { name, distance };
     }
   }
-  return { neighborhood: neighborhood?.name ?? null, city: city?.name ?? null, cityDistance: city?.distance ?? null };
+  let cityNorth: number | null = null;
+  let cityEast: number | null = null;
+  if (city) {
+    const match = places.find((place) => (place.kind === "city" || place.kind === "town") && shortPlace(place.name) === city.name);
+    if (match) {
+      cityNorth = lat - match.lat;
+      cityEast = lon - match.lon;
+    }
+  }
+  return { neighborhood: neighborhood?.name ?? null, city: city?.name ?? null, cityDistance: city?.distance ?? null, cityNorth, cityEast };
+}
+
+function compassWord(north: number, east: number): string {
+  const degrees = (Math.atan2(east, north) * 180) / Math.PI;
+  const dirs = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+  const word = dirs[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/** "Fort Worth" alone is not a stop. Offset a large city from its downtown. */
+function compassArea(labels: { neighborhood: string | null; city: string | null; cityDistance: number | null; cityNorth: number | null; cityEast: number | null }): string | null {
+  if (labels.neighborhood || !labels.city || labels.cityDistance == null || labels.cityNorth == null || labels.cityEast == null) return null;
+  const broad = labels.city === "Fort Worth" || labels.city === "Dallas" || labels.cityDistance > 8;
+  if (!broad || labels.cityDistance < 2.5) return null;
+  return `${compassWord(labels.cityNorth, labels.cityEast)} ${labels.city}`;
 }
 
 function nameTract(
@@ -190,7 +214,13 @@ function nameTract(
 ): string {
   const city = labels.city?.replace(/,.*$/, "").trim() || null;
   const neighborhood = labels.neighborhood?.trim() || null;
-  if (neighborhood && city && neighborhood.toLowerCase() !== city.toLowerCase() && !neighborhood.toLowerCase().startsWith(city.toLowerCase())) {
+  if (
+    neighborhood &&
+    city &&
+    neighborhood.toLowerCase() !== city.toLowerCase() &&
+    !neighborhood.toLowerCase().startsWith(city.toLowerCase()) &&
+    !neighborhood.toLowerCase().endsWith(city.toLowerCase())
+  ) {
     return `${neighborhood}, ${city}`;
   }
   if (neighborhood) return neighborhood;
@@ -250,6 +280,7 @@ export async function buildHoney(input: {
     return {
       ...target,
       neighborhood: target.neighborhood ?? labels.neighborhood,
+      area: target.neighborhood || labels.neighborhood ? null : compassArea(labels),
       city: target.city ?? labels.city,
     };
   });

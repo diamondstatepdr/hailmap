@@ -659,7 +659,7 @@ html.dark .hazard-tornado {
   bottom: 0.5rem;
   left: 0.5rem;
   display: flex;
-  max-height: min(58dvh, 32rem);
+  max-height: min(48dvh, 28rem);
   flex-direction: column;
   overflow: hidden;
   border-radius: 1.35rem;

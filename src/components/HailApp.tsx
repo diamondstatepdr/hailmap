@@ -1352,6 +1352,8 @@ export default function HailApp() {
                 <Gem size={18} />
               </button>
             </div>
+            {honeyOpen ? null : (
+            <>
             <div className="pointer-events-auto seg" role="group" aria-label="Hazards and time window">
               {HAZARD_OPTIONS.map((option) => {
                 const on = hazards.includes(option.id);
@@ -1493,9 +1495,11 @@ export default function HailApp() {
                 ) : null}
               </div>
             ) : null}
+            </>
+            )}
           </div>
-          {stateCounts.length ? (
-            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
+          {stateCounts.length && !honeyOpen ? (
+            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen || honeyOpen ? "is-covered" : ""}`}>
               <div className="pointer-events-auto flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Jump to a state">
                 {stateCounts.slice(0, 12).map(([code, count]) => {
                   const on = filter.state === code;
@@ -1587,6 +1591,7 @@ export default function HailApp() {
               spots={honey?.spots?.[honeyMode] ?? []}
               selectedId={selectedHoneyId}
               needsDay={!honeyQuery}
+              distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
               attribution={honey?.attribution ?? "Lots © OpenStreetMap contributors. Homes from US Census ACS. Hail from NOAA MRMS MESH."}
               onClose={() => setHoneyOpen(false)}
               onSelect={(spot) => {

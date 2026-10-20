@@ -14,5 +14,9 @@ export async function register() {
       const { startHoneyWarm } = await import("@/lib/honey-warm");
       startHoneyWarm();
     }
+    if (process.env.HAILMAP_CHASE_WARM !== "0") {
+      const { startChaseWarm } = await import("@/lib/chase-warm");
+      startChaseWarm();
+    }
   }
 }

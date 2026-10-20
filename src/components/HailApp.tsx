@@ -16,6 +16,7 @@ import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
+import ChasePopup from "@/components/chase/ChasePopup";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
@@ -46,6 +47,7 @@ import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
+import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { showHoneyRanking } from "@/lib/honey";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
@@ -191,6 +193,10 @@ export default function HailApp() {
   const [honey, setHoney] = useState<HoneyResponse | null>(null);
   const [honeyLoading, setHoneyLoading] = useState(false);
   const [honeyError, setHoneyError] = useState<string | null>(null);
+  const [chase, setChase] = useState<ChasePayload | null>(null);
+  const [chaseLoading, setChaseLoading] = useState(true);
+  const [chasePopup, setChasePopup] = useState(false);
+  const [chaseUnseen, setChaseUnseen] = useState(false);
   const [selectedHoneyId, setSelectedHoneyId] = useState<string | null>(null);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
@@ -288,6 +294,59 @@ export default function HailApp() {
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
   const replay = useReplayPlayer();
+
+  useEffect(() => {
+    let cancelled = false;
+    setChaseLoading(true);
+    fetch("/api/chase")
+      .then(async (response) => {
+        const payload = (await response.json()) as ChasePayload & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "unavailable");
+        if (!cancelled) setChase(payload);
+      })
+      .catch(() => {
+        // A refresh failure leaves the last good week on screen. The unavailable
+        // note is only for a first load that never arrives.
+      })
+      .finally(() => {
+        if (!cancelled) setChaseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  useEffect(() => {
+    if (!chase) return;
+    let viewed = false;
+    try {
+      viewed = !chaseListIsNew(localStorage.getItem(chaseViewedKey(chase.week)));
+    } catch {
+      viewed = false;
+    }
+    setChaseUnseen(!viewed);
+  }, [chase]);
+
+  useEffect(() => {
+    if (section !== "storms" || !chase) return;
+    try {
+      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chasePopupKey(chase.week), "1");
+    } catch {
+      // Private mode can block storage. The in-memory flag still hides the dot.
+    }
+    setChaseUnseen(false);
+    setChasePopup(false);
+  }, [section, chase]);
+
+  useEffect(() => {
+    if (!chase || section !== "map" || replay.active) return;
+    try {
+      if (shouldShowWeeklyChase(localStorage.getItem(chasePopupKey(chase.week)))) setChasePopup(true);
+    } catch {
+      setChasePopup(true);
+    }
+  }, [chase, section, replay.active]);
 
   function followAlertLink(href: string) {
     const target = parseAlertLink(href);
@@ -912,6 +971,38 @@ export default function HailApp() {
     setCalendarOpen((open) => !open);
   }
 
+  function dismissChase() {
+    if (chase) {
+      try {
+        localStorage.setItem(chasePopupKey(chase.week), "1");
+      } catch {
+        // The pop-up still closes for this visit.
+      }
+    }
+    setChasePopup(false);
+  }
+
+  function openChaseStop(stop: ChaseStop) {
+    dismissChase();
+    setSection("map");
+    setHoneyOpen(false);
+    setShowHoney(false);
+    setCalendarOpen(false);
+    setHailDaysOpen(false);
+    setCustomOpen(false);
+    setFiltersOpen(false);
+    setPlaceCardOpen(false);
+    setSelectedId(null);
+    setThreat(null);
+    setCounty(null);
+    setArea(null);
+    setShowMesh(true);
+    setShowPoints(true);
+    lockFrame.current = true;
+    pickStormDay(stop.date);
+    setFocus({ lat: stop.lat, lon: stop.lon, zoom: 9.5, nonce: Date.now() });
+  }
+
   function pickStormDay(date: string) {
     setHistoryMode({ kind: "day", date });
     setMeshDate(date);
@@ -1334,6 +1425,7 @@ export default function HailApp() {
       authConfigured={authConfigured}
       onSignIn={() => setAuthOpen(true)}
       onSignOut={() => void signOut()}
+      stormsNew={chaseUnseen && section !== "storms"}
     >
       {showMap ? (
         <div
@@ -2013,6 +2105,21 @@ export default function HailApp() {
               Loading reports…
             </p>
           ) : null}
+          {chasePopup && section === "map" && chase && !replay.active ? (
+            <ChasePopup
+              mobile={mobile}
+              mode={honeyMode}
+              payload={chase}
+              preview
+              onMode={setHoneyMode}
+              onClose={dismissChase}
+              onSeeAll={() => {
+                dismissChase();
+                setSection("storms");
+              }}
+              onSelect={openChaseStop}
+            />
+          ) : null}
         </div>
       ) : null}
       {section === "storms" ? (
@@ -2030,6 +2137,11 @@ export default function HailApp() {
             setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 10 });
             setSection("map");
           }}
+          chase={chase}
+          chaseLoading={chaseLoading}
+          chaseMode={honeyMode}
+          onChaseMode={setHoneyMode}
+          onOpenChase={openChaseStop}
         />
         </MobileOrPage>
       ) : null}

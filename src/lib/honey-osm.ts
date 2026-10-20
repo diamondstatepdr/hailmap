@@ -409,3 +409,17 @@ export async function loadOsmTargets(
   const parsed = targetsFromElements(elements, bounds);
   return { ...parsed, partial };
 }
+
+/** Lots already stored for this view. Never calls Overpass. */
+export function cachedOsmTargets(bounds: HoneyBounds, hailAtTile: (tile: HoneyBounds) => number): OsmTileResult {
+  const tiles = gridTiles(bounds, TILE_STEP).filter((tile) => hailAtTile(tile) >= 0.75);
+  const elements: OverpassElement[] = [];
+  let partial = tiles.length === 0;
+  for (const tile of tiles) {
+    const cached = readCache(tile);
+    if (cached) elements.push(...cached);
+    else partial = true;
+  }
+  const parsed = targetsFromElements(elements, bounds);
+  return { ...parsed, partial };
+}

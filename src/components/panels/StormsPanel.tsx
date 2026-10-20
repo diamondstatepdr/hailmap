@@ -1,8 +1,11 @@
 "use client";
 
 import { CloudHail, Tornado, Wind } from "lucide-react";
+import { ChaseSection } from "@/components/chase/ChaseList";
+import type { ChasePayload, ChaseStop } from "@/lib/chase-week";
 import { formatWhen, placeLabel, type ReportFilter } from "@/lib/filters";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
+import type { HoneyMode } from "@/lib/honey";
 import type { HailReport, SourceStatus } from "@/lib/types";
 
 interface Props {
@@ -13,9 +16,14 @@ interface Props {
   status: SourceStatus | null;
   syncedAt: string | null;
   onSelect: (report: HailReport) => void;
+  chase: ChasePayload | null;
+  chaseLoading: boolean;
+  chaseMode: HoneyMode;
+  onChaseMode: (mode: HoneyMode) => void;
+  onOpenChase: (stop: ChaseStop) => void;
 }
 
-export default function StormsPanel({ loading, error, reports, filter, status, syncedAt, onSelect }: Props) {
+export default function StormsPanel({ loading, error, reports, filter, status, syncedAt, onSelect, chase, chaseLoading, chaseMode, onChaseMode, onOpenChase }: Props) {
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8">
       <header className="mb-5 max-w-3xl">
@@ -25,6 +33,20 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
           Official hail, wind, and tornado reports for the map window. Community photos stay labeled as community.
         </p>
       </header>
+      {chase ? (
+        <ChaseSection mode={chaseMode} payload={chase} preview={false} onMode={onChaseMode} onSelect={onOpenChase} />
+      ) : chaseLoading ? (
+        <div aria-busy="true" className="mb-5 max-w-3xl space-y-2" data-chase-loading>
+          <span className="sr-only">Loading this week&apos;s Money Holes…</span>
+          <div className="skeleton h-28" />
+        </div>
+      ) : (
+        <section className="chase-section" data-chase-section aria-label="Chase List">
+          <p className="honey-kicker">Money Hole</p>
+          <h2 className="text-xl font-semibold tracking-tight">Chase List</h2>
+          <p className="honey-note">This week&apos;s Money Holes are unavailable right now.</p>
+        </section>
+      )}
       {error ? <p className="mb-3 rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{error}</p> : null}
       {loading && !reports.length ? (
         <div aria-busy="true" className="max-w-3xl space-y-2">

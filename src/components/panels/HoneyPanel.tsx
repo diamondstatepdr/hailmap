@@ -50,7 +50,13 @@ const KIND_LABEL: Record<string, string> = {
 export default function HoneyPanel(props: Props) {
   const countLabel = props.mode === "pdr" ? "vehicles" : "homes";
   return (
-    <aside className="honey-dock glass" data-honey-panel data-mode={props.mode} aria-label="Money holes">
+    <aside
+      className="honey-dock glass"
+      data-honey-panel
+      data-mode={props.mode}
+      data-honey-status={props.loading && !props.needsDay ? "loading" : props.spots.length ? "ready" : "empty"}
+      aria-label="Money holes"
+    >
       <header className="honey-head">
         <div className="min-w-0">
           <p className="honey-kicker">
@@ -90,9 +96,9 @@ export default function HoneyPanel(props: Props) {
         ) : null}
         {props.error ? <p className="honey-note">{props.error}</p> : null}
         {props.note && !props.error ? <p className="honey-note">{props.note}</p> : null}
-        {props.loading && !props.spots.length ? (
-          <div aria-busy="true" className="space-y-2 px-1">
-            <span className="sr-only">Ranking money holes…</span>
+        {props.loading && !props.needsDay ? (
+          <div aria-busy="true" className="space-y-2 px-1" data-honey-loading>
+            <p className="honey-note">Finding Money Holes…</p>
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
@@ -101,7 +107,7 @@ export default function HoneyPanel(props: Props) {
         {!props.needsDay && !props.loading && !props.spots.length && !props.error ? (
           <p className="honey-note">No hail-hit stops in this view yet.</p>
         ) : null}
-        <ol className="honey-list">
+        {props.loading ? null : <ol className="honey-list">
           {props.spots.map((spot, index) => {
             const count = props.mode === "pdr" ? spot.vehicles : spot.homes;
             const selected = props.selectedId === spot.id;
@@ -132,8 +138,7 @@ export default function HoneyPanel(props: Props) {
               </li>
             );
           })}
-        </ol>
-        {props.loading && props.spots.length ? <p className="honey-note">Adding more of this view…</p> : null}
+        </ol>}
       </div>
       {props.attribution ? <p className="honey-attrib">{props.attribution}</p> : null}
     </aside>

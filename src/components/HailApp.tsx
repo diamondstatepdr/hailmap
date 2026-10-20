@@ -44,6 +44,7 @@ import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
+import { showHoneyRanking } from "@/lib/honey";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -99,6 +100,7 @@ type HistoryMode =
 interface HoneyResponse {
   label?: string;
   partial?: boolean;
+  status?: "partial" | "complete";
   zoom?: boolean;
   note?: string | null;
   attribution?: string;
@@ -1206,9 +1208,11 @@ export default function HailApp() {
     return params.toString();
   }, [rankBounds, viewBounds, historyMode, meshDate, filter.hours, userLocation]);
 
+  const honeyReady = Boolean(honey) && showHoneyRanking({ partial: honey?.partial, loading: honeyLoading });
+  const honeyFinding = Boolean(honeyQuery) && !honeyReady && !honeyError;
   const honeyCollection = useMemo(() => {
     const collection = honey?.heat?.[honeyMode];
-    if (!showHoney || !collection) return null;
+    if (!showHoney || !collection || !showHoneyRanking({ partial: honey?.partial })) return null;
     return {
       type: "FeatureCollection" as const,
       features: collection.features.map((feature) => ({
@@ -1223,10 +1227,11 @@ export default function HailApp() {
 
   useEffect(() => {
     if (!honeyOpen || !honeyQuery) return;
+    setHoney(null);
+    setHoneyLoading(true);
     const controller = new AbortController();
     let cancelled = false;
     let retryTimer = 0;
-    let attempts = 0;
     const run = async () => {
       setHoneyLoading(true);
       setHoneyError(null);
@@ -1235,14 +1240,15 @@ export default function HailApp() {
         const payload = (await response.json()) as HoneyResponse;
         if (cancelled) return;
         if (!response.ok) throw new Error(payload.error ?? "Could not rank money holes");
-        setHoney(payload);
-        if (payload.partial && attempts < 8) {
-          attempts += 1;
+        const stillLoading = payload.partial === true || payload.status === "partial";
+        if (stillLoading) {
+          setHoney(null);
           setHoneyLoading(true);
-          retryTimer = window.setTimeout(() => void run(), 2800);
-        } else {
-          setHoneyLoading(false);
+          retryTimer = window.setTimeout(() => void run(), 2500);
+          return;
         }
+        setHoney(payload);
+        setHoneyLoading(false);
       } catch (error) {
         if (cancelled || (error instanceof Error && error.name === "AbortError")) return;
         setHoneyError(error instanceof Error ? error.message : "Could not rank money holes");
@@ -1719,10 +1725,10 @@ export default function HailApp() {
               onMode={setHoneyMode}
               showHeat={showHoney}
               onToggleHeat={() => setShowHoney((value) => !value)}
-              loading={honeyLoading}
-              note={honey?.zoom ? honey.note ?? "Zoom in to a metro to rank money holes." : honey?.note ?? null}
+              loading={honeyFinding}
+              note={honeyReady ? (honey?.zoom ? honey.note ?? "Zoom in to a metro to rank money holes." : honey?.note ?? null) : null}
               error={honeyError}
-              spots={honey?.spots?.[honeyMode] ?? []}
+              spots={honeyReady ? honey?.spots?.[honeyMode] ?? [] : []}
               selectedId={selectedHoneyId}
               needsDay={!honeyQuery}
               distanceFrom={userLocation ? "you" : placePoint ? "search" : null}

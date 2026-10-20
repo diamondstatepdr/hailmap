@@ -355,3 +355,24 @@ export async function loadRoofTracts(bounds: HoneyBounds): Promise<{ tracts: Roo
   }
   return { tracts: tractsWithHomes(seeds, counts, countyNames), partial, unavailable: false };
 }
+
+const censusFills = new Set<string>();
+
+/** Keep reading counties after a ranking request stopped at the per-request cap. */
+export function scheduleCensusFill(bounds: HoneyBounds): void {
+  const key = [bounds.west, bounds.south, bounds.east, bounds.north].map((value) => value.toFixed(2)).join(",");
+  if (censusFills.has(key)) return;
+  censusFills.add(key);
+  void (async () => {
+    try {
+      for (let pass = 0; pass < 8; pass += 1) {
+        const result = await loadRoofTracts(bounds);
+        if (!result.partial) return;
+      }
+    } catch (error) {
+      console.error("[hailmap] honey census", error instanceof Error ? error.message : error);
+    } finally {
+      censusFills.delete(key);
+    }
+  })();
+}

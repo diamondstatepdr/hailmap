@@ -246,6 +246,11 @@ export function roundBounds(bounds: HoneyBounds, step = 0.02): HoneyBounds {
   };
 }
 
+/** A partial payload is still loading. The ranked list is only ready once it is complete. */
+export function showHoneyRanking(input: { partial?: boolean; loading?: boolean }): boolean {
+  return input.partial !== true && input.loading !== true;
+}
+
 export function gridTiles(bounds: HoneyBounds, step = 0.36): HoneyBounds[] {
   const tiles: HoneyBounds[] = [];
   const west0 = Math.floor(bounds.west / step) * step;

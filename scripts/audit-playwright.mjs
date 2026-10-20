@@ -99,7 +99,10 @@ async function runViewport(browser, { width, height, hasTouch, prefix }) {
 
   await openTab(page, "Addresses");
   await shot(page, `${prefix}-06-addresses-empty`);
-  const search = page.getByRole("textbox", { name: "Search an address" });
+  const addressSheet = page.getByRole("dialog", { name: "Addresses" });
+  const search = (await addressSheet.count())
+    ? addressSheet.getByRole("textbox", { name: "Search an address" })
+    : page.getByRole("textbox", { name: "Search an address" });
   await search.fill("3500 W 7th St Fort Worth");
   const suggestion = page.getByRole("button", { name: /fort worth/i }).first();
   await suggestion.waitFor({ timeout: 15000 });
@@ -126,7 +129,9 @@ async function runViewport(browser, { width, height, hasTouch, prefix }) {
 const browser = await chromium.launch({ headless: true });
 try {
   await runViewport(browser, { width: 412, height: 915, hasTouch: true, prefix: "m" });
-  await runViewport(browser, { width: 1280, height: 800, hasTouch: false, prefix: "d" });
+  if (process.env.PHONE_ONLY !== "1") {
+    await runViewport(browser, { width: 1280, height: 800, hasTouch: false, prefix: "d" });
+  }
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

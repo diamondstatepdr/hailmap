@@ -266,11 +266,30 @@ export default function HailMap({
     }
     const width = raw.getContainer().clientWidth;
     const height = raw.getContainer().clientHeight;
+    if (width < 280 || height < 320) {
+      if (frameWait.current) return;
+      frameWait.current = true;
+      window.setTimeout(() => {
+        frameWait.current = false;
+        if (frameRef.current?.nonce === next.nonce) applyFrame(next);
+      }, 200);
+      return;
+    }
     const desktop = width >= 768;
     const padding = honeyPanel
       ? desktop
-        ? { top: 124, bottom: 72, left: Math.min(400, Math.round(width * 0.34)), right: 48 }
-        : { top: 96, bottom: Math.round(height * 0.6), left: 16, right: 16 }
+        ? {
+            top: Math.min(124, Math.round(height * 0.18)),
+            bottom: Math.min(72, Math.round(height * 0.12)),
+            left: Math.min(400, Math.round(width * 0.34)),
+            right: 48,
+          }
+        : {
+            top: 72,
+            bottom: Math.min(Math.round(height * 0.5), height - 220),
+            left: 12,
+            right: 12,
+          }
       : { top: 124, bottom: 232, left: 36, right: 48 };
     map.fitBounds(
       [

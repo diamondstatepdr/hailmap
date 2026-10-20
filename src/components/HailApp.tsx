@@ -254,6 +254,8 @@ export default function HailApp() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
   const viewBoundsRef = useRef<ViewBounds | null>(null);
+  const [rankBounds, setRankBounds] = useState<ViewBounds | null>(null);
+  const holdRankUntil = useRef(0);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -264,6 +266,7 @@ export default function HailApp() {
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
+  const lockFrame = useRef(false);
   const historyActive = historyMode.kind !== "window";
   const historyActiveRef = useRef(false);
   historyActiveRef.current = historyActive;
@@ -322,6 +325,7 @@ export default function HailApp() {
       const east = Number(params.get("east"));
       const north = Number(params.get("north"));
       if ([west, south, east, north].every((value) => Number.isFinite(value)) && south < north && west < east) {
+        lockFrame.current = true;
         setFrame({ west, south, east, north, nonce: Date.now(), maxZoom: 11.5 });
       }
       const mode = params.get("mode");
@@ -573,7 +577,7 @@ export default function HailApp() {
         setMeshLabel(payload.label ?? null);
         setMeshNote(payload.note ?? null);
         const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
-        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current) {
+        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
           meshFrameKey.current = key;
           setFrame({ ...payload.bounds, nonce: Date.now(), maxZoom: 9.5 });
         }
@@ -1120,24 +1124,25 @@ export default function HailApp() {
   }
 
   const honeyQuery = useMemo(() => {
-    if (!viewBounds) return "";
+    const bounds = rankBounds ?? viewBounds;
+    if (!bounds) return "";
     const day = historyMode.kind === "day" ? historyMode.date : meshDate;
     const liveHours = !day && historyMode.kind === "window" && filter.hours <= 24 ? filter.hours : null;
     if (!day && liveHours == null) return "";
     const params = new URLSearchParams({
-      west: viewBounds.west.toFixed(2),
-      south: viewBounds.south.toFixed(2),
-      east: viewBounds.east.toFixed(2),
-      north: viewBounds.north.toFixed(2),
+      west: bounds.west.toFixed(2),
+      south: bounds.south.toFixed(2),
+      east: bounds.east.toFixed(2),
+      north: bounds.north.toFixed(2),
     });
     if (day) params.set("date", day);
     else if (liveHours != null) params.set("hours", String(liveHours));
-    const originLat = userLocation?.lat ?? (viewBounds.south + viewBounds.north) / 2;
-    const originLon = userLocation?.lon ?? (viewBounds.west + viewBounds.east) / 2;
+    const originLat = userLocation?.lat ?? (bounds.south + bounds.north) / 2;
+    const originLon = userLocation?.lon ?? (bounds.west + bounds.east) / 2;
     params.set("lat", originLat.toFixed(4));
     params.set("lon", originLon.toFixed(4));
     return params.toString();
-  }, [viewBounds, historyMode, meshDate, filter.hours, userLocation]);
+  }, [rankBounds, viewBounds, historyMode, meshDate, filter.hours, userLocation]);
 
   const honeyCollection = useMemo(() => {
     const collection = honey?.heat?.[honeyMode];
@@ -1253,6 +1258,7 @@ export default function HailApp() {
               setSelectedHoneyId(id);
               const spot = honey?.spots?.[honeyMode]?.find((item) => item.id === id);
               if (!spot) return;
+              holdRankUntil.current = Date.now() + 1600;
               setSelectedId(null);
               setFocus({ lat: spot.lat, lon: spot.lon, zoom: 13, nonce: Date.now() });
             }}
@@ -1312,6 +1318,8 @@ export default function HailApp() {
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
+              if (Date.now() < holdRankUntil.current) return;
+              setRankBounds(bounds);
             }}
           />
           <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -1586,6 +1594,7 @@ export default function HailApp() {
                 setSelectedId(null);
                 setCounty(null);
                 setThreat(null);
+                holdRankUntil.current = Date.now() + 1600;
                 setFocus({ lat: spot.lat, lon: spot.lon, zoom: 13, nonce: Date.now() });
               }}
             />

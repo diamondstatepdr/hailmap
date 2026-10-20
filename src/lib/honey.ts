@@ -452,12 +452,6 @@ function disambiguateNames(spots: HoneySpot[]): HoneySpot[] {
     const lon = group.reduce((sum, item) => sum + item.lon, 0) / group.length;
     return `${spot.name} ${compass(spot.lat - lat, spot.lon - lon)}`;
   });
-  apply((spot) => {
-    const tract = spot.id.match(/(?:^|\+)tract\/\d{5}(\d{4})(\d{2})(?:\+|$)/);
-    if (!tract) return spot.name;
-    const minor = tract[2] === "00" ? "" : `.${Number(tract[2])}`;
-    return `${spot.name}, tract ${Number(tract[1])}${minor}`;
-  });
   return spots;
 }
 

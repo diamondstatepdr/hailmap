@@ -6,7 +6,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import ChasePopup from "@/components/chase/ChasePopup";
 import { ChaseSection } from "@/components/chase/ChaseList";
+import { placeChaseHit } from "@/lib/chase-place";
 import { cachedChase, readChaseCache, writeChaseCache } from "@/lib/chase-cache";
+import { frameInsideUnitedStates } from "@/lib/map-home";
 import {
   CHASE_PREVIEW,
   chaseListIsNew,
@@ -268,6 +270,34 @@ describe("money hole chase ranking", () => {
   });
 });
 
+describe("real chase places", () => {
+  it("names a radar cell by its US county and drops hail outside the country", () => {
+    const texas = placeChaseHit(hit({ lat: 30.2, lon: -102.5, stormDate: "2026-10-14", radarIn: 3.47, confidence: "mesh", spotterIn: null }));
+    expect(texas?.state).toBe("TX");
+    expect(texas?.county).toBe("Terrell");
+    expect(texas?.location).toBeNull();
+    const canada = placeChaseHit(hit({ lat: 52.2, lon: -102.6, stormDate: "2026-10-15", radarIn: 2.31, confidence: "mesh", spotterIn: null }));
+    expect(canada).toBeNull();
+    const named = placeChaseHit(hit({ lat: 33.93, lon: -99.75, stormDate: "2026-10-14", location: "4 SW Crowell", state: "TX", spotterIn: 1.75, radarIn: 2.42 }));
+    expect(named?.location).toBe("4 SW Crowell");
+    expect(named?.state).toBe("TX");
+    const zone = placeChaseHit(hit({ lat: 32.02, lon: -108.59, stormDate: "2026-10-20", location: "Grant, NM; Hidalgo, NM", spotterIn: 1, radarIn: null }));
+    expect(zone?.location).toBeNull();
+    expect(zone?.state).toBe("NM");
+    expect(zone?.county).toBeTruthy();
+  });
+
+  it("keeps the national map frame inside the United States", () => {
+    expect(frameInsideUnitedStates({ west: -123, south: 22, east: -60, north: 53.6 })).toEqual({
+      west: -123,
+      south: 24.2,
+      east: -66.5,
+      north: 49.4,
+    });
+    expect(frameInsideUnitedStates({ west: -110, south: 52, east: -90, north: 60 }).south).toBeLessThan(50);
+  });
+});
+
 describe("chase cache", () => {
   const previous = process.env.HAILMAP_DATA_DIR;
   let dir = "";
@@ -321,6 +351,7 @@ describe("chase list UI", () => {
       name: `City ${index + 1}, TX`,
       score: 90 - index,
     }));
+    stops[4] = { ...stops[4], spotterIn: null };
     const payload: ChasePayload = {
       ...samplePayload(false),
       fresh: { pdr: stops, roof: stops },
@@ -347,8 +378,9 @@ describe("chase list UI", () => {
     expect(html).toContain('data-chase-see-all');
     expect(html).toContain("City 1, TX");
     expect(html).not.toContain("City 6, TX");
-    expect(html).toContain("Radar 1.75");
-    expect(html).toContain("Spotter 2.00");
+    expect(html).toContain("Radar 1.75&quot;");
+    expect(html).toContain("Spotter 2.00&quot;");
+    expect(html).toContain("No spotter reports");
     expect(html).toContain("800 vehicles");
     expect(html).toContain(">86<");
   });
@@ -374,5 +406,6 @@ describe("chase list UI", () => {
   it("does not let the chase sheet pull to refresh", () => {
     const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.chase-body\s*\{[^}]*overscroll-behavior:\s*contain/);
+    expect(css).toMatch(/\.chase-sheet-dock\s*\{[^}]*var\(--chrome-offset\)/);
   });
 });

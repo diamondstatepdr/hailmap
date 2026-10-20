@@ -48,6 +48,7 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
+import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
 import { showHoneyRanking } from "@/lib/honey";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
@@ -282,7 +283,9 @@ export default function HailApp() {
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
-  const lockFrame = useRef(false);
+  const lockFrame = useRef(true);
+  const chaseFly = useRef(false);
+  const holdNationalFrame = useRef(true);
   const historyActive = historyMode.kind !== "window";
   const historyActiveRef = useRef(false);
   historyActiveRef.current = historyActive;
@@ -651,7 +654,8 @@ export default function HailApp() {
         const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
         if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
           meshFrameKey.current = key;
-          setFrame({ ...payload.bounds, nonce: Date.now(), maxZoom: 9.5 });
+          const clipped = frameInsideUnitedStates(payload.bounds);
+          setFrame({ ...clipped, nonce: Date.now(), maxZoom: 9.5 });
         }
       })
       .catch((reason: unknown) => {
@@ -983,6 +987,7 @@ export default function HailApp() {
   }
 
   function openChaseStop(stop: ChaseStop) {
+    chaseFly.current = true;
     dismissChase();
     setSection("map");
     setHoneyOpen(false);
@@ -1361,6 +1366,28 @@ export default function HailApp() {
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
   const mobile = useMediaQuery("(max-width: 767px)");
   const showMap = section === "map" || section === "field" || mobile;
+
+  useEffect(() => {
+    if (chaseLoading && !chase) return;
+    const mapHeight = Math.round(document.querySelector(".maplibregl-map")?.clientHeight || window.innerHeight);
+    if (chasePopup) {
+      chaseFly.current = false;
+      lockFrame.current = true;
+      holdNationalFrame.current = true;
+      const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: mobile });
+      setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.2 : 4.6, padding });
+      return;
+    }
+    if (chaseFly.current) {
+      holdNationalFrame.current = false;
+      return;
+    }
+    if (!holdNationalFrame.current) return;
+    holdNationalFrame.current = false;
+    lockFrame.current = false;
+    const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: false });
+    setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.4 : 4.8, padding });
+  }, [chasePopup, chaseLoading, chase, mobile, chromePx]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel ?? "MESH");
 
@@ -1433,6 +1460,7 @@ export default function HailApp() {
           style={
             {
               "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
+              "--chase-map-gap": "13.5rem",
             } as CSSProperties
           }
         >

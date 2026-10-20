@@ -50,8 +50,8 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
 
   if (mobile) {
     return (
-      <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-40" data-chase-popup>
-        <BottomSheet label="This week's Money Holes" onClose={onClose} expandedMax="min(78dvh, 40rem)" peekHeight={148}>
+      <div className="sheet-dock chase-sheet-dock pointer-events-none absolute inset-x-0 bottom-0" data-chase-popup>
+        <BottomSheet label="This week's Money Holes" onClose={onClose} expandedMax="100%" peekHeight={148}>
           {body}
         </BottomSheet>
       </div>

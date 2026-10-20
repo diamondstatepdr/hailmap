@@ -36,9 +36,9 @@ export function ChaseModeToggle({ mode, onMode }: { mode: HoneyMode; onMode: (mo
   );
 }
 
-function inches(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return value.toFixed(2);
+function hailInches(value: number | null): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return `${value.toFixed(2)}"`;
 }
 
 function countLine(stop: ChaseStop, mode: HoneyMode): string {
@@ -65,14 +65,17 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
       {!payload.quiet && !stops.length ? <p className="honey-note">No Money Holes in this list yet.</p> : null}
       {stops.length ? (
         <ol className="honey-list">
-          {stops.map((stop, index) => (
+          {stops.map((stop, index) => {
+            const radar = hailInches(stop.radarIn);
+            const spotter = hailInches(stop.spotterIn);
+            return (
             <li key={stop.id}>
               <button type="button" className="honey-row press" data-chase-stop onClick={() => onSelect(stop)}>
                 <span className="honey-rank">{index + 1}</span>
                 <span className="min-w-0">
                   <span className="honey-name">{stop.name}</span>
                   <span className="honey-meta">
-                    {formatDay(stop.date)} · Radar {inches(stop.radarIn)} · Spotter {inches(stop.spotterIn)}
+                    {formatDay(stop.date)} · Radar {radar ?? "—"} · {spotter ? `Spotter ${spotter}` : "No spotter reports"}
                   </span>
                   <span className="honey-meta">{countLine(stop, mode)}</span>
                 </span>
@@ -81,7 +84,8 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
                 </span>
               </button>
             </li>
-          ))}
+            );
+          })}
         </ol>
       ) : null}
       {payload.partial && stops.length ? (

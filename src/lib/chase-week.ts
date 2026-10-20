@@ -39,7 +39,7 @@ export interface ChaseStop {
 }
 
 export interface ChasePayload {
-  version: 1;
+  version: 2;
   week: string;
   generatedAt: string;
   windowStart: string;

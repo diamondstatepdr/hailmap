@@ -128,9 +128,15 @@ export function clusterChaseHits(hits: ChaseHit[], radiusKm = AREA_RADIUS_KM): C
   }
   return groups.map((group) => {
     const peak = group.reduce((best, hit) => (hitInches(hit) > hitInches(best) ? hit : best));
+    let named: ChaseHit | null = null;
+    for (const hit of group) {
+      if (!hit.location?.trim()) continue;
+      if (haversineKm(hit.lat, hit.lon, peak.lat, peak.lon) > radiusKm) continue;
+      if (!named || hitInches(hit) > hitInches(named)) named = hit;
+    }
     return {
       id: `${peak.lat.toFixed(2)},${peak.lon.toFixed(2)}`,
-      name: areaLabel(peak),
+      name: areaLabel(named ?? peak),
       lat: peak.lat,
       lon: peak.lon,
       bounds: padBounds(group),
@@ -343,7 +349,7 @@ export function rankChaseWeek(input: { hits: ChaseHit[]; places: HoneyPlace[]; n
     ? [...pdr.fallback, ...roof.fallback]
     : [...pdr.fresh, ...roof.fresh];
   return {
-    version: 1,
+    version: 2,
     week: isoWeekKey(input.now),
     generatedAt: input.now.toISOString(),
     windowStart: window.start,

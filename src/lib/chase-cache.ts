@@ -12,7 +12,7 @@ export function readChaseCache(): ChasePayload | null {
   if (!fs.existsSync(file)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as ChasePayload;
-    if (parsed?.version !== 1 || typeof parsed.week !== "string" || !parsed.fresh || !parsed.fallback) return null;
+    if (parsed?.version !== 2 || typeof parsed.week !== "string" || !parsed.fresh || !parsed.fallback) return null;
     return parsed;
   } catch {
     return null;

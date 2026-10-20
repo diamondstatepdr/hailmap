@@ -1039,6 +1039,18 @@ html.dark .honey-kicker {
   margin-left: 0;
 }
 
+.chase-body .honey-meta,
+.chase-section .honey-meta {
+  white-space: normal;
+}
+
+/* Below the filter stack and the States chip, with a gap of map between them. */
+.chase-sheet-dock {
+  top: calc(var(--chrome-offset) + var(--chase-map-gap, 13.5rem));
+  /* Above the radar legend, which sits on the bottom edge of the map. */
+  z-index: 30;
+}
+
 .chase-head,
 .chase-section-head {
   display: flex;
@@ -1121,7 +1133,7 @@ html.dark .chase-empty svg {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: max(5rem, calc(env(safe-area-inset-top) + 4.75rem)) 0.85rem 1.25rem;
+  padding: calc(var(--chrome-offset) + 3.5rem) 0.85rem 1.25rem;
   pointer-events: none;
 }
 

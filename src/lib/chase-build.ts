@@ -4,6 +4,7 @@ import { CHASE_LOOKBACK_DAYS, chaseWindow, clusterChaseHits, rankChaseWeek, type
 import type { HoneyPlace } from "@/lib/honey";
 import { cachedOsmTargets } from "@/lib/honey-osm";
 import { historyDb } from "@/lib/history-db";
+import { placeChaseHit } from "@/lib/chase-place";
 import { convectiveDay } from "@/lib/parsers";
 
 interface HistoryHailRow {
@@ -160,7 +161,10 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
     console.error("[hailmap] chase live", error instanceof Error ? error.message : error);
   }
 
-  return hits;
+  return hits.flatMap((hit) => {
+    const placed = placeChaseHit(hit);
+    return placed ? [placed] : [];
+  });
 }
 
 function cachedPlaces(hits: ChaseHit[]): HoneyPlace[] {

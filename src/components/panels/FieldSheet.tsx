@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CarFront, Navigation } from "lucide-react";
+import BottomSheet from "@/components/ui/BottomSheet";
 import type { DealerPin } from "@/lib/area-selection";
 import { FIELD_DAMAGE_TYPES, PIN_STATUSES, pinStatusLabel, type PinStatus } from "@/lib/field";
 import type { PlaceHistory } from "@/lib/place";
@@ -34,6 +35,7 @@ interface Props {
   onMark: (status: PinStatus, note: string) => void;
   onSelectPin: (id: string) => void;
   onUpload: (pinId: string, file: File, damageType: string, note: string) => Promise<void>;
+  onClose: () => void;
 }
 
 const STATUS_TONE: Record<PinStatus, string> = {
@@ -64,6 +66,7 @@ export default function FieldSheet({
   onMark,
   onSelectPin,
   onUpload,
+  onClose,
 }: Props) {
   const [note, setNote] = useState("");
   const [damageType, setDamageType] = useState<(typeof FIELD_DAMAGE_TYPES)[number]>("hail");
@@ -87,9 +90,9 @@ export default function FieldSheet({
   }
 
   return (
-    <div className="sheet max-h-[62dvh] overflow-y-auto px-4 pb-3 pt-1">
-      <div className="sheet-handle" />
-      <div className="mt-2 flex items-center gap-2">
+    <BottomSheet label="Field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
+      <div className="px-4 pb-3">
+      <div className="mt-1 flex items-center gap-2">
         <span className="hazard-badge h-8 w-8 hazard-wind">
           <Navigation size={15} />
         </span>
@@ -256,7 +259,8 @@ export default function FieldSheet({
           Sign in to mark houses
         </button>
       )}
-    </div>
+      </div>
+    </BottomSheet>
   );
 }
 

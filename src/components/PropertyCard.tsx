@@ -19,12 +19,14 @@ interface Props {
   onAlert?: () => void;
   onClose?: () => void;
   saveLabel?: string;
+  /** Drop the floating card chrome when a bottom sheet already provides it. */
+  bare?: boolean;
 }
 
-export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare }: Props) {
   const score = history.score;
   return (
-    <article className="float-card p-4">
+    <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Property</p>

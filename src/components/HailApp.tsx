@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { CloudHail, Moon, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
+import { CloudHail, Gem, Moon, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
@@ -16,6 +16,7 @@ import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
+import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
@@ -95,6 +96,17 @@ type HistoryMode =
   | { kind: "custom"; start: string; end: string }
   | { kind: "day"; date: string };
 
+interface HoneyResponse {
+  label?: string;
+  partial?: boolean;
+  zoom?: boolean;
+  note?: string | null;
+  attribution?: string;
+  error?: string;
+  spots?: { pdr: HoneySpotView[]; roof: HoneySpotView[] };
+  heat?: { pdr: GeoJSON.FeatureCollection; roof: GeoJSON.FeatureCollection };
+}
+
 interface HailDayView {
   date: string;
   maxHailIn: number | null;
@@ -169,6 +181,13 @@ export default function HailApp() {
   const [showThreats, setShowThreats] = useState(true);
   const [showOutlook, setShowOutlook] = useState(true);
   const [showHeat, setShowHeat] = useState(false);
+  const [honeyOpen, setHoneyOpen] = useState(false);
+  const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
+  const [showHoney, setShowHoney] = useState(false);
+  const [honey, setHoney] = useState<HoneyResponse | null>(null);
+  const [honeyLoading, setHoneyLoading] = useState(false);
+  const [honeyError, setHoneyError] = useState<string | null>(null);
+  const [selectedHoneyId, setSelectedHoneyId] = useState<string | null>(null);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
   const [historyMode, setHistoryMode] = useState<HistoryMode>({ kind: "window" });
@@ -241,6 +260,8 @@ export default function HailApp() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
   const viewBoundsRef = useRef<ViewBounds | null>(null);
+  const [rankBounds, setRankBounds] = useState<ViewBounds | null>(null);
+  const holdRankUntil = useRef(0);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -251,6 +272,7 @@ export default function HailApp() {
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
+  const lockFrame = useRef(false);
   const historyActive = historyMode.kind !== "window";
   const historyActiveRef = useRef(false);
   historyActiveRef.current = historyActive;
@@ -290,6 +312,38 @@ export default function HailApp() {
 
   useEffect(() => {
     followAlertLink(window.location.href);
+    const params = new URL(window.location.href).searchParams;
+    if (params.get("theme") === "dark") {
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
+      localStorage.setItem("hailmap-theme", "dark");
+    } else if (params.get("theme") === "light") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.style.colorScheme = "light";
+      localStorage.setItem("hailmap-theme", "light");
+    }
+    if (params.get("honey") === "1") {
+      const day = params.get("day");
+      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        setHistoryMode({ kind: "day", date: day });
+        setMeshDate(day);
+        setScoreDate(day);
+      }
+      const west = Number(params.get("west"));
+      const south = Number(params.get("south"));
+      const east = Number(params.get("east"));
+      const north = Number(params.get("north"));
+      if ([west, south, east, north].every((value) => Number.isFinite(value)) && south < north && west < east) {
+        lockFrame.current = true;
+        setFrame({ west, south, east, north, nonce: Date.now(), maxZoom: 11.5 });
+      }
+      const mode = params.get("mode");
+      if (mode === "roof" || mode === "pdr") setHoneyMode(mode);
+      if (params.get("heat") === "1") setShowHoney(true);
+      setHoneyOpen(true);
+      setSection("map");
+      setCalendarOpen(false);
+    }
     function onMessage(event: MessageEvent) {
       const data = event.data as { type?: string; url?: string } | null;
       if (!data || typeof data !== "object") return;
@@ -532,7 +586,7 @@ export default function HailApp() {
         setMeshLabel(payload.label ?? null);
         setMeshNote(payload.note ?? null);
         const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
-        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current) {
+        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
           meshFrameKey.current = key;
           setFrame({ ...payload.bounds, nonce: Date.now(), maxZoom: 9.5 });
         }
@@ -881,6 +935,8 @@ export default function HailApp() {
     replayAnchor.current = center ?? { lat: (bounds.north + bounds.south) / 2, lon: (bounds.east + bounds.west) / 2 };
     replayFitReports.current = false;
     setSection("map");
+    setHoneyOpen(false);
+    setShowHoney(false);
     setPlaceCardOpen(false);
     setArea(null);
     setCalendarOpen(false);
@@ -1129,6 +1185,79 @@ export default function HailApp() {
     setUser(null);
   }
 
+  const honeyQuery = useMemo(() => {
+    const bounds = rankBounds ?? viewBounds;
+    if (!bounds) return "";
+    const day = historyMode.kind === "day" ? historyMode.date : meshDate;
+    const liveHours = !day && historyMode.kind === "window" && filter.hours <= 24 ? filter.hours : null;
+    if (!day && liveHours == null) return "";
+    const params = new URLSearchParams({
+      west: bounds.west.toFixed(2),
+      south: bounds.south.toFixed(2),
+      east: bounds.east.toFixed(2),
+      north: bounds.north.toFixed(2),
+    });
+    if (day) params.set("date", day);
+    else if (liveHours != null) params.set("hours", String(liveHours));
+    const originLat = userLocation?.lat ?? (bounds.south + bounds.north) / 2;
+    const originLon = userLocation?.lon ?? (bounds.west + bounds.east) / 2;
+    params.set("lat", originLat.toFixed(4));
+    params.set("lon", originLon.toFixed(4));
+    return params.toString();
+  }, [rankBounds, viewBounds, historyMode, meshDate, filter.hours, userLocation]);
+
+  const honeyCollection = useMemo(() => {
+    const collection = honey?.heat?.[honeyMode];
+    if (!showHoney || !collection) return null;
+    return {
+      type: "FeatureCollection" as const,
+      features: collection.features.map((feature) => ({
+        ...feature,
+        properties: {
+          ...(feature.properties ?? {}),
+          selected: feature.properties?.id === selectedHoneyId ? 1 : 0,
+        },
+      })),
+    };
+  }, [honey, honeyMode, selectedHoneyId, showHoney]);
+
+  useEffect(() => {
+    if (!honeyOpen || !honeyQuery) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    let retryTimer = 0;
+    let attempts = 0;
+    const run = async () => {
+      setHoneyLoading(true);
+      setHoneyError(null);
+      try {
+        const response = await fetch(`/api/honey?${honeyQuery}`, { signal: controller.signal });
+        const payload = (await response.json()) as HoneyResponse;
+        if (cancelled) return;
+        if (!response.ok) throw new Error(payload.error ?? "Could not rank money holes");
+        setHoney(payload);
+        if (payload.partial && attempts < 8) {
+          attempts += 1;
+          setHoneyLoading(true);
+          retryTimer = window.setTimeout(() => void run(), 2800);
+        } else {
+          setHoneyLoading(false);
+        }
+      } catch (error) {
+        if (cancelled || (error instanceof Error && error.name === "AbortError")) return;
+        setHoneyError(error instanceof Error ? error.message : "Could not rank money holes");
+        setHoneyLoading(false);
+      }
+    };
+    const start = window.setTimeout(() => void run(), 280);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(start);
+      window.clearTimeout(retryTimer);
+    };
+  }, [honeyOpen, honeyQuery]);
+
   const folded = Math.max(0, rawCount - reports.length);
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
   const showMap = section === "map" || section === "field";
@@ -1224,6 +1353,17 @@ export default function HailApp() {
             showOutlook={showOutlook && !replay.active}
             showHeat={showHeat}
             heat={heat}
+            showHoney={showHoney}
+            honeyPanel={honeyOpen && section === "map"}
+            honey={honeyCollection}
+            onSelectHoney={(id) => {
+              setSelectedHoneyId(id);
+              const spot = honey?.spots?.[honeyMode]?.find((item) => item.id === id);
+              if (!spot) return;
+              holdRankUntil.current = Date.now() + 1600;
+              setSelectedId(null);
+              setFocus({ lat: spot.lat, lon: spot.lon, zoom: 13, nonce: Date.now() });
+            }}
             userLocation={section === "field" ? userLocation : null}
             fieldPins={user ? fieldCollection : null}
             selectedId={selectedId}
@@ -1280,6 +1420,8 @@ export default function HailApp() {
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
+              if (Date.now() < holdRankUntil.current) return;
+              setRankBounds(bounds);
             }}
             onBackgroundClick={closeMapDetail}
           />
@@ -1297,7 +1439,25 @@ export default function HailApp() {
               >
                 {theme === "dark" ? <SunMedium size={18} /> : <Moon size={18} />}
               </button>
+              <button
+                type="button"
+                data-honey-open
+                aria-pressed={honeyOpen}
+                aria-label="Money holes"
+                className="icon-btn press"
+                onClick={() => {
+                  setCalendarOpen(false);
+                  setHailDaysOpen(false);
+                  setCustomOpen(false);
+                  if (!honeyOpen && replay.active) replay.stop();
+                  setHoneyOpen((open) => !open);
+                }}
+              >
+                <Gem size={18} />
+              </button>
             </div>
+            {honeyOpen ? null : (
+            <>
             <div className="pointer-events-auto seg" role="group" aria-label="Hazards and time window">
               {HAZARD_OPTIONS.map((option) => {
                 const on = hazards.includes(option.id);
@@ -1459,9 +1619,11 @@ export default function HailApp() {
                 ) : null}
               </div>
             ) : null}
+            </>
+            )}
           </div>
-          {stateCounts.length && !replay.active ? (
-            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""}`}>
+          {stateCounts.length && !replay.active && !honeyOpen ? (
+            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen || honeyOpen ? "is-covered" : ""}`}>
               <div className="state-strip">
                 <button
                   type="button"
@@ -1495,7 +1657,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showOutlook || showPoints) && !reportOpen && !replay.active && section === "map" && !place && !selected && !threat ? (
+          {(showOutlook || showPoints) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
               <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
                 {showPoints ? (
@@ -1532,7 +1694,7 @@ export default function HailApp() {
               </div>
             </div>
           ) : null}
-          {!loading && !replay.active && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
             <p className="glass pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
               {historyLoading
                 ? "Loading storm history…"
@@ -1543,7 +1705,40 @@ export default function HailApp() {
                     : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
             </p>
           ) : null}
-          {section === "map" && placeCardOpen && !replay.active && placeLabel && placePoint ? (
+          {section === "map" && honeyOpen ? (
+            <HoneyPanel
+              label={
+                honey?.label ||
+                (historyMode.kind === "day"
+                  ? formatDay(historyMode.date)
+                  : historyMode.kind === "window" && filter.hours <= 24
+                    ? windowPhrase(filter.hours)
+                    : "Pick a storm day")
+              }
+              mode={honeyMode}
+              onMode={setHoneyMode}
+              showHeat={showHoney}
+              onToggleHeat={() => setShowHoney((value) => !value)}
+              loading={honeyLoading}
+              note={honey?.zoom ? honey.note ?? "Zoom in to a metro to rank money holes." : honey?.note ?? null}
+              error={honeyError}
+              spots={honey?.spots?.[honeyMode] ?? []}
+              selectedId={selectedHoneyId}
+              needsDay={!honeyQuery}
+              distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
+              attribution={honey?.attribution ?? "Lots © OpenStreetMap contributors. Homes from US Census ACS. Hail from NOAA MRMS MESH."}
+              onClose={() => setHoneyOpen(false)}
+              onSelect={(spot) => {
+                setSelectedHoneyId(spot.id);
+                setSelectedId(null);
+                setCounty(null);
+                setThreat(null);
+                holdRankUntil.current = Date.now() + 1600;
+                setFocus({ lat: spot.lat, lon: spot.lon, zoom: 13, nonce: Date.now() });
+              }}
+            />
+          ) : null}
+          {section === "map" && !honeyOpen && !replay.active && placeCardOpen && placeLabel && placePoint ? (
             <div className="absolute inset-x-3 bottom-3 z-30 max-h-[min(72dvh,36rem)] overflow-y-auto">
               {addressHistory ? (
                 <AddressHistoryCard
@@ -1626,7 +1821,7 @@ export default function HailApp() {
               onClose={replay.stop}
             />
           ) : null}
-          {section === "map" && area && !(placeCardOpen && place) && !replay.active ? (
+          {section === "map" && !honeyOpen && !replay.active && area && !(placeCardOpen && place) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
               <MapDetailSheet label={area.source === "mesh" ? "Radar hail" : "Map area"} onClose={closeMapDetail}>
                 <div>
@@ -1662,7 +1857,7 @@ export default function HailApp() {
               </MapDetailSheet>
             </div>
           ) : null}
-          {section === "map" && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
+          {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="absolute inset-x-3 bottom-3 z-30">
               <MapDetailSheet label={selected ? "Storm report" : threat ? "Warning" : "County"} onClose={closeMapDetail}>
                 {selected ? (
@@ -1754,6 +1949,7 @@ export default function HailApp() {
               showOutlook={showOutlook}
               showIncome={showIncome}
               showHeat={showHeat}
+              showHoney={showHoney}
               onToggle={(key) => {
                 if (key === "points") setShowPoints((value) => !value);
                 if (key === "swaths") setShowSwaths((value) => !value);
@@ -1762,6 +1958,13 @@ export default function HailApp() {
                 if (key === "outlook") setShowOutlook((value) => !value);
                 if (key === "income") setShowIncome((value) => !value);
                 if (key === "heat") setShowHeat((value) => !value);
+                if (key === "honey") {
+                  setShowHoney((value) => {
+                    const next = !value;
+                    if (next) setHoneyOpen(true);
+                    return next;
+                  });
+                }
               }}
               incomeError={incomeError}
               threatError={threatError}

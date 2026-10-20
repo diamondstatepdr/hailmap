@@ -167,6 +167,10 @@ interface Props {
   showOutlook: boolean;
   showHeat?: boolean;
   heat?: GeoJSON.FeatureCollection | null;
+  showHoney?: boolean;
+  honey?: GeoJSON.FeatureCollection | null;
+  /** When the honey panel is open, keep the storm in the map area beside or above it. */
+  honeyPanel?: boolean;
   /** Draw the radar swath above warning polygons and with stronger contour fill. */
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
@@ -184,6 +188,7 @@ interface Props {
   onSelectThreat: (info: ThreatInfo) => void;
   onSelectArea?: (area: AreaSelection) => void;
   onSelectDealer?: (id: string) => void;
+  onSelectHoney?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onBackgroundClick?: () => void;
@@ -217,6 +222,9 @@ export default function HailMap({
   showOutlook,
   showHeat = false,
   heat = null,
+  showHoney = false,
+  honey = null,
+  honeyPanel = false,
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
@@ -233,6 +241,7 @@ export default function HailMap({
   onSelectThreat,
   onSelectArea,
   onSelectDealer,
+  onSelectHoney,
   onViewChange,
   onPreviewBounds,
   onBackgroundClick,
@@ -245,6 +254,8 @@ export default function HailMap({
   const outlookData = useMemo(() => subsetThreats(threats, ["outlook", "significant"]), [threats]);
   const alertData = useMemo(() => subsetThreats(threats, ["watch", "warning", "statement"]), [threats]);
   const interactiveLayerIds = [
+    showHoney && honey?.features.length ? "honey-pins" : "",
+    showHoney && honey?.features.length ? "honey-heat" : "",
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
     ...(emphasizeMesh
@@ -274,14 +285,41 @@ export default function HailMap({
       });
       return;
     }
+    const width = raw.getContainer().clientWidth;
+    const height = raw.getContainer().clientHeight;
+    if (width < 280 || height < 320) {
+      if (frameWait.current) return;
+      frameWait.current = true;
+      window.setTimeout(() => {
+        frameWait.current = false;
+        if (frameRef.current?.nonce === next.nonce) applyFrame(next);
+      }, 200);
+      return;
+    }
     raw.stop();
     const safe = normalizeMapBounds(next);
     if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
-    if (raw.getContainer().clientWidth < 768) {
+    if (width < 768) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
+    const desktop = width >= 768;
+    const padding = honeyPanel
+      ? desktop
+        ? {
+            top: Math.min(124, Math.round(height * 0.18)),
+            bottom: Math.min(72, Math.round(height * 0.12)),
+            left: Math.min(400, Math.round(width * 0.34)),
+            right: 48,
+          }
+        : {
+            top: 72,
+            bottom: Math.min(Math.round(height * 0.5), height - 220),
+            left: 12,
+            right: 12,
+          }
+      : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
     try {
       map.fitBounds(
         [
@@ -289,7 +327,7 @@ export default function HailMap({
           [safe.east, safe.north],
         ],
         {
-          padding: next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 },
+          padding,
           duration: 0,
           maxZoom: next.maxZoom ?? 8.2,
         },
@@ -303,13 +341,20 @@ export default function HailMap({
     if (!focus) return;
     const map = mapRef.current;
     if (!map) return;
+    const width = map.getContainer().clientWidth;
+    const desktop = width >= 768;
     const camera = {
       center: [focus.lon, focus.lat] as [number, number],
       zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
       duration: 700,
     };
-    map.flyTo(focus.zoom ? { ...camera, padding: { top: 96, bottom: 260, left: 28, right: 28 } } : camera);
-  }, [focus]);
+    const padding = honeyPanel
+      ? desktop
+        ? { top: 120, bottom: 48, left: Math.min(400, Math.round(width * 0.34)), right: 36 }
+        : { top: 88, bottom: 280, left: 16, right: 16 }
+      : { top: 96, bottom: 260, left: 28, right: 28 };
+    map.flyTo(focus.zoom ? { ...camera, padding } : camera);
+  }, [focus, honeyPanel]);
 
   useEffect(() => {
     applyFrame(frame);
@@ -354,6 +399,13 @@ export default function HailMap({
       return;
     }
     if (blockSelection) return;
+    const honeyHit = (event.features ?? []).find(
+      (feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat",
+    );
+    if (honeyHit?.properties?.id) {
+      onSelectHoney?.(String(honeyHit.properties.id));
+      return;
+    }
     for (const feature of event.features ?? []) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
@@ -428,15 +480,9 @@ export default function HailMap({
         installIcons();
         quietBaseStateLayers();
         applyFrame();
-        const box = mapRef.current?.getBounds();
-        if (box) {
-          onViewChange?.({
-            west: box.getWest(),
-            south: box.getSouth(),
-            east: box.getEast(),
-            north: box.getNorth(),
-          });
-        }
+        const raw = mapRef.current?.getMap();
+        const bounds = raw ? readMapBounds(raw) : null;
+        if (bounds) onViewChange?.(bounds);
       }}
       onStyleData={() => {
         installIcons();
@@ -556,7 +602,7 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} /> : null}
+      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
       {showSwaths ? (
         <Source id="swaths" type="geojson" data={swaths}>
           <Layer
@@ -712,7 +758,55 @@ export default function HailMap({
           }}
         />
       </Source>
-      {showMesh && emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis /> : null}
+      {showMesh && emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis faded={showHoney} /> : null}
+      {showHoney && honey?.features.length ? (
+        <Source id="honey" type="geojson" data={honey}>
+          <Layer
+            id="honey-heat"
+            type="fill"
+            filter={["==", ["geometry-type"], "Polygon"]}
+            paint={{
+              "fill-color": ["get", "fill"] as never,
+              "fill-opacity": ["get", "opacity"] as never,
+            }}
+          />
+          <Layer
+            id="honey-heat-line"
+            type="line"
+            filter={["==", ["geometry-type"], "Polygon"]}
+            paint={{
+              "line-color": ["get", "fill"] as never,
+              "line-width": 1.25,
+              "line-opacity": 0.85,
+            }}
+          />
+          <Layer
+            id="honey-pins"
+            type="circle"
+            filter={["==", ["geometry-type"], "Point"]}
+            paint={{
+              "circle-radius": ["case", ["==", ["get", "selected"], 1], 16, 13],
+              "circle-color": ["get", "fill"] as never,
+              "circle-stroke-color": theme === "dark" ? "#0b111a" : "#ffffff",
+              "circle-stroke-width": ["case", ["==", ["get", "selected"], 1], 3, 2],
+            }}
+          />
+          <Layer
+            id="honey-rank"
+            type="symbol"
+            filter={["==", ["geometry-type"], "Point"]}
+            layout={{
+              "text-field": ["to-string", ["get", "rank"]],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": 11,
+              "text-allow-overlap": true,
+            }}
+            paint={{
+              "text-color": "#ffffff",
+            }}
+          />
+        </Source>
+      ) : null}
       {showPoints ? (
         <Source
           id="reports"
@@ -983,18 +1077,20 @@ function MeshContours({
   meshPulse,
   theme,
   emphasis,
+  faded = false,
 }: {
   mesh: GeoJSON.FeatureCollection | null;
   meshPulse: GeoJSON.FeatureCollection | null;
   theme: "light" | "dark";
   emphasis: boolean;
+  faded?: boolean;
 }) {
   const meshFade = useCrossfade(mesh);
   const pulseFade = useCrossfade(meshPulse);
-  const fill = emphasis ? (theme === "dark" ? 0.58 : 0.66) : theme === "dark" ? 0.34 : 0.4;
+  const fill = faded ? (theme === "dark" ? 0.16 : 0.18) : emphasis ? (theme === "dark" ? 0.58 : 0.66) : theme === "dark" ? 0.34 : 0.4;
   const lineWidth = emphasis ? 2.2 : 1.25;
-  const lineOpacity = emphasis ? 0.95 : 0.72;
-  const pulseFill = theme === "dark" ? 0.72 : 0.8;
+  const lineOpacity = (emphasis ? 0.95 : 0.72) * (faded ? 0.45 : 1);
+  const pulseFill = (theme === "dark" ? 0.72 : 0.8) * (faded ? 0.4 : 1);
   if (!emphasis) {
     return (
       <>

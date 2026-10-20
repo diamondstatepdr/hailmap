@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CloudHail, Gem, Moon, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
@@ -37,6 +37,8 @@ import {
 import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
 import MapDetailSheet from "@/components/MapDetailSheet";
 import StormReplayBar from "@/components/StormReplayBar";
+import BottomSheet from "@/components/ui/BottomSheet";
+import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
 import { beginAddressSelection } from "@/lib/address-lookup";
 import { HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
@@ -1426,7 +1428,8 @@ export default function HailApp() {
     return `${hazard} · ${time?.label ?? "7 days"}`;
   }, [hazards, historyMode, filter.hours]);
   const fieldWindowLabel = fieldSpanHours === 90 * 24 ? "last 90 days" : (TIME_WINDOWS.find((item) => item.hours === filter.hours)?.detail ?? "selected window");
-  const showMap = section === "map" || section === "field";
+  const mobile = useMediaQuery("(max-width: 767px)");
+  const showMap = section === "map" || section === "field" || mobile;
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
 
@@ -1969,60 +1972,62 @@ export default function HailApp() {
             />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && placeCardOpen && placeLabel && placePoint ? (
-            <div className="absolute inset-x-3 bottom-3 z-30 max-h-[min(72dvh,36rem)] overflow-y-auto">
-              {addressHistory ? (
-                <AddressHistoryCard
-                  label={placeLabel}
-                  history={addressHistory}
-                  spanId={addressSpanId}
-                  loading={placeLoading}
-                  expanded={placeExpanded}
-                  onToggle={() => setPlaceExpanded(true)}
-                  scopeLabel={viewScopeLabel(viewBounds, filter.state)}
-                  onSpan={(id) => {
-                    addressRetries.current = 0;
-                    setScoreDate(null);
-                    setAddressSpanId(id);
-                  }}
-                  onSelectDate={(date) => pickStormDay(date)}
-                  onReplay={(date) => beginReplay(date, placePoint)}
-                  onClose={() => setPlaceCardOpen(false)}
-                  onSave={() => void saveWatch()}
-                  onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
-                  onReport={() => {
-                    setSection("reports");
-                    void generateReport("address");
-                  }}
-                />
-              ) : place ? (
-                <PropertyCard
-                  label={placeLabel}
-                  history={place}
-                  mesh={status?.mesh}
-                  radar={radar}
-                  radarLoading={radarLoading}
-                  onClose={() => setPlaceCardOpen(false)}
-                  onSave={() => void saveWatch()}
-                  onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
-                  onReport={() => {
-                    setSection("reports");
-                    void generateReport("address");
-                  }}
-                />
-              ) : (
-                <article className="float-card p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Property</p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight">{placeLabel}</h2>
-                  <p className="mt-2 text-sm text-muted">{placeError ?? "Checking storm history…"}</p>
-                  <button
-                    type="button"
-                    className="btn btn-primary press mt-3"
-                    onClick={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
-                  >
-                    Alert me here
-                  </button>
-                </article>
-              )}
+            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
+              <BottomSheet label="Address" onClose={() => setPlaceCardOpen(false)} expandedMax="min(72dvh, 36rem)">
+                {addressHistory ? (
+                  <AddressHistoryCard
+                    bare
+                    label={placeLabel}
+                    history={addressHistory}
+                    spanId={addressSpanId}
+                    loading={placeLoading}
+                    expanded={placeExpanded}
+                    onToggle={() => setPlaceExpanded(true)}
+                    scopeLabel={viewScopeLabel(viewBounds, filter.state)}
+                    onSpan={(id) => {
+                      addressRetries.current = 0;
+                      setScoreDate(null);
+                      setAddressSpanId(id);
+                    }}
+                    onSelectDate={(date) => pickStormDay(date)}
+                    onReplay={(date) => beginReplay(date, placePoint)}
+                    onSave={() => void saveWatch()}
+                    onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                    onReport={() => {
+                      setSection("reports");
+                      void generateReport("address");
+                    }}
+                  />
+                ) : place ? (
+                  <PropertyCard
+                    bare
+                    label={placeLabel}
+                    history={place}
+                    mesh={status?.mesh}
+                    radar={radar}
+                    radarLoading={radarLoading}
+                    onSave={() => void saveWatch()}
+                    onAlert={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                    onReport={() => {
+                      setSection("reports");
+                      void generateReport("address");
+                    }}
+                  />
+                ) : (
+                  <article className="px-4 pb-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Property</p>
+                    <h2 className="mt-1 text-lg font-semibold tracking-tight">{placeLabel}</h2>
+                    <p className="mt-2 text-sm text-muted">{placeError ?? "Checking storm history…"}</p>
+                    <button
+                      type="button"
+                      className="btn btn-primary press mt-3"
+                      onClick={() => setAlertDraft({ lat: placePoint.lat, lon: placePoint.lon, label: placeLabel })}
+                    >
+                      Alert me here
+                    </button>
+                  </article>
+                )}
+              </BottomSheet>
             </div>
           ) : null}
           {replay.active && section === "map" ? (
@@ -2055,7 +2060,7 @@ export default function HailApp() {
             />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && area && !(placeCardOpen && place) ? (
-            <div className="absolute inset-x-3 bottom-3 z-30">
+            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
               <MapDetailSheet label={area.source === "mesh" ? "Radar hail" : "Map area"} onClose={closeMapDetail}>
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
@@ -2091,7 +2096,7 @@ export default function HailApp() {
             </div>
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
-            <div className="absolute inset-x-3 bottom-3 z-30">
+            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
               <MapDetailSheet label={selected ? "Storm report" : threat ? "Warning" : "County"} onClose={closeMapDetail}>
                 {selected ? (
                   <>
@@ -2133,7 +2138,7 @@ export default function HailApp() {
             </div>
           ) : null}
           {section === "field" ? (
-            <div className="absolute inset-x-0 bottom-0 z-30">
+            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
               <FieldSheet
                 gpsError={gpsError}
                 street={street}
@@ -2168,6 +2173,7 @@ export default function HailApp() {
                   if (pin) setFocus({ lon: pin.lon, lat: pin.lat, nonce: Date.now(), zoom: 16 });
                 }}
                 onUpload={uploadFieldPhoto}
+                onClose={() => setSection("map")}
               />
             </div>
           ) : null}
@@ -2241,6 +2247,7 @@ export default function HailApp() {
           ) : null}
         </div>
       {section === "storms" ? (
+        <MobileOrPage label="Storms" mobile={mobile} onClose={() => setSection("map")}>
         <StormsPanel
           loading={loading}
           error={error}
@@ -2255,8 +2262,10 @@ export default function HailApp() {
             setSection("map");
           }}
         />
+        </MobileOrPage>
       ) : null}
       {section === "properties" ? (
+        <MobileOrPage label="Addresses" mobile={mobile} onClose={() => setSection("map")}>
         <PropertiesPanel
           radiusMi={radiusMi}
           hours={filter.hours}
@@ -2289,9 +2298,15 @@ export default function HailApp() {
           }
           onShowMap={() => setSection("map")}
         />
+        </MobileOrPage>
       ) : null}
-      {section === "alerts" ? <AlertsPanel onOpenAlert={followAlertLink} /> : null}
+      {section === "alerts" ? (
+        <MobileOrPage label="Alerts" mobile={mobile} onClose={() => setSection("map")}>
+          <AlertsPanel onOpenAlert={followAlertLink} />
+        </MobileOrPage>
+      ) : null}
       {section === "reports" ? (
+        <MobileOrPage label="Reports" mobile={mobile} onClose={() => setSection("map")}>
         <ReportsPanel
           canUseView={Boolean(viewBounds)}
           hasPlace={Boolean(placePoint && placeLabel)}
@@ -2306,6 +2321,7 @@ export default function HailApp() {
           onFindAddress={() => setSection("properties")}
           onSignIn={() => setAuthOpen(true)}
         />
+        </MobileOrPage>
       ) : null}
       {alertDraft ? (
         <AlertHereSheet
@@ -2330,6 +2346,27 @@ export default function HailApp() {
         />
       ) : null}
     </AppShell>
+  );
+}
+
+function MobileOrPage({
+  label,
+  mobile,
+  onClose,
+  children,
+}: {
+  label: string;
+  mobile: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!mobile) return children;
+  return (
+    <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
+      <BottomSheet label={label} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
+        {children}
+      </BottomSheet>
+    </div>
   );
 }
 

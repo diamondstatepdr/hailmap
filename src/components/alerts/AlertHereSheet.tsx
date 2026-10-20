@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
+import BottomSheet from "@/components/ui/BottomSheet";
 import WatchFields from "@/components/alerts/WatchFields";
 import { deviceHeaders, enablePush, iosNeedsHomeScreen, storedDeviceKey } from "@/components/alerts/push";
 import { DEFAULT_PREFS } from "@/lib/alert-model";
@@ -66,19 +67,16 @@ export default function AlertHereSheet({ label, lat, lon, onClose, onSaved }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(8,18,28,0.45)] p-3 sm:items-center" role="presentation">
-      <article className="float-card w-full max-w-md p-4" role="dialog" aria-labelledby="alert-here-title">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Phone alert</p>
-            <h2 id="alert-here-title" className="mt-1 text-lg font-semibold tracking-tight">
-              Alert me here
-            </h2>
-            <p className="mt-1 text-sm text-muted">{label}</p>
-          </div>
-          <button type="button" className="btn btn-secondary press px-3 py-1.5 text-xs" onClick={onClose}>
-            Close
-          </button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(8,18,28,0.45)]" role="presentation" onClick={onClose}>
+      <div className="w-full max-w-md" onClick={(event) => event.stopPropagation()}>
+      <BottomSheet label="Alert me here" onClose={onClose} expandedMax="min(85dvh, 40rem)">
+        <div className="px-4 pb-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Phone alert</p>
+          <h2 id="alert-here-title" className="mt-1 text-lg font-semibold tracking-tight">
+            Alert me here
+          </h2>
+          <p className="mt-1 text-sm text-muted">{label}</p>
         </div>
         {iosHint ? (
           <p className="mt-3 rounded-2xl bg-panel-2 px-3 py-2 text-sm leading-relaxed" style={{ background: "var(--panel-2)" }}>
@@ -107,11 +105,13 @@ export default function AlertHereSheet({ label, lat, lon, onClose, onSaved }: Pr
             {error ? <p className="mt-3 text-sm text-muted">{error}</p> : null}
             <button type="button" className="btn btn-primary press mt-4 w-full" disabled={busy} onClick={() => void save()}>
               <Bell size={16} />
-              {busy ? "Saving…" : "Watch this spot"}
-            </button>
-          </>
+            {busy ? "Saving…" : "Watch this spot"}
+          </button>
+        </>
         )}
-      </article>
+        </div>
+      </BottomSheet>
+      </div>
     </div>
   );
 }

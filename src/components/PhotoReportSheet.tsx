@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MapFocus } from "@/components/HailMap";
+import BottomSheet from "@/components/ui/BottomSheet";
 import type { HailReport } from "@/lib/types";
 
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -161,32 +162,28 @@ export default function PhotoReportSheet({
   const sizeReady = inches() != null;
 
   return (
-    <section className="absolute inset-x-0 bottom-0 z-30" role="dialog" aria-labelledby="photo-report-title">
-      <div className="sheet mx-auto w-full max-w-3xl">
-        <div className="sheet-handle" />
-        <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-2">
-          <div>
-            <p id="photo-report-title" className="text-sm font-semibold">
-              Report hail
-            </p>
-            <p className="text-xs text-muted">
-              Step {stepIndex + 1} of {STEPS.length} · community photo
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="btn btn-secondary press px-3 py-1 text-xs">
-            Close
-          </button>
+    <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
+      <BottomSheet
+        label="Report hail"
+        onClose={onClose}
+        expandedMax={step === "pin" ? "min(42dvh, 22rem)" : "min(70dvh, 40rem)"}
+        className="mx-auto max-w-3xl"
+      >
+        <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="pb-2 pt-1">
+          <p id="photo-report-title" className="text-sm font-semibold">
+            Report hail
+          </p>
+          <p className="text-xs text-muted">
+            Step {stepIndex + 1} of {STEPS.length} · community photo
+          </p>
         </div>
-        <ol className="flex gap-1 px-4" aria-hidden>
+        <ol className="flex gap-1" aria-hidden>
           {STEPS.map((item, index) => (
             <li key={item} className={`h-1 flex-1 rounded-full ${index <= stepIndex ? "bg-accent" : "bg-app"}`} />
           ))}
         </ol>
-        <div
-          className={`space-y-3 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${
-            step === "pin" ? "max-h-[34dvh]" : "max-h-[62dvh]"
-          }`}
-        >
+        <div className="mt-3 space-y-3">
           {step === "photo" ? (
             <>
               <p className="text-sm text-muted">Take or choose a photo of the hail. The pin on the next step is the location we save.</p>
@@ -382,7 +379,8 @@ export default function PhotoReportSheet({
 
           {error ? <p className="text-sm text-red-700 dark:text-red-300">{error}</p> : null}
         </div>
-      </div>
-    </section>
+        </div>
+      </BottomSheet>
+    </div>
   );
 }

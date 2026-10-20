@@ -52,6 +52,8 @@ interface Props {
   expanded?: boolean;
   onToggle?: () => void;
   scopeLabel?: string;
+  /** Drop the floating card chrome when a bottom sheet already provides it. */
+  bare?: boolean;
 }
 
 export default function AddressHistoryCard({
@@ -69,6 +71,7 @@ export default function AddressHistoryCard({
   expanded = true,
   onToggle,
   scopeLabel,
+  bare,
 }: Props) {
   const score = history.score;
   const spanName = ADDRESS_SPANS.find((item) => item.id === spanId)?.label ?? "this range";
@@ -116,7 +119,7 @@ export default function AddressHistoryCard({
   }, [history.events]);
   if (!expanded) {
     return (
-      <article className="float-card p-4">
+      <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Address history</p>
@@ -141,7 +144,7 @@ export default function AddressHistoryCard({
     );
   }
   return (
-    <article className="float-card p-4">
+    <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Address history</p>

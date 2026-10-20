@@ -57,6 +57,8 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/swaths` — GeoJSON swaths from those reports
 - `GET /api/mesh?hours=` or `GET /api/mesh?date=YYYY-MM-DD` — NOAA MRMS MESH hail swaths. `hours` follows the map windows (last hour for Live, 1 hour, and 6 hours; last 24 hours; daily composite for 3 and 7 days). A date uses that day’s 24-hour maximum. Results are cached under `$HAILMAP_DATA_DIR/mesh`.
 - `GET /api/honey?date=YYYY-MM-DD&west=&south=&east=&north=` or `hours=` instead of `date` — Money Hole ranks for that storm day inside the map view. Optional `lat` and `lon` set the distance origin. Targets come from OpenStreetMap (dealerships, large parking lots, apartments, malls, fleet and rental yards) and Census ACS housing units. Cached under `$HAILMAP_DATA_DIR/honey`. A wide view asks you to zoom in. The response can be `partial` while Overpass tiles are still loading.
+- `GET /api/replay?date=YYYY-MM-DD&west=&south=&east=&north=` — one convective day prepared for playback. Returns 15-minute frame times, spotter reports, and archived severe-thunderstorm and tornado warning polygons inside the box. Reports come from the history index when that day is already stored, otherwise from that day’s SPC CSV. Warnings come from the IEM storm-based warning archive.
+- `GET /api/replay/frame?date=&at=&west=&south=&east=&north=` — radar for one replay time. The swath is MRMS `MESH_Max_1440min` minus the 12:00 UTC baseline, so hail builds through the day. A brighter pulse is the instantaneous MESH scan nearest that time. Scans are cached under `$HAILMAP_DATA_DIR/mesh/replay`.
 - `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
 - `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap
 - `GET /api/income` — county polygons with ACS median household income
@@ -152,6 +154,10 @@ Roof and property records are not in this build. `src/lib/seams.ts` records that
 ## Map
 
 Light theme is the default. Dark is a toggle and is remembered on the device. On a phone, Map, Storms, Addresses, Field, and Reports sit in a bottom bar. On a wide screen they sit in a side rail. Filters open in a sheet. Layer switches control reports, radar hail (MRMS MESH), report swaths, damage areas, NWS severe threats, the SPC Day 1 outlook, and the income choropleth. Radar hail, threats, and the outlook are on by default. Radar hail draws underneath markers, with a size legend at 0.75, 1, 1.5, and 2 inches or larger. A date field loads a past convective day from the Iowa State MRMS archive. State borders and names stay on the map. The site is a mobile PWA (`public/manifest.webmanifest`).
+
+Replay plays one convective day. From the hail calendar or the selected-day bar, Replay watches the current map view. On an address history storm, Replay zooms to that address. Play, pause, a scrubber, 15-minute or 1-hour steps, and 1x, 2x, or 4x sit on a glass bar. The clock is local to the storm. The radar swath builds from 12:00 UTC, spotter reports appear at their times, and warning polygons show while they were in effect.
+
+Replay plays one convective day. From the hail calendar or the selected-day bar, Replay watches the current map view. On an address history storm, Replay zooms to that address. Play, pause, a scrubber, 15-minute or 1-hour steps, and 1x, 2x, or 4x sit on a glass bar. The clock is local to the storm. The radar swath builds from 12:00 UTC, spotter reports appear at their times, and warning polygons show while they were in effect.
 
 Field mode can list car dealerships and named auto lots inside a tapped hail swath, or inside the visible map, using OpenStreetMap. Pins show the name, address, and distance.
 

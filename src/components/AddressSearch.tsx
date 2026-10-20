@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
 export interface AddressHit {
@@ -15,30 +15,45 @@ interface Props {
   onPick: (hit: AddressHit) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Increment to close the suggestion list, including a search that is still in flight. */
+  closeSignal?: number;
 }
 
-export default function AddressSearch({ onPick, placeholder = "Address, city, or ZIP", autoFocus = false }: Props) {
+export default function AddressSearch({ onPick, placeholder = "Address, city, or ZIP", autoFocus = false, closeSignal = 0 }: Props) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<AddressHit[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
+  const request = useRef(0);
+  const pinnedQuery = useRef<string | null>(null);
+
+  useEffect(() => {
+    request.current += 1;
+    setHits([]);
+    setStatus("idle");
+  }, [closeSignal]);
 
   useEffect(() => {
     const trimmed = query.trim();
+    if (pinnedQuery.current === trimmed) return;
+    pinnedQuery.current = null;
     if (trimmed.length < 3) {
       setHits([]);
       setStatus("idle");
       return;
     }
+    const id = ++request.current;
     const timer = window.setTimeout(() => {
       setStatus("loading");
       fetch(`/api/geocode?q=${encodeURIComponent(trimmed)}`)
         .then(async (response) => {
           const payload = (await response.json()) as { places?: AddressHit[]; error?: string };
+          if (request.current !== id) return;
           if (!response.ok) throw new Error(payload.error ?? "Search failed");
           setHits(payload.places ?? []);
           setStatus(payload.places?.length ? "idle" : "empty");
         })
         .catch(() => {
+          if (request.current !== id) return;
           setHits([]);
           setStatus("error");
         });
@@ -73,8 +88,11 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
                 type="button"
                 className="block w-full px-3 py-2.5 text-left text-sm hover:bg-app"
                 onClick={() => {
+                  pinnedQuery.current = hit.label;
+                  request.current += 1;
                   setQuery(hit.label);
                   setHits([]);
+                  setStatus("idle");
                   onPick(hit);
                 }}
               >

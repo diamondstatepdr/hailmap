@@ -1,5 +1,5 @@
 import { convectiveDay } from "@/lib/parsers";
-import { haversineKm } from "@/lib/geo";
+import { haversineKm, normalizeMapBounds } from "@/lib/geo";
 import type { HailReport } from "@/lib/types";
 import { clusterCellDegrees, clusterReports, shouldCluster, type ReportCluster } from "@/lib/history-cluster";
 import {
@@ -214,8 +214,7 @@ export function parseHistoryBounds(params: URLSearchParams): HistoryBounds | { e
   const south = Number(params.get("south"));
   const east = Number(params.get("east"));
   const north = Number(params.get("north"));
-  if (![west, south, east, north].every(Number.isFinite)) return { error: "west, south, east, and north are required" };
-  if (west >= east || south >= north) return { error: "Those map bounds are empty." };
-  if (north > 90 || south < -90 || west < -180 || east > 180) return { error: "Those map bounds are outside the world." };
-  return { west, south, east, north };
+  const bounds = normalizeMapBounds({ west, south, east, north });
+  if (!bounds) return { error: "Zoom in a little to load storms for this view." };
+  return bounds;
 }

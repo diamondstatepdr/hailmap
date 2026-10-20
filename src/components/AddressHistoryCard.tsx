@@ -48,9 +48,11 @@ interface Props {
   onReport?: () => void;
   onAlert?: () => void;
   onClose?: () => void;
+  /** Drop the floating card chrome when a bottom sheet already provides it. */
+  bare?: boolean;
 }
 
-export default function AddressHistoryCard({ label, history, spanId, loading, onSpan, onSelectDate, onReplay, onSave, onReport, onAlert, onClose }: Props) {
+export default function AddressHistoryCard({ label, history, spanId, loading, onSpan, onSelectDate, onReplay, onSave, onReport, onAlert, onClose, bare }: Props) {
   const score = history.score;
   const opened = useMemo(() => {
     let best = history.selectedDate ?? history.events[0]?.date ?? history.end;
@@ -85,7 +87,7 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
     });
   }, [history.events]);
   return (
-    <article className="float-card p-4">
+    <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Address history</p>

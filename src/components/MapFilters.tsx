@@ -1,6 +1,7 @@
 "use client";
 
 import { CONFIDENCE_OPTIONS, type ReportFilter } from "@/components/map-shared";
+import BottomSheet from "@/components/ui/BottomSheet";
 import { OUTLOOK_LEVELS, SIGNIFICANT_COLOR, THREAT_LEGEND, type ThreatsResponse } from "@/lib/threats";
 import type { Confidence } from "@/lib/confidence";
 import type { SourceStatus } from "@/lib/types";
@@ -34,9 +35,10 @@ interface Props {
 export default function MapFilters(props: Props) {
   return (
     <div className="absolute inset-0 z-40 flex items-end bg-black/40 backdrop-blur-[2px]" onClick={props.onClose}>
-      <div className="sheet max-h-[80dvh] w-full overflow-y-auto px-4 pb-5 pt-1" onClick={(event) => event.stopPropagation()}>
-        <div className="sheet-handle" />
-        <div className="mb-3 mt-2 flex items-center justify-between">
+      <div className="sheet-dock w-full" onClick={(event) => event.stopPropagation()}>
+        <BottomSheet label="Filters and layers" onClose={props.onClose} expandedMax="min(80dvh, 44rem)">
+        <div className="px-4 pb-5">
+        <div className="mb-3 mt-1 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Filters and layers</h2>
           <button type="button" onClick={props.onClose} className="btn btn-primary press px-3 py-1.5 text-xs">
             Done
@@ -161,6 +163,8 @@ export default function MapFilters(props: Props) {
           {props.syncedAt ? ` · Updated ${formatWhen(props.syncedAt)}` : ""}
           {props.folded > 0 ? ` · ${props.folded} nearby reports were combined.` : ""} Published local storm reports stay Official or Spotter. HailMap does not scrape social networks.
         </p>
+        </div>
+        </BottomSheet>
       </div>
     </div>
   );

@@ -14,8 +14,8 @@ import {
   type HoneySpot,
   type ScoredPlace,
 } from "@/lib/honey";
-import { loadRoofTracts } from "@/lib/honey-census";
-import { loadOsmTargets, type PlaceLabel } from "@/lib/honey-osm";
+import { loadRoofTracts, scheduleCensusFill } from "@/lib/honey-census";
+import { loadOsmTargets, scheduleOsmFill, type PlaceLabel } from "@/lib/honey-osm";
 import { getMapReports } from "@/lib/ingest";
 import { indexCells, sampleIndexed, type MeshCell, type MeshGridShape } from "@/lib/mesh-contour";
 import { loadPlanGrids } from "@/lib/mesh-cache";
@@ -27,7 +27,10 @@ export interface HoneyPayload {
   date: string | null;
   label: string;
   live: boolean;
+  /** True while OpenStreetMap or Census tiles for this view are still being cached. */
   partial: boolean;
+  /** `partial` while lots are still loading. `complete` is a finished ranking. */
+  status: "partial" | "complete";
   zoom: boolean;
   note: string | null;
   attribution: string;
@@ -46,6 +49,7 @@ function emptyPayload(label: string, note: string, zoom = false): HoneyPayload {
     label,
     live: false,
     partial: false,
+    status: "complete",
     zoom,
     note,
     attribution: ATTRIBUTION,
@@ -267,13 +271,16 @@ export async function buildHoney(input: {
   const meshAt = meshSampler(grids.map((grid) => ({ shape: grid.shape, cells: grid.cells })));
   const meshOk = grids.some((grid) => grid.status === "ok");
 
+  const hailAtTile = (tile: HoneyBounds) => tileHail(tile, meshAt, reports);
   const [osm, census] = await Promise.all([
-    loadOsmTargets(input.bounds, (tile) => tileHail(tile, meshAt, reports)).catch((error) => {
+    loadOsmTargets(input.bounds, hailAtTile).catch((error) => {
       console.error("[hailmap] honey osm", error instanceof Error ? error.message : error);
       return { targets: [] as HoneyPlace[], places: [] as PlaceLabel[], partial: true };
     }),
     loadRoofTracts(input.bounds).catch(() => ({ tracts: [], partial: true, unavailable: true })),
   ]);
+  if (osm.partial) scheduleOsmFill(input.bounds, hailAtTile);
+  if (census.partial) scheduleCensusFill(input.bounds);
 
   const labeled = osm.targets.map((target) => {
     const labels = nearestLabels(target.lat, target.lon, osm.places);
@@ -338,10 +345,9 @@ export async function buildHoney(input: {
   );
   const roofRanked = listAndHeat([...apartments, ...scoredTracts], "roof", origin);
 
+  const stillLoading = osm.partial || census.partial;
   const notes: string[] = [];
-  if (osm.partial || census.partial) {
-    notes.push("Still reading part of this view. OpenStreetMap is paced, and the list fills in as each tile is cached.");
-  }
+  if (stillLoading) notes.push("Finding Money Holes…");
   if (!meshOk && reports.length) notes.push("Radar hail is unavailable, so these scores use spotter reports.");
   if (!meshOk && !reports.length) notes.push("No radar or spotter hail in this view for that day.");
   if (census.unavailable) notes.push("Census home counts are unavailable, so roofing uses apartment buildings.");
@@ -356,7 +362,8 @@ export async function buildHoney(input: {
     date: input.date,
     label,
     live,
-    partial: osm.partial || census.partial,
+    partial: stillLoading,
+    status: stillLoading ? "partial" : "complete",
     zoom: false,
     note: notes.length ? notes.join(" ") : null,
     attribution: ATTRIBUTION,

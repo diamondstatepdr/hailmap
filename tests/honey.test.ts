@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countsFromAcs, countsFromDataCensus, countyNameFromAcs, tractsFromTiger, tractsWithHomes } from "@/lib/honey-census";
 import { honeyOverpassQuery, targetsFromElements } from "@/lib/honey-osm";
+import { hailAreas, warmTileCount } from "@/lib/honey-warm";
 import {
   CLUSTER_RADIUS_KM,
   confidenceFor,
@@ -10,6 +11,7 @@ import {
   ringAreaM2,
   scoreHoney,
   scorePlaces,
+  showHoneyRanking,
   sizesAgree,
   toSpots,
   vehiclesFromArea,
@@ -190,6 +192,30 @@ describe("census homes", () => {
     expect(tracts).toEqual([
       { geoid: "48439113605", basename: "1136.05", county: "Tarrant County", lat: 32.72, lon: -97.35, homes: 1820 },
     ]);
+  });
+});
+
+describe("money hole loading", () => {
+  it("hides a ranking until the response is complete", () => {
+    expect(showHoneyRanking({ partial: true, loading: true })).toBe(false);
+    expect(showHoneyRanking({ partial: true, loading: false })).toBe(false);
+    expect(showHoneyRanking({ partial: false, loading: true })).toBe(false);
+    expect(showHoneyRanking({ partial: false, loading: false })).toBe(true);
+  });
+
+  it("groups recent hail into city-sized warm boxes", () => {
+    const areas = hailAreas([
+      { lat: 32.75, lon: -97.33 },
+      { lat: 32.78, lon: -97.31 },
+      { lat: 33.2, lon: -96.8 },
+    ]);
+    expect(areas).toHaveLength(2);
+    const fortWorth = areas.find((area) => area.south < 32.75 && area.north > 32.78);
+    expect(fortWorth).toBeTruthy();
+    expect(fortWorth!.east - fortWorth!.west).toBeLessThan(1);
+    expect(fortWorth!.north - fortWorth!.south).toBeLessThan(1);
+    expect(warmTileCount(areas)).toBeGreaterThanOrEqual(2);
+    expect(warmTileCount(areas)).toBeLessThanOrEqual(16);
   });
 });
 

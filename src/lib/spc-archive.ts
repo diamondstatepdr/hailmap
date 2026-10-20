@@ -334,6 +334,10 @@ export async function ensureDaily(stormDate: string, now = new Date()): Promise<
       return;
     }
     replaceDayRows(stormDate, "spc-daily", rows, immutable);
+    if (rows.some((row) => row.hazard === "hail" && (row.sizeIn ?? 0) >= 0.75)) {
+      const { scheduleHoneyWarm } = await import("@/lib/honey-warm");
+      scheduleHoneyWarm();
+    }
     const cacheDir = path.join(historyDir(), "spc-daily");
     fs.mkdirSync(cacheDir, { recursive: true });
     if (hail.status === 200) fs.writeFileSync(path.join(cacheDir, `${stormDate}-hail.csv`), hail.text);

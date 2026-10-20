@@ -318,12 +318,62 @@ async function queryMirror(query: string): Promise<OverpassElement[]> {
   throw new Error(lastError);
 }
 
+const tileInflight = new Map<string, Promise<OverpassElement[]>>();
+
 async function fetchTile(bounds: HoneyBounds): Promise<OverpassElement[]> {
   const cached = readCache(bounds);
   if (cached) return cached;
-  const elements = await pace("overpass", OVERPASS_GAP_MS, () => queryMirror(honeyOverpassQuery(bounds)));
-  writeCache(bounds, elements);
-  return elements;
+  const key = cacheFile(bounds);
+  const pending = tileInflight.get(key);
+  if (pending) return pending;
+  const job = pace("overpass", OVERPASS_GAP_MS, () => queryMirror(honeyOverpassQuery(bounds)))
+    .then((elements) => {
+      writeCache(bounds, elements);
+      return elements;
+    })
+    .finally(() => {
+      if (tileInflight.get(key) === job) tileInflight.delete(key);
+    });
+  tileInflight.set(key, job);
+  return job;
+}
+
+/** Tiles under hail that are not already on the data volume. */
+export function missingOsmTiles(bounds: HoneyBounds, hailAtTile: (tile: HoneyBounds) => number): HoneyBounds[] {
+  return gridTiles(bounds, TILE_STEP)
+    .filter((tile) => hailAtTile(tile) >= 0.75 && !readCache(tile));
+}
+
+/** Cache more Overpass tiles for one view. Stops after `limit` fresh calls. */
+export async function fillOsmTiles(
+  bounds: HoneyBounds,
+  hailAtTile: (tile: HoneyBounds) => number,
+  limit: number,
+): Promise<number> {
+  let fetched = 0;
+  for (const tile of missingOsmTiles(bounds, hailAtTile)) {
+    if (fetched >= limit) break;
+    try {
+      await fetchTile(tile);
+      fetched += 1;
+    } catch (error) {
+      console.error("[hailmap] honey tile", error instanceof Error ? error.message : error);
+      break;
+    }
+  }
+  return fetched;
+}
+
+const viewFills = new Set<string>();
+
+/** Keep filling a view after the ranking request has already answered. */
+export function scheduleOsmFill(bounds: HoneyBounds, hailAtTile: (tile: HoneyBounds) => number): void {
+  const key = [bounds.west, bounds.south, bounds.east, bounds.north].map((value) => value.toFixed(2)).join(",");
+  if (viewFills.has(key)) return;
+  viewFills.add(key);
+  void fillOsmTiles(bounds, hailAtTile, 16).finally(() => {
+    viewFills.delete(key);
+  });
 }
 
 export async function loadOsmTargets(

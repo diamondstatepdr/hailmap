@@ -149,6 +149,10 @@ export async function syncLive(): Promise<SourceStatus> {
   };
   const rows = [...spc.reports, ...iem.reports, ...nws.reports, ...mesh.reports];
   if (rows.length) upsertReports(rows);
+  if (rows.some((row) => row.hazard === "hail" && (row.sizeIn ?? 0) >= 0.75)) {
+    const { scheduleHoneyWarm } = await import("@/lib/honey-warm");
+    scheduleHoneyWarm();
+  }
   pruneLiveReports(new Date(Date.now() - 8 * 86400000).toISOString());
   const reachable = [spc, iem, nws].some((feed) => feed.status === "ok" || feed.status === "empty");
   if (reachable) deleteSeedReports();

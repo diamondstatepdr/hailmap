@@ -10,5 +10,9 @@ export async function register() {
       const { startHistoryBackfill } = await import("@/lib/history-backfill");
       startHistoryBackfill();
     }
+    if (process.env.HAILMAP_HONEY_WARM !== "0") {
+      const { startHoneyWarm } = await import("@/lib/honey-warm");
+      startHoneyWarm();
+    }
   }
 }

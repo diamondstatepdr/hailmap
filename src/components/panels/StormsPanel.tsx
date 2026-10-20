@@ -3,6 +3,7 @@
 import { CloudHail, Tornado, Wind } from "lucide-react";
 import { formatWhen, placeLabel, type ReportFilter } from "@/lib/filters";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
+import { confidenceLabel } from "@/components/map-shared";
 import type { HailReport, SourceStatus } from "@/lib/types";
 
 interface Props {
@@ -22,7 +23,7 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Live window</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Storms</h1>
         <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
-          Official hail, wind, and tornado reports for the map window. Community photos stay labeled as community.
+          Official reports in the current map view. Hail is on by default. Community photos stay labeled as community.
         </p>
       </header>
       {error ? <p className="mb-3 rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{error}</p> : null}
@@ -41,27 +42,27 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
           <p className="mt-1 text-sm">Widen the time window or turn a hazard back on.</p>
         </div>
       ) : null}
-      <ul className="grid max-w-3xl gap-2">
+      <ul className="storm-list">
         {reports.slice(0, 300).map((report) => {
           const hazard = hazardOf(report.hazard);
           const Icon = hazard === "wind" ? Wind : hazard === "tornado" ? Tornado : CloudHail;
           return (
-            <li key={report.id}>
+            <li key={report.id} className="min-w-0">
               <button type="button" onClick={() => onSelect(report)} className="storm-card">
+                <span className="storm-size">{magnitudeLabel(report)}</span>
                 <span className={`hazard-badge ${hazardClass(hazard)}`}>
                   <Icon size={18} />
                 </span>
-                <span className="min-w-0 flex-1">
+                <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold tracking-tight">
                     {hazardLabel(hazard)} · {placeLabel(report)}
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-muted">
-                    {formatWhen(report.occurredAt)} · {report.confidence}
+                    {formatWhen(report.occurredAt)} · {confidenceLabel(report.confidence)}
                     {report.photoUrl ? " · community photo" : ""}
                     {report.source === "seed" ? " · sample" : ""}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-sm font-semibold tracking-tight">{magnitudeLabel(report)}</span>
               </button>
             </li>
           );
@@ -72,7 +73,7 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
         <Feed label="SPC" value={status?.spc ?? "checking"} />
         <Feed label="IEM" value={status?.iem ?? "checking"} />
         <Feed label="NWS" value={status?.nws ?? "checking"} />
-        <Feed label="MESH" value={status?.mesh === "skipped" ? "radar swaths on · point feed off" : (status?.mesh ?? "checking")} />
+        <Feed label="Radar" value={status?.mesh === "skipped" ? "swaths on" : (status?.mesh ?? "checking")} />
         {syncedAt ? <span className="self-center">Updated {formatWhen(syncedAt)}</span> : null}
         {filter.state ? <span className="self-center">State {filter.state}</span> : null}
       </div>

@@ -1,6 +1,7 @@
 import type { Confidence } from "@/lib/confidence";
 import { haversineKm } from "@/lib/geo";
 import { efRank, hazardOf, type Hazard } from "@/lib/hazard";
+import { formatMiles } from "@/lib/units";
 
 /**
  * Damage probability is a documented score, not a trained model.
@@ -123,6 +124,14 @@ export function recencyWeight(hoursAgo: number): number {
   return 0.3;
 }
 
+/** Highest-point reasons, for the card. A zero score has no ranked factors. */
+export function topScoreFactors(factors: DamageFactor[], limit = 3): DamageFactor[] {
+  return factors
+    .filter((factor) => factor.points > 0)
+    .sort((a, b) => b.points - a.points || a.label.localeCompare(b.label))
+    .slice(0, Math.max(1, limit));
+}
+
 export function levelForScore(score: number): DamageLevel {
   if (score >= 65) return "Very High";
   if (score >= 40) return "High";
@@ -185,9 +194,9 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
           : item.report.confidence === "spotter"
             ? "spotter"
             : item.report.confidence === "mesh"
-              ? "radar MESH"
+              ? "radar"
               : "community";
-      bestDetail = `${label}, ${item.km < 0.1 ? "at this point" : `${item.km.toFixed(1)} km away`}, ${confidence}, ${formatHours(item.hours)}.`;
+      bestDetail = `${label}, ${item.km < 0.1 ? "at this point" : `${formatMiles(item.km)} away`}, ${confidence}, ${formatHours(item.hours)}.`;
     }
   }
 
@@ -216,7 +225,7 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
         id: "density",
         label: "Nearby reports",
         points: densityPoints,
-        detail: `${nearbyDense.length} reports within 10 km. Extra reports add confidence, up to 12 points.`,
+        detail: `${nearbyDense.length} reports within ${formatMiles(10)}. Extra reports add confidence, up to 12 points.`,
       });
     }
   }
@@ -240,7 +249,7 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
         points: swathPoints,
         detail:
           size != null && size > 0
-            ? `No hail report inside ${radiusKm} km, but a swath covers this point (max ${size.toFixed(2)} in nearby).`
+            ? `No hail report inside ${formatMiles(radiusKm)}, but a swath covers this point (max ${size.toFixed(2)} in nearby).`
             : "A hail swath covers this point, without a sized hail report inside the radius.",
       });
     }
@@ -254,7 +263,7 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
       id: "radar",
       label: `Radar hail ${radarIn.toFixed(2)} in`,
       points: radarPoints,
-      detail: `NOAA MRMS MESH estimates ${radarIn.toFixed(2)} in at this address in the selected window. That size is blended with spotter, wind, and tornado reports. It is a radar estimate, not a stone measured on the ground.`,
+      detail: `Radar hail estimates ${radarIn.toFixed(2)} in at this address in the selected window. That size is blended with spotter, wind, and tornado reports. It is a radar estimate, not a stone measured on the ground.`,
     });
   }
 
@@ -265,7 +274,7 @@ export function scoreDamage(options: ScoreOptions): DamageScore {
       id: "none",
       label: "No reports in range",
       points: 0,
-      detail: `No hail, wind, tornado, or radar hail at or above 0.50 in within ${radiusKm} km in this date range.`,
+      detail: `No hail, wind, tornado, or radar hail at or above 0.50 in within ${formatMiles(radiusKm)} in this date range.`,
     });
   }
 

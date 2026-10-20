@@ -19,7 +19,7 @@ const TYPES: Array<{ key: "mesh" | "reports" | "warnings" | "outlook"; label: st
   { key: "mesh", label: "Radar hail" },
   { key: "reports", label: "Spotter reports" },
   { key: "warnings", label: "NWS warnings" },
-  { key: "outlook", label: "SPC outlook" },
+  { key: "outlook", label: "Storm outlook" },
 ];
 
 export default function WatchFields({

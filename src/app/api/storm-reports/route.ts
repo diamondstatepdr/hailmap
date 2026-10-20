@@ -148,7 +148,7 @@ export async function POST(request: Request) {
         radar: {
           maxIn: built.history.score ? built.events.find((event) => event.date === built.selectedDate)?.meshMaxIn ?? null : null,
           days: meshDays,
-          note: "NOAA MRMS MESH at this point for hail dates in the span. Past days are cached. Days still marked pending fill in on the next report.",
+          note: "Radar hail at this point for hail dates in the span. Past days are cached. Days still marked pending fill in on the next report.",
         },
         nearbyWarnings: built.events.flatMap((event) => event.warnings).slice(0, 80),
         nearbyWarningNote: built.warningNote,

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
 import { ADDRESS_SPANS, formatDay, type DateSpan } from "@/lib/history-range";
-import type { DamageScore } from "@/lib/probability";
+import { topScoreFactors, type DamageScore } from "@/lib/probability";
+import { formatHailSources, formatMiles } from "@/lib/units";
 import ScoreRing from "@/components/ui/ScoreRing";
 
 export interface AddressEventView {
@@ -48,12 +49,42 @@ interface Props {
   onReport?: () => void;
   onAlert?: () => void;
   onClose?: () => void;
+  expanded?: boolean;
+  onToggle?: () => void;
+  scopeLabel?: string;
   /** Drop the floating card chrome when a bottom sheet already provides it. */
   bare?: boolean;
 }
 
-export default function AddressHistoryCard({ label, history, spanId, loading, onSpan, onSelectDate, onReplay, onSave, onReport, onAlert, onClose, bare }: Props) {
+export default function AddressHistoryCard({
+  label,
+  history,
+  spanId,
+  loading,
+  onSpan,
+  onSelectDate,
+  onReplay,
+  onSave,
+  onReport,
+  onAlert,
+  onClose,
+  expanded = true,
+  onToggle,
+  scopeLabel,
+  bare,
+}: Props) {
   const score = history.score;
+  const spanName = ADDRESS_SPANS.find((item) => item.id === spanId)?.label ?? "this range";
+  const maxRadar = history.events.reduce<number | null>((max, event) => {
+    if (event.meshMaxIn == null) return max;
+    return max == null ? event.meshMaxIn : Math.max(max, event.meshMaxIn);
+  }, null);
+  const maxSpotter = history.events.reduce<number | null>((max, event) => {
+    if (event.spotterMaxIn == null) return max;
+    return max == null ? event.spotterMaxIn : Math.max(max, event.spotterMaxIn);
+  }, null);
+  const hailLine = formatHailSources({ radarIn: maxRadar, spotterIn: maxSpotter, radiusKm: history.radiusKm });
+  const factors = topScoreFactors(score.factors);
   const opened = useMemo(() => {
     let best = history.selectedDate ?? history.events[0]?.date ?? history.end;
     let size = -1;
@@ -86,6 +117,32 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
       return [];
     });
   }, [history.events]);
+  if (!expanded) {
+    return (
+      <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Address history</p>
+            <h2 className="mt-1 truncate text-lg font-semibold leading-tight tracking-tight">{label}</h2>
+            <p className="mt-1 text-xs text-muted">
+              Date range · {spanName} · {formatMiles(history.radiusKm)}
+            </p>
+            <p className="mt-1 text-sm font-semibold">{hailLine}</p>
+          </div>
+          {onClose ? (
+            <button type="button" onClick={onClose} className="tap btn btn-secondary press px-3 text-xs">
+              Close
+            </button>
+          ) : null}
+        </div>
+        {onToggle ? (
+          <button type="button" onClick={onToggle} className="btn btn-primary press mt-3 w-full">
+            Show history
+          </button>
+        ) : null}
+      </article>
+    );
+  }
   return (
     <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
       <div className="flex items-start justify-between gap-3">
@@ -93,11 +150,12 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Address history</p>
           <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight">{label}</h2>
           <p className="mt-1 text-xs text-muted">
-            {formatDay(history.start)} – {formatDay(history.end)} · {history.radiusKm} km
+            {formatDay(history.start)} – {formatDay(history.end)} · {formatMiles(history.radiusKm)}
             {history.pendingDays ? ` · loading ${history.pendingDays} recent days` : ""}
           </p>
+          {scopeLabel ? <p className="mt-1 text-xs text-muted">{scopeLabel}</p> : null}
           <p className="mt-1 text-sm font-semibold">
-            Max hail in this range · {history.maxHailIn != null ? `${history.maxHailIn.toFixed(2)} in` : "None"}
+            Max hail in {spanName} · {hailLine}
           </p>
         </div>
         {onClose ? (
@@ -106,14 +164,15 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
           </button>
         ) : null}
       </div>
-      <div className="mt-3 flex gap-1.5 overflow-x-auto" role="group" aria-label="Address history span">
+      <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted">Date range</p>
+      <div className="mt-1.5 flex gap-1.5 overflow-x-auto" role="group" aria-label="Date range">
         {ADDRESS_SPANS.map((item) => (
           <button
             key={item.id}
             type="button"
             aria-pressed={spanId === item.id}
             onClick={() => onSpan(item.id)}
-            className={`press shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${spanId === item.id ? "chip-on" : "chip"}`}
+            className={`tap press shrink-0 rounded-full px-3 text-xs font-semibold ${spanId === item.id ? "chip-on" : "chip"}`}
           >
             {item.label}
           </button>
@@ -145,6 +204,16 @@ export default function AddressHistoryCard({ label, history, spanId, loading, on
           </p>
           <p className="mt-0.5 text-xl font-semibold tracking-tight">{score.level}</p>
           <p className="mt-1 text-sm leading-relaxed text-muted">{score.summary}</p>
+          {factors.length ? (
+            <ul className="mt-2 space-y-1">
+              {factors.map((factor) => (
+                <li key={factor.id} className="text-xs leading-relaxed text-muted">
+                  <span className="font-semibold text-ink">{factor.label}</span>
+                  {factor.points ? ` · ${factor.points}` : ""} — {factor.detail}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </div>
       <h3 className="mt-4 text-sm font-semibold">Timeline</h3>
@@ -246,8 +315,8 @@ function inches(value: number | null, status: string): string {
 }
 
 function sizeLine(mesh: number | null, spotter: number | null): string {
-  const value = Math.max(mesh ?? 0, spotter ?? 0);
-  return value > 0 ? `${value.toFixed(2)} in` : "—";
+  if ((mesh ?? 0) <= 0 && (spotter ?? 0) <= 0) return "—";
+  return formatHailSources({ radarIn: mesh, spotterIn: spotter });
 }
 
 export type { DateSpan };

@@ -73,6 +73,8 @@ export interface HoneyPlace {
 
 export interface ScoredPlace extends HoneyPlace {
   hailIn: number;
+  radarIn: number | null;
+  spotterIn: number | null;
   recency: number;
   confidence: number;
   agreement: boolean;
@@ -88,6 +90,8 @@ export interface HoneySpot {
   lat: number;
   lon: number;
   hailIn: number;
+  radarIn: number | null;
+  spotterIn: number | null;
   vehicles: number | null;
   homes: number | null;
   score: number;
@@ -384,6 +388,8 @@ export function clusterPlaces(places: ScoredPlace[], mode: HoneyMode, radiusKm =
       homes: totals.homes,
       vehicleBasis: members.some((member) => member.vehicleBasis === "area") ? "area" : "default",
       hailIn: hailMember.hailIn,
+      radarIn: hailMember.radarIn,
+      spotterIn: hailMember.spotterIn,
       recency: hailMember.recency,
       confidence: hailMember.confidence,
       agreement: hailMember.agreement,
@@ -424,6 +430,8 @@ export function toSpots(
       lat: place.lat,
       lon: place.lon,
       hailIn: place.hailIn,
+      radarIn: place.radarIn,
+      spotterIn: place.spotterIn,
       vehicles: mode === "pdr" ? place.vehicles : place.vehicles || null,
       homes: mode === "roof" ? place.homes : place.homes || null,
       score: scored.score,
@@ -549,9 +557,13 @@ export function scorePlaces(
     const report = matchReport(place.lat, place.lon, reports);
     const confidence = confidenceFor({ meshIn, report });
     if (confidence.hailIn < MIN_HAIL_IN) continue;
+    const radarIn = meshIn != null && meshIn >= 0.5 ? Math.round(meshIn * 100) / 100 : null;
+    const spotterIn = report && report.sizeIn >= 0.5 ? Math.round(report.sizeIn * 100) / 100 : null;
     scored.push({
       ...place,
       hailIn: confidence.hailIn,
+      radarIn,
+      spotterIn,
       recency: recencyFactor(report?.occurredAt ?? null, latest, live, now),
       confidence: confidence.factor,
       agreement: confidence.agreement,

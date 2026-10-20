@@ -1,4 +1,6 @@
-export const RADIUS_MILES = [5, 10, 25, 50] as const;
+export const RADIUS_MILES = [1, 3, 5, 10, 25] as const;
+/** Older watches used 50 miles. They still save; new chips are RADIUS_MILES. */
+const ACCEPTED_RADIUS_MILES = [1, 3, 5, 10, 25, 50] as const;
 export type RadiusMi = (typeof RADIUS_MILES)[number];
 
 export const HAIL_THRESHOLDS = [
@@ -84,7 +86,7 @@ export const US_STATES: ReadonlyArray<{ abbr: string; name: string }> = [
 export const MILES_TO_KM = 1.609344;
 
 export function isRadiusMi(value: number): value is RadiusMi {
-  return (RADIUS_MILES as readonly number[]).includes(value);
+  return (ACCEPTED_RADIUS_MILES as readonly number[]).includes(value);
 }
 
 export function isThreshold(value: number): boolean {

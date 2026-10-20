@@ -234,6 +234,6 @@ describe("address report radar fields", () => {
     expect(document.meshDays[0].label).toBe("Last 24 hours");
     expect(document.nearbyWarnings[0].event).toBe("Severe Thunderstorm Warning");
     expect(document.snapshotSvg).toContain("<svg");
-    expect(document.sources.some((source) => source.includes("MRMS"))).toBe(true);
+    expect(document.sources.some((source) => source.includes("Radar hail"))).toBe(true);
   });
 });

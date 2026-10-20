@@ -2,6 +2,7 @@
 
 import { CONFIDENCE_OPTIONS, type ReportFilter } from "@/components/map-shared";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { US_STATES } from "@/lib/alert-model";
 import { OUTLOOK_LEVELS, SIGNIFICANT_COLOR, THREAT_LEGEND, type ThreatsResponse } from "@/lib/threats";
 import type { Confidence } from "@/lib/confidence";
 import type { SourceStatus } from "@/lib/types";
@@ -47,7 +48,7 @@ export default function MapFilters(props: Props) {
         <label className="block text-sm">
           <span className="font-medium">Smallest hail to show</span>
           <span className="mt-1 block text-muted">
-            {props.filter.minSize <= 0 ? "Any size" : `${props.filter.minSize.toFixed(2)} in and larger`}. Wind and tornado stay visible.
+            {props.filter.minSize <= 0 ? "Any size" : `${props.filter.minSize.toFixed(2)} in and larger`}. Wind and tornado follow the hazard control on the map.
           </span>
           <input
             type="range"
@@ -88,21 +89,20 @@ export default function MapFilters(props: Props) {
             <Toggle on={props.showMesh} label="Radar hail" onClick={() => props.onToggle("mesh")} />
             <Toggle on={props.showSwaths} label="Report swaths" onClick={() => props.onToggle("swaths")} />
             <Toggle on={props.showHeat} label="Damage areas" onClick={() => props.onToggle("heat")} />
-            <Toggle on={props.showHoney} label="Money holes" onClick={() => props.onToggle("honey")} />
+            <Toggle on={props.showHoney} label="Money Hole" onClick={() => props.onToggle("honey")} />
             <Toggle on={props.showThreats} label="Threats" onClick={() => props.onToggle("threats")} />
-            <Toggle on={props.showOutlook} label="Outlook" onClick={() => props.onToggle("outlook")} />
+            <Toggle on={props.showOutlook} label="Storm outlook" onClick={() => props.onToggle("outlook")} />
             <Toggle on={props.showIncome} label="County income" onClick={() => props.onToggle("income")} />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
-            Radar hail is NOAA MRMS MESH, estimated hail size where stones fell. Report swaths still group nearby hail reports. Damage areas use the same score as an address, on a coarse grid. Money holes rank hail-hit lots and neighborhoods for the storm day in view.
+            Radar hail size is the estimated size of stones where they fell. Report swaths group nearby hail reports. Damage areas use the same score as an address, on a coarse grid. Money Hole ranks hail-hit lots and neighborhoods for the storm day in view.
             {props.showIncome && props.incomeError ? " Income data is unavailable right now." : ""}
             {props.showThreats && (props.threatError || props.threatStatus?.nws === "error")
               ? " Watches and warnings are unavailable right now."
               : ""}
             {props.showOutlook && (props.threatError || props.threatStatus?.spc === "error")
-              ? " The Day 1 outlook is unavailable right now."
+              ? " Today's storm outlook is unavailable right now."
               : ""}
-            {props.status?.mesh === "skipped" ? " Extra MESH points stay off until HAILMAP_MESH_URL is set." : ""}
           </p>
           {props.showOutlook ? (
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -121,20 +121,20 @@ export default function MapFilters(props: Props) {
           ) : null}
         </div>
         <label className="mt-4 block text-sm">
-          <span className="font-medium">State code</span>
-          <input
+          <span className="font-medium">State</span>
+          <select
             value={props.filter.state}
-            maxLength={2}
-            placeholder="Any"
-            aria-label="State code"
-            onChange={(event) =>
-              props.onFilter({
-                ...props.filter,
-                state: event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2),
-              })
-            }
-            className="mt-1 w-24 rounded-xl border border-line bg-app px-3 py-2 uppercase"
-          />
+            aria-label="State"
+            onChange={(event) => props.onFilter({ ...props.filter, state: event.target.value })}
+            className="tap mt-1 w-full max-w-xs rounded-xl border border-line bg-app px-3"
+          >
+            <option value="">Any state</option>
+            {US_STATES.map((item) => (
+              <option key={item.abbr} value={item.abbr}>
+                {item.name}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="mt-4">
           <button type="button" onClick={props.onCommunityPhoto} className="btn btn-secondary press w-full">
@@ -158,7 +158,7 @@ export default function MapFilters(props: Props) {
           {props.importNote ? <span className="mt-1 block text-xs text-muted">{props.importNote}</span> : null}
         </label>
         <p className="mt-4 text-xs leading-relaxed text-muted">
-          SPC {props.status?.spc ?? "checking"} · IEM {props.status?.iem ?? "checking"} · NWS {props.status?.nws ?? "checking"} · MESH{" "}
+          Weather service {props.status?.spc ?? "checking"} · Reports {props.status?.iem ?? "checking"} · Alerts {props.status?.nws ?? "checking"} · Radar{" "}
           {props.status?.mesh ?? "checking"}
           {props.syncedAt ? ` · Updated ${formatWhen(props.syncedAt)}` : ""}
           {props.folded > 0 ? ` · ${props.folded} nearby reports were combined.` : ""} Published local storm reports stay Official or Spotter. HailMap does not scrape social networks.

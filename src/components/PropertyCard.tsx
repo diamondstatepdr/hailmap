@@ -5,6 +5,8 @@ import type { RadarSample } from "@/lib/area-selection";
 import { formatWhen, placeLabel } from "@/lib/filters";
 import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
+import { topScoreFactors } from "@/lib/probability";
+import { formatHailSources, formatMiles } from "@/lib/units";
 import ScoreRing from "@/components/ui/ScoreRing";
 import Sparkline from "@/components/ui/Sparkline";
 
@@ -25,6 +27,12 @@ interface Props {
 
 export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare }: Props) {
   const score = history.score;
+  const factors = topScoreFactors(score.factors);
+  const hailLine = formatHailSources({
+    radarIn: radar?.maxIn,
+    spotterIn: history.maxHailIn,
+    radiusKm: history.radiusKm,
+  });
   return (
     <article className={bare ? "px-4 pb-4" : "float-card p-4"}>
       <div className="flex items-start justify-between gap-3">
@@ -47,10 +55,10 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
         </div>
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-2">
-        <Fact label="Max hail" value={history.maxHailIn != null ? `${history.maxHailIn.toFixed(2)} in` : "None in range"} />
+        <Fact label="Max hail" value={hailLine} />
         <Fact label="Max wind" value={history.maxWindMph != null ? `${history.maxWindMph} mph` : "None in range"} />
         <Fact label="Tornado" value={history.strongestTornado ?? "None in range"} />
-        <Fact label="Nearest report" value={history.nearestKm != null ? `${history.nearestKm.toFixed(1)} km` : "None"} />
+        <Fact label="Nearest report" value={history.nearestKm != null ? formatMiles(history.nearestKm) : "None"} />
         <Fact label="Hail swath" value={history.swathHit ? "Covers this point" : "Does not cover this point"} />
         <Fact
           label="Radar hail"
@@ -74,7 +82,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
         </div>
       ) : null}
       <div className="mt-4 space-y-3">
-        {score.factors.map((factor) => (
+        {(factors.length ? factors : score.factors.slice(0, 1)).map((factor) => (
           <div key={factor.id}>
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="font-semibold">{factor.label}</span>
@@ -105,7 +113,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
         )}
       </div>
       {mesh === "skipped" && !radar ? (
-        <p className="mt-3 text-xs text-muted">Optional MESH points stay off until HAILMAP_MESH_URL is set. Radar swaths still load from NOAA.</p>
+        <p className="mt-3 text-xs text-muted">Radar hail size is unavailable for this window. Report swaths still load.</p>
       ) : null}
       {history.reports.length ? (
         <ul className="mt-3 max-h-44 space-y-1.5 overflow-auto">
@@ -122,7 +130,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
                     {hazardLabel(hazard)} · {magnitudeLabel(report)}
                   </span>
                   <span className="block text-xs text-muted">
-                    {placeLabel(report)} · {report.distanceKm.toFixed(1)} km · {formatWhen(report.occurredAt)}
+                    {placeLabel(report)} · {formatMiles(report.distanceKm)} · {formatWhen(report.occurredAt)}
                   </span>
                 </span>
               </li>

@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { CarFront, Navigation } from "lucide-react";
 import type { DealerPin } from "@/lib/area-selection";
+import { fieldScoreCopy, fieldStreetTitle } from "@/lib/field-status";
 import { FIELD_DAMAGE_TYPES, PIN_STATUSES, pinStatusLabel, type PinStatus } from "@/lib/field";
 import type { PlaceHistory } from "@/lib/place";
+import { topScoreFactors } from "@/lib/probability";
+import { formatMiles } from "@/lib/units";
 
 interface FieldPinView {
   id: string;
@@ -17,6 +20,10 @@ interface Props {
   gpsError: string | null;
   street: string | null;
   streetStatus: "idle" | "loading" | "unavailable" | "ok";
+  lat: number | null;
+  lon: number | null;
+  waitedMs: number;
+  windowLabel: string;
   history: PlaceHistory | null;
   historyError: string | null;
   signedIn: boolean;
@@ -29,6 +36,7 @@ interface Props {
   dealerError: string | null;
   selectedDealerId: string | null;
   onSearchArea: () => void;
+  onWiden: () => void;
   onSelectDealer: (id: string) => void;
   onSignIn: () => void;
   onMark: (status: PinStatus, note: string) => void;
@@ -47,6 +55,10 @@ export default function FieldSheet({
   gpsError,
   street,
   streetStatus,
+  lat,
+  lon,
+  waitedMs,
+  windowLabel,
   history,
   historyError,
   signedIn,
@@ -59,6 +71,7 @@ export default function FieldSheet({
   dealerError,
   selectedDealerId,
   onSearchArea,
+  onWiden,
   onSelectDealer,
   onSignIn,
   onMark,
@@ -71,6 +84,9 @@ export default function FieldSheet({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const places = uniquePlaces(history);
+  const title = fieldStreetTitle({ street, status: streetStatus, lat, lon, waitedMs });
+  const scoreCopy = fieldScoreCopy({ score: history ? history.score.score : null, windowLabel });
+  const factors = history ? topScoreFactors(history.score.factors) : [];
 
   async function upload(file: File | null) {
     if (!file || !selectedPinId) return;
@@ -95,29 +111,34 @@ export default function FieldSheet({
         </span>
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Field</p>
-          <p className="truncate text-sm font-semibold">
-            {streetStatus === "loading"
-              ? "Looking up the street…"
-              : street
-                ? street
-                : streetStatus === "unavailable"
-                  ? "Street name is unavailable from the geocoder."
-                  : "Waiting for GPS…"}
-          </p>
+          <p className="truncate text-sm font-semibold">{title}</p>
         </div>
       </div>
       {gpsError ? <p className="mt-2 text-sm text-muted">{gpsError}</p> : null}
-      {history ? (
-        <p className="mt-2 text-sm">
-          <span className="font-semibold">
+      {scoreCopy.showScore && history ? (
+        <div className="mt-2 text-sm">
+          <p className="font-semibold">
             Damage probability {history.score.level} · {history.score.score}/100
-          </span>
-          <span className="mt-0.5 block text-xs font-normal text-muted">{history.score.summary}</span>
-        </p>
-      ) : historyError ? (
-        <p className="mt-2 text-sm text-muted">{historyError}</p>
+          </p>
+          {factors.length ? (
+            <ul className="mt-1 space-y-1">
+              {factors.map((factor) => (
+                <li key={factor.id} className="text-xs leading-relaxed text-muted">
+                  <span className="font-semibold text-ink">{factor.label}</span> — {factor.detail}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : (
-        <p className="mt-2 text-sm text-muted">Score appears when your location is known.</p>
+        <div className="mt-2">
+          <p className="text-sm text-muted">{historyError ?? scoreCopy.message}</p>
+          {history && history.score.score <= 0 ? (
+            <button type="button" onClick={onWiden} className="btn btn-secondary press mt-2 w-full text-sm">
+              Widen to 90 days
+            </button>
+          ) : null}
+        </div>
       )}
       <div className="mt-3 rounded-2xl border border-line bg-panel-2 p-3" style={{ background: "var(--panel-2)" }}>
         <div className="flex items-center gap-2">
@@ -126,11 +147,11 @@ export default function FieldSheet({
           </span>
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Dealerships</p>
-            <p className="truncate text-sm font-semibold">{areaLabel ?? "Tap a hail swath, or search the map"}</p>
+            <p className="truncate text-sm font-semibold">{areaLabel ?? "Lots near this stop"}</p>
           </div>
         </div>
-        <button type="button" onClick={onSearchArea} disabled={dealerLoading} className="btn btn-secondary press mt-2 w-full text-sm disabled:opacity-60">
-          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Search the visible map"}
+        <button type="button" onClick={onSearchArea} disabled={dealerLoading} className="btn btn-primary press mt-2 w-full text-sm disabled:opacity-60">
+          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Find dealerships near me"}
         </button>
         {dealerLoading ? <p className="mt-2 text-xs text-muted">Searching OpenStreetMap…</p> : null}
         {dealerError ? <p className="mt-2 text-xs text-muted">{dealerError}</p> : null}
@@ -145,7 +166,7 @@ export default function FieldSheet({
                 >
                   <span className="block text-sm">{dealer.name}</span>
                   <span className="block text-xs text-muted">
-                    {dealer.kind === "lot" ? "Auto lot" : "Dealership"} · {dealer.distanceKm.toFixed(1)} km
+                    {dealer.kind === "lot" ? "Auto lot" : "Dealership"} · {formatMiles(dealer.distanceKm)}
                   </span>
                   <span className="block text-xs text-muted">{dealer.address}</span>
                 </button>

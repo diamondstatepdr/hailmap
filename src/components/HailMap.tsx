@@ -171,6 +171,8 @@ interface Props {
   honey?: GeoJSON.FeatureCollection | null;
   /** When the honey panel is open, keep the storm in the map area beside or above it. */
   honeyPanel?: boolean;
+  /** Keep the camera when the map is covered by another tab, then resize on return. */
+  visible?: boolean;
   /** Draw the radar swath above warning polygons and with stronger contour fill. */
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
@@ -225,6 +227,7 @@ export default function HailMap({
   showHoney = false,
   honey = null,
   honeyPanel = false,
+  visible = true,
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
@@ -248,6 +251,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const iconsBound = useRef(false);
   const frameRef = useRef(frame);
   const frameWait = useRef(false);
   frameRef.current = frame;
@@ -258,11 +262,13 @@ export default function HailMap({
     showHoney && honey?.features.length ? "honey-heat" : "",
     showPoints ? "hail-clusters" : "",
     showPoints ? "hail-points" : "",
+    showPoints ? "hail-point-hit" : "",
     ...(emphasizeMesh
       ? ["mesh-a-fill", "mesh-b-fill", "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
       : [showMesh && mesh?.features.length ? "mesh-fill" : "", showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : ""]),
     showSwaths ? "swath-fill" : "",
     dealers?.features.length ? "dealer-pins" : "",
+    dealers?.features.length ? "dealer-hit" : "",
     showThreats ? "threat-warning-fill" : "",
     showThreats ? "threat-watch-fill" : "",
     showThreats ? "threat-statement-fill" : "",
@@ -270,6 +276,7 @@ export default function HailMap({
     showOutlook ? "significant-fill" : "",
     showIncome ? "income-fill" : "",
     fieldPins?.features.length ? "field-pins" : "",
+    fieldPins?.features.length ? "field-pin-hit" : "",
   ].filter(Boolean);
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
@@ -357,6 +364,11 @@ export default function HailMap({
   }, [focus, honeyPanel]);
 
   useEffect(() => {
+    if (!visible) return;
+    mapRef.current?.getMap()?.resize();
+  }, [visible]);
+
+  useEffect(() => {
     applyFrame(frame);
   }, [frame]);
 
@@ -421,15 +433,15 @@ export default function HailMap({
           .catch(() => undefined);
         return;
       }
-      if (feature.layer?.id === "field-pins" && props.id) {
+      if ((feature.layer?.id === "field-pins" || feature.layer?.id === "field-pin-hit") && props.id) {
         onSelectFieldPin?.(String(props.id));
         return;
       }
-      if (feature.layer?.id === "hail-points" && props.id) {
+      if ((feature.layer?.id === "hail-points" || feature.layer?.id === "hail-point-hit") && props.id) {
         onSelectReport(String(props.id));
         return;
       }
-      if (feature.layer?.id === "dealer-pins" && props.id) {
+      if ((feature.layer?.id === "dealer-pins" || feature.layer?.id === "dealer-hit") && props.id) {
         onSelectDealer?.(String(props.id));
         return;
       }
@@ -473,10 +485,24 @@ export default function HailMap({
   return (
     <Map
       ref={mapRef}
-      initialViewState={{ longitude: -97.5, latitude: 39.2, zoom: 3.7 }}
+      initialViewState={{
+        longitude: focus?.lon ?? -98.2,
+        latitude: focus?.lat ?? 38.4,
+        zoom: focus?.zoom ?? 4.15,
+      }}
       mapStyle={theme === "dark" ? DARK_STYLE : LIGHT_STYLE}
       attributionControl={false}
       onLoad={() => {
+        const map = mapRef.current?.getMap();
+        if (map && !iconsBound.current) {
+          iconsBound.current = true;
+          map.on("styleimagemissing", (event) => {
+            const id = event.id;
+            if (id !== "mark-wind" && id !== "mark-tornado") return;
+            if (map.hasImage(id)) return;
+            map.addImage(id, id === "mark-wind" ? windGlyph() : tornadoGlyph(), { pixelRatio: 2 });
+          });
+        }
         installIcons();
         quietBaseStateLayers();
         applyFrame();
@@ -861,6 +887,16 @@ export default function HailMap({
             }}
           />
           <Layer
+            id="hail-point-hit"
+            type="circle"
+            filter={["!", ["has", "point_count"]]}
+            paint={{
+              "circle-color": "#000000",
+              "circle-radius": 22,
+              "circle-opacity": 0,
+            }}
+          />
+          <Layer
             id="hail-points"
             type="circle"
             filter={["!", ["has", "point_count"]]}
@@ -939,6 +975,11 @@ export default function HailMap({
       {dealers?.features.length ? (
         <Source id="dealers" type="geojson" data={dealers}>
           <Layer
+            id="dealer-hit"
+            type="circle"
+            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
+          />
+          <Layer
             id="dealer-pins"
             type="circle"
             paint={{
@@ -952,6 +993,11 @@ export default function HailMap({
       ) : null}
       {fieldPins?.features.length ? (
         <Source id="field-pins" type="geojson" data={fieldPins}>
+          <Layer
+            id="field-pin-hit"
+            type="circle"
+            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
+          />
           <Layer
             id="field-pins"
             type="circle"
@@ -976,7 +1022,9 @@ export default function HailMap({
       ) : null}
       {userLocation ? (
         <Marker longitude={userLocation.lon} latitude={userLocation.lat} anchor="center">
-          <span className="user-dot" aria-label="Your location" />
+          <span className="user-dot-hit">
+            <span className="user-dot" aria-label="Your location" />
+          </span>
         </Marker>
       ) : null}
       {draftPin ? (

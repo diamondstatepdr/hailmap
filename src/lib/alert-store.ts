@@ -351,7 +351,7 @@ export function normalizeArea(input: AreaInput): { area: Omit<AlertArea, "id" | 
   const kind = input.kind;
   if (kind !== "point" && kind !== "state" && kind !== "near") return { error: "kind must be point, state, or near" };
   const radiusMi = input.radiusMi ?? 25;
-  if (kind !== "state" && !isRadiusMi(radiusMi)) return { error: "radius must be 5, 10, 25, or 50 miles" };
+    if (kind !== "state" && !isRadiusMi(radiusMi)) return { error: "radius must be 1, 3, 5, 10, or 25 miles" };
   const minSizeIn = input.minSizeIn ?? DEFAULT_PREFS.minSizeIn;
   if (!isThreshold(minSizeIn)) return { error: 'hail size must be any, 1", 1.5", or 2"+' };
   const prefs = {

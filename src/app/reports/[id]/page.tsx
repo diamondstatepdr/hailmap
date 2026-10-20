@@ -6,6 +6,7 @@ import ScoreRing from "@/components/ui/ScoreRing";
 import Sparkline from "@/components/ui/Sparkline";
 import { getStormReport } from "@/lib/accounts";
 import { formatWhen } from "@/lib/filters";
+import { formatMiles } from "@/lib/units";
 import type { StormReportDocument } from "@/lib/storm-report";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
           ) : null}
           <p className="mt-1 text-sm text-muted">
             {report.place.lat.toFixed(4)}, {report.place.lon.toFixed(4)}
-            {report.place.radiusKm ? ` · ${report.place.radiusKm} km radius` : " · reports inside the box"}
+            {report.place.radiusKm ? ` · ${formatMiles(report.place.radiusKm)} radius` : " · reports inside the box"}
           </p>
 
           <section className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -79,14 +80,14 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
             <Stat label="Max wind" value={report.stats.maxWindMph != null ? `${report.stats.maxWindMph} mph` : "—"} />
             <Stat label="Tornado" value={report.stats.strongestTornado ?? "—"} />
             <Stat label="Reports" value={String(report.stats.reportCount)} />
-            <Stat label="Nearest" value={report.stats.nearestKm != null ? `${report.stats.nearestKm.toFixed(1)} km` : "—"} />
+            <Stat label="Nearest" value={report.stats.nearestKm != null ? formatMiles(report.stats.nearestKm) : "—"} />
           </dl>
 
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Map</h2>
           <p className="mt-1 text-sm text-muted">Address marker, radar hail swaths, and nearby reports.</p>
           <div className="report-map mt-3 overflow-hidden rounded-2xl border border-line" dangerouslySetInnerHTML={{ __html: mapSvg }} />
           {report.snapshotSvg ? (
-            <p className="mt-1 text-[11px] leading-relaxed text-muted">© OpenStreetMap contributors · NOAA MRMS MESH</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted">© OpenStreetMap contributors · Radar hail</p>
           ) : null}
 
           {candidates.length ? (
@@ -124,7 +125,7 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
 
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>
           <p className="mt-1 text-sm text-muted">
-            NOAA MRMS MESH at this address. Sizes are estimates for the radar grid cell, not a ground survey.
+            Radar hail at this address. Sizes are estimates for the radar grid cell, not a ground survey.
           </p>
           {meshDays.length ? (
             <div className="mt-2 overflow-x-auto">

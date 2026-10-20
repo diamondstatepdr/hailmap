@@ -162,7 +162,7 @@ export async function findDealers(input: {
     [bounds.west, bounds.south],
     [bounds.east, bounds.north],
   ]);
-  if (span > 500) throw new Error("Zoom in or pick a smaller hail swath (under about 500 km).");
+  if (span > 500) throw new Error("Zoom in or pick a smaller hail swath (under about 300 miles).");
   const near = input.near && Number.isFinite(input.near.lat) ? input.near : {
     lat: (bounds.south + bounds.north) / 2,
     lon: (bounds.west + bounds.east) / 2,

@@ -20,13 +20,13 @@ export const LATEST_MESH_URL = {
 } as const;
 
 const SHORT_NOTE =
-  "MRMS has no 6-hour maximum, so this radar layer is the last hour of MESH.";
+  "Radar hail for the last hour. There is no 6-hour radar product, so the 6-hour map uses the last hour.";
 
 const DAY_NOTE =
-  "Each date is the 24-hour MRMS MESH maximum ending at 12:00 UTC the next day, so it covers that afternoon and evening in the United States.";
+  "Each date is the 24-hour radar hail maximum ending at 12:00 UTC the next day, covering that afternoon and evening in the United States.";
 
 const ROLLING_NOTE =
-  "Rolling NOAA MRMS MESH maximum. It estimates hail size aloft, not a stone measured at the address.";
+  "Rolling radar hail maximum. It estimates hail size where stones fell, not a stone measured at the address.";
 
 export function isoDateUTC(date: Date): string {
   return date.toISOString().slice(0, 10);

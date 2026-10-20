@@ -19,6 +19,8 @@ interface Props {
   signedIn: boolean;
   onAddress: () => void;
   onView: () => void;
+  onFindAddress: () => void;
+  onSignIn: () => void;
 }
 
 export default function ReportsPanel({
@@ -32,6 +34,8 @@ export default function ReportsPanel({
   signedIn,
   onAddress,
   onView,
+  onFindAddress,
+  onSignIn,
 }: Props) {
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8">
@@ -45,16 +49,16 @@ export default function ReportsPanel({
       <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
         <button
           type="button"
-          disabled={!hasPlace || busy}
-          onClick={onAddress}
+          disabled={hasPlace && busy}
+          onClick={hasPlace ? onAddress : onFindAddress}
           className="storm-card h-full items-start disabled:opacity-50"
         >
           <span className="hazard-badge hazard-hail">
             <FileText size={18} />
           </span>
-          <span>
+          <span className="min-w-0">
             <span className="block text-sm font-semibold">{busy ? "Building the report…" : "Address report"}</span>
-            <span className="mt-0.5 block text-xs text-muted">{placeLabel ?? "Search an address first"}</span>
+            <span className="mt-0.5 block text-xs text-muted">{placeLabel ?? "Search an address"}</span>
           </span>
         </button>
         <button
@@ -72,7 +76,14 @@ export default function ReportsPanel({
           </span>
         </button>
       </div>
-      {!hasPlace ? <p className="mt-3 max-w-xl text-sm text-muted">Search an address on the map or Addresses tab first.</p> : null}
+      {!hasPlace ? (
+        <div className="mt-3 max-w-xl">
+          <p className="text-sm text-muted">An address report needs a place first.</p>
+          <button type="button" onClick={onFindAddress} className="btn btn-primary press mt-2">
+            Search an address
+          </button>
+        </div>
+      ) : null}
       {error ? <p className="mt-3 text-sm text-muted">{error}</p> : null}
       {lastUrl ? (
         <a href={lastUrl} className="btn btn-primary press mt-4">
@@ -85,7 +96,16 @@ export default function ReportsPanel({
       </p>
       <section className="mt-8 max-w-3xl">
         <h2 className="text-sm font-semibold tracking-tight">Your saved reports</h2>
-        {!signedIn ? <p className="mt-1 text-sm text-muted">Sign in to see reports tied to your name.</p> : null}
+        {!signedIn ? (
+          <div className="mt-1 max-w-xl text-sm text-muted">
+            <p>
+              Sign in with the team passcode to see reports saved on your name. The passcode is shared by whoever set up HailMap. It is not a personal password.
+            </p>
+            <button type="button" onClick={onSignIn} className="btn btn-secondary press mt-2">
+              Sign in
+            </button>
+          </div>
+        ) : null}
         {signedIn && !saved.length ? (
           <div className="empty-state mt-3">
             <p className="text-sm">No saved reports yet.</p>

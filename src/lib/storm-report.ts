@@ -79,7 +79,7 @@ const SOURCE_NAMES: Record<string, string> = {
   spc: "Storm Prediction Center local storm reports",
   iem: "Iowa Environmental Mesonet local storm reports",
   nws: "National Weather Service warning centroids",
-  mesh: "MRMS MESH radar (HAILMAP_MESH_URL)",
+  mesh: "Radar hail size estimates",
   photo: "In-app community photo reports",
   import: "Imported community file",
   community: "Community webhook",
@@ -183,7 +183,7 @@ export function buildStormReport(input: {
   const sources = new Set<string>();
   for (const report of listed) sources.add(SOURCE_NAMES[report.source] ?? report.source);
   if (input.history.warnings.length) sources.add("National Weather Service active watches and warnings");
-  if (input.radar) sources.add("NOAA MRMS Maximum Expected Size of Hail (MESH)");
+  if (input.radar) sources.add("Radar hail size estimates");
   if (input.nearbyWarnings?.length) sources.add("Iowa Environmental Mesonet archive of NWS warnings");
   sources.add("Damage probability model documented in HailMap (not a trained model)");
 
@@ -206,11 +206,11 @@ export function buildStormReport(input: {
   const meshNote = input.radar
     ? input.radar.note
     : input.meshStatus === "skipped" || input.meshStatus == null
-      ? "Radar MESH is not included. Set HAILMAP_MESH_URL to ingest an official MESH feed."
+      ? "Radar hail is not included for this window."
       : input.meshStatus === "error"
-        ? "The MESH feed was unavailable when this report was built."
+        ? "The radar hail feed was unavailable when this report was built."
         : input.meshStatus === "empty"
-          ? "The MESH feed responded with no hail polygons in this window."
+          ? "The radar hail feed had no hail in this window."
           : null;
 
   return {

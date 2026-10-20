@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
 export interface AddressHit {
@@ -25,6 +25,16 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
   const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
   const request = useRef(0);
   const pinnedQuery = useRef<string | null>(null);
+  const inputId = useId();
+
+  function pick(hit: AddressHit) {
+    pinnedQuery.current = hit.label;
+    request.current += 1;
+    setQuery(hit.label);
+    setHits([]);
+    setStatus("idle");
+    onPick(hit);
+  }
 
   useEffect(() => {
     request.current += 1;
@@ -63,17 +73,24 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
 
   return (
     <div className="relative min-w-0 flex-1">
-      <label className="sr-only" htmlFor="address-search">
+      <label className="sr-only" htmlFor={inputId}>
         Search an address
       </label>
       <div className="relative">
         <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
         <input
-          id="address-search"
+          id={inputId}
           value={query}
           autoFocus={autoFocus}
           placeholder={placeholder}
+          enterKeyHint="search"
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && hits[0]) {
+              event.preventDefault();
+              pick(hits[0]);
+            }
+          }}
           className="glass w-full rounded-2xl py-2.5 pl-9 pr-3 text-sm outline-none"
         />
       </div>
@@ -86,15 +103,8 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
             <li key={`${hit.lat},${hit.lon},${hit.label}`}>
               <button
                 type="button"
-                className="block w-full px-3 py-2.5 text-left text-sm hover:bg-app"
-                onClick={() => {
-                  pinnedQuery.current = hit.label;
-                  request.current += 1;
-                  setQuery(hit.label);
-                  setHits([]);
-                  setStatus("idle");
-                  onPick(hit);
-                }}
+                className="tap block w-full px-3 text-left text-sm hover:bg-app"
+                onClick={() => pick(hit)}
               >
                 {hit.label}
               </button>

@@ -480,15 +480,9 @@ export default function HailMap({
         installIcons();
         quietBaseStateLayers();
         applyFrame();
-        const box = mapRef.current?.getBounds();
-        if (box) {
-          onViewChange?.({
-            west: box.getWest(),
-            south: box.getSouth(),
-            east: box.getEast(),
-            north: box.getNorth(),
-          });
-        }
+        const raw = mapRef.current?.getMap();
+        const bounds = raw ? readMapBounds(raw) : null;
+        if (bounds) onViewChange?.(bounds);
       }}
       onStyleData={() => {
         installIcons();

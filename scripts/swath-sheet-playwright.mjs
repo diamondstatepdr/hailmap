@@ -53,12 +53,12 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
   const box = await canvas.boundingBox();
   if (!box) throw new Error("map canvas has no box");
   const spots = [
-    [0.5, 0.22],
-    [0.38, 0.24],
-    [0.64, 0.2],
-    [0.3, 0.28],
-    [0.72, 0.26],
-    [0.5, 0.18],
+    [0.5, 0.34],
+    [0.4, 0.34],
+    [0.5, 0.64],
+    [0.62, 0.34],
+    [0.3, 0.34],
+    [0.5, 0.42],
   ];
   let opened = false;
   for (const [fx, fy] of spots) {
@@ -84,7 +84,8 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
     const titled = fileLabel === "before" ? /[12]\.\d+/.test(title) || /swath/i.test(title) : /radar hail/.test(title);
     const bands = fileLabel === "before" || /2(\.5)?"/.test(statsText);
     console.log(label, name, "stats", JSON.stringify(statsText.replace(/\s+/g, " ").slice(0, 180)));
-    if (titled && bands && (fileLabel === "before" || count > 0)) {
+    const fullStorm = /42 mi/.test(statsText);
+    if (titled && bands && fullStorm && (fileLabel === "before" || count > 0)) {
       opened = true;
       break;
     }

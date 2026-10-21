@@ -2,11 +2,15 @@
 
 import { House, MapPinned } from "lucide-react";
 import AddressSearch, { type AddressHit } from "@/components/AddressSearch";
+import type { AddressHistoryView } from "@/components/AddressHistoryCard";
 import PropertyCard from "@/components/PropertyCard";
+import SourceYears from "@/components/SourceYears";
+import YearlyHail from "@/components/YearlyHail";
 import type { RadarSample } from "@/lib/area-selection";
-import { TIME_WINDOWS } from "@/lib/filters";
 import { laterPhase } from "@/lib/seams";
+import { ADDRESS_SPANS } from "@/lib/history-range";
 import type { PlaceHistory } from "@/lib/place";
+import { sourceCoverage } from "@/lib/source-coverage";
 import { formatMiles, SEARCH_RADIUS_MILES, type SearchRadiusMi } from "@/lib/units";
 
 export interface WatchItem {
@@ -20,11 +24,13 @@ export interface WatchItem {
 
 interface Props {
   radiusMi: SearchRadiusMi;
-  hours: number;
+  spanId: string;
   onRadius: (radiusMi: SearchRadiusMi) => void;
-  onHours: (hours: number) => void;
+  onSpan: (id: string) => void;
   onSearch: (hit: AddressHit) => void;
   history: PlaceHistory | null;
+  addressHistory: AddressHistoryView | null;
+  addressLoading: boolean;
   label: string | null;
   loading: boolean;
   error: string | null;
@@ -67,14 +73,14 @@ export default function PropertiesPanel(props: Props) {
           </button>
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Time window">
-        {TIME_WINDOWS.map((item) => (
+      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Date range">
+        {ADDRESS_SPANS.map((item) => (
           <button
-            key={item.hours}
+            key={item.id}
             type="button"
-            aria-pressed={props.hours === item.hours}
-            onClick={() => props.onHours(item.hours)}
-            className={`tap press rounded-full px-3 text-sm ${props.hours === item.hours ? "chip-on" : "chip"}`}
+            aria-pressed={props.spanId === item.id}
+            onClick={() => props.onSpan(item.id)}
+            className={`tap press year-chip rounded-full px-3 ${props.spanId === item.id ? "chip-on" : "chip"}`}
           >
             {item.label}
           </button>
@@ -91,8 +97,24 @@ export default function PropertiesPanel(props: Props) {
         </div>
       ) : null}
       {props.error ? <p className="mt-4 max-w-3xl rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{props.error}</p> : null}
+      <SourceYears
+        spans={sourceCoverage({
+          start: props.addressHistory?.start ?? "1950-01-01",
+          end: props.addressHistory?.end ?? new Date().toISOString().slice(0, 10),
+        })}
+        start={props.addressHistory?.start ?? "1950-01-01"}
+        end={props.addressHistory?.end ?? new Date().toISOString().slice(0, 10)}
+      />
+      {props.label && (props.addressHistory || props.addressLoading) ? (
+        <YearlyHail
+          events={props.addressHistory?.events ?? []}
+          start={props.addressHistory?.start ?? "1950-01-01"}
+          end={props.addressHistory?.end ?? new Date().toISOString().slice(0, 10)}
+          loading={props.addressLoading && !props.addressHistory}
+        />
+      ) : null}
       {!props.history && !props.loading && !props.label ? (
-        <div className="empty-state mt-6 max-w-xl">
+        <div className="empty-state mt-4 max-w-xl">
           <House className="mx-auto mb-2" size={26} />
           <p className="text-sm font-semibold text-ink">Search an address</p>
           <p className="mt-1 text-sm">

@@ -131,6 +131,8 @@ export async function POST(request: Request) {
         bounds: null,
         hours: daysInSpan(historySpan) * 24,
         rangeLabel: spanLabel(historySpan),
+        rangeStart: historySpan.start,
+        rangeEnd: historySpan.end,
         scoreDate: built.selectedDate ? built.events.find((event) => event.date === built.selectedDate)?.label ?? built.selectedDate : null,
         lossCandidates: candidates.map((event) => ({
           date: event.date,
@@ -186,6 +188,8 @@ export async function POST(request: Request) {
         bounds,
         hours: daysInSpan(historySpan) * 24,
         rangeLabel: spanLabel(historySpan),
+        rangeStart: historySpan.start,
+        rangeEnd: historySpan.end,
         scoreDate: newestDate || null,
         history,
         listed,

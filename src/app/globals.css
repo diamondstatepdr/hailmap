@@ -3008,3 +3008,139 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   flex: 1.35;
   font-weight: 750;
 }
+
+.source-years,
+.year-hail {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.year-chip {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.year-chip.chip-on {
+  color: var(--accent-ink);
+}
+
+.source-years,
+.year-hail {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel-2);
+}
+
+.source-years-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 44px;
+}
+
+.source-years h3,
+.year-hail h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.source-years .help-chip {
+  border: 1.5px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.source-years ul,
+.year-hail ol {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-years li,
+.source-years-detail,
+.year-hail p,
+.year-hail li {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.source-years-detail {
+  margin-top: 0.65rem;
+}
+
+.year-hail li {
+  display: grid;
+  grid-template-columns: 3.4rem 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 32px;
+}
+
+.year-hail-track {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.year-hail-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.year-hail-size {
+  min-width: 3.2rem;
+  text-align: right;
+  font-weight: 700;
+}
+
+.year-chip {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sheet-body > .page-enter > .sheet-band {
+  margin: 0.35rem -1rem 0.9rem;
+}
+
+.address-search {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.address-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  color: var(--text);
+  pointer-events: none;
+}
+
+.address-search-input {
+  min-height: 48px;
+  padding-left: 2.75rem;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.sheet-body .address-search {
+  margin-top: 0.2rem;
+}

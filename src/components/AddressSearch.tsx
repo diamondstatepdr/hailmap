@@ -72,12 +72,12 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
   }, [query]);
 
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="address-search">
       <label className="sr-only" htmlFor={inputId}>
         Search an address
       </label>
       <div className="relative">
-        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+        <Search size={20} strokeWidth={2.4} className="address-search-icon" aria-hidden />
         <input
           id={inputId}
           value={query}
@@ -91,7 +91,7 @@ export default function AddressSearch({ onPick, placeholder = "Address, city, or
               pick(hits[0]);
             }
           }}
-          className="glass w-full rounded-2xl py-2.5 pl-9 pr-3 text-sm outline-none"
+          className="address-search-input glass w-full rounded-2xl py-2.5 pr-3 outline-none"
         />
       </div>
       {status === "loading" ? <p className="px-1 pt-1 text-xs text-muted">Searching…</p> : null}

@@ -46,7 +46,8 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | `VAPID_SUBJECT` | `mailto:` or `https:` contact on each push. Defaults to the project mailbox. |
 | `HAILMAP_ALERT_INTERVAL_MS` | Alert loop interval. Default 3 minutes, clamped between 2 and 5. |
 | `HAILMAP_HISTORY_BACKFILL` | Set to `0` to skip the background fill of SPC daily files after the annual severe-weather database. |
-| `HAILMAP_MESH_BACKFILL` | Set to `1` to cache one past MESH day every 20 seconds. Leave unset on a small volume. |
+| `HAILMAP_MESH_BACKFILL` | Set to `0` to skip the background hail index. Otherwise one past day is indexed every 20 seconds. Raw GRIB is not kept. |
+| `HAILMAP_MESH_BUDGET_BYTES` | Stop the hail index at this many bytes. Default 335544320 (320 MB). |
 | `CAPACITOR_SERVER_URL` | HTTPS origin loaded by the Android WebView. |
 
 ## HTTP API
@@ -163,7 +164,7 @@ Field mode can list car dealerships and named auto lots inside a tapped hail swa
 
 ## Radar hail
 
-MRMS MESH is the free NOAA estimate of maximum hail size. Swathline reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address. Archive swaths start on 2019-09-28. See [docs/history-coverage.md](docs/history-coverage.md).
+MRMS MESH is the free NOAA estimate of maximum hail size. Swathline reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address. The 24-hour radar swath starts on 2019-09-28. Hourly radar hail fills 2019-08-20 through 2019-09-27. There is no free nationwide MESH archive before that, so older years use spotter reports (hail and wind from 1955, tornadoes from 1950). Address reports say which years each source covers. A background job indexes one day at a time and stops at a byte budget instead of keeping the raw GRIB. See [docs/history-coverage.md](docs/history-coverage.md).
 
 ## Storm history
 

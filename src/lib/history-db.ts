@@ -292,7 +292,12 @@ export function hailDaysInBounds(span: { start: string; end: string }, bounds: H
   }));
 }
 
-export function recordMeshGrid(stormDate: string, cells: Array<{ lat: number; lon: number; inches: number }>) {
+export function meshCellTotal(): number {
+  const row = historyDb().prepare("SELECT COALESCE(SUM(cell_count), 0) AS n FROM mesh_days").get() as { n: number };
+  return row.n;
+}
+
+export function recordMeshGrid(stormDate: string, cells: Array<{ lat: number; lon: number; inches: number }>): number {
   const db = historyDb();
   const del = db.prepare("DELETE FROM mesh_cells WHERE storm_date = ?");
   const ins = db.prepare(
@@ -325,6 +330,7 @@ export function recordMeshGrid(stormDate: string, cells: Array<{ lat: number; lo
     mark.run(stormDate, bins.size, maxIn, new Date().toISOString());
   });
   tx();
+  return bins.size;
 }
 
 export function meshDayReady(stormDate: string): boolean {

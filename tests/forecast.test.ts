@@ -6,6 +6,7 @@ import {
   bandForHail,
   dollarRange,
   estimateRange,
+  forecastShareText,
   moneyLabel,
   normalizePrices,
   percentLabel,
@@ -75,6 +76,11 @@ describe("storm-to-cash estimate", () => {
     expect(ESTIMATE_BADGE).toBe("ESTIMATE · GUIDE ONLY");
     expect(ESTIMATE_GUIDE).toBe("A rough guide based on averages. Not actual damage, claims or earnings.");
     expect(estimateRange(2_300_000, 5_800_000)).toBe("~$2.3M–$5.8M");
+    const shared = forecastShareText({ label: "Mesa, AZ", pdr: "~$2.3M–$5.8M", roof: "~$4.7M–$18M", lines: ['1.5": 1,000 vehicles · 40 damaged (4.0%)'] });
+    expect(shared).toContain("Storm-to-Cash Estimate");
+    expect(shared).toContain("ESTIMATE · GUIDE ONLY");
+    expect(shared).toContain("A rough guide based on averages. Not actual damage, claims or earnings.");
+    expect(shared).toContain("4.0%");
     expect(moneyLabel(1750)).toBe("$1,750");
     expect(moneyLabel(397_000)).toBe("$397k");
     expect(percentLabel(0)).toBe("0%");

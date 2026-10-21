@@ -5,6 +5,9 @@ import {
   CREW_CAPTURE_RATE,
   DAMAGE_BANDS,
   DEFAULT_PRICES,
+  ESTIMATE_BADGE,
+  ESTIMATE_GUIDE,
+  ESTIMATE_TITLE,
   type BacktestStorm,
   type DamageBand,
   type RateBasis,
@@ -374,6 +377,11 @@ export function estimateRange(low: number, high: number): string {
   const right = moneyLabel(high);
   if (left === right) return `~${left}`;
   return `~${left}–${right}`;
+}
+
+/** Text for the share sheet or clipboard. The badge and guide travel with the dollars. */
+export function forecastShareText(input: { label: string; pdr: string; roof: string; lines?: string[] }): string {
+  return [ESTIMATE_TITLE, ESTIMATE_BADGE, input.label, `PDR ${input.pdr}`, `Roofing ${input.roof}`, ...(input.lines ?? []), ESTIMATE_GUIDE].join("\n");
 }
 
 export function percentLabel(rate: number): string {

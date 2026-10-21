@@ -8,6 +8,7 @@ import {
   DEFAULT_PRICES,
   dollarRange,
   estimateRange,
+  forecastShareText,
   percentLabel,
   sumDollars,
   type ExposureLine,
@@ -99,6 +100,29 @@ export default function ForecastSheet({ label, query, onClose }: Props) {
   function setField(key: keyof JobPrices, value: string) {
     const next = Math.round(Number(value));
     setPrices((current) => ({ ...current, [key]: Number.isFinite(next) ? next : current[key] }));
+  }
+
+  async function shareEstimate() {
+    const text = forecastShareText({
+      label,
+      pdr: pdrText,
+      roof: roofText,
+      lines: lines.map((line) => `${line.label}: ${countLine(line)}`),
+    });
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: ESTIMATE_TITLE, text });
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setSaveNote("Copied. ESTIMATE · GUIDE ONLY");
+    } catch {
+      setSaveNote(text);
+    }
   }
 
   async function save() {
@@ -236,6 +260,9 @@ export default function ForecastSheet({ label, query, onClose }: Props) {
                 </label>
               ))}
             </div>
+            <button type="button" className="btn btn-secondary press mt-2 w-full" data-forecast-share onClick={() => void shareEstimate()}>
+              Share estimate
+            </button>
             <button type="button" className="btn btn-primary press mt-2 w-full" onClick={() => void save()} disabled={saving}>
               {saving ? "Saving…" : "Save prices for the team"}
             </button>

@@ -65,7 +65,7 @@ import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
-import { bandsFromFeatures, buildForecast, circlePolygon, type ForecastLine } from "@/lib/forecast";
+import { bandsForSelection, circlePolygon, type ForecastQuery } from "@/lib/forecast";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -203,7 +203,7 @@ export default function HailApp() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
-  const [forecast, setForecast] = useState<{ label: string; lines: ForecastLine[] } | null>(null);
+  const [forecast, setForecast] = useState<{ label: string; query: ForecastQuery } | null>(null);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
@@ -2213,7 +2213,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat && !area && !forecast && !placeCardOpen && !chasePopup ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
@@ -2272,7 +2272,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen && !forecast && !area && !placeCardOpen && !selected && !threat && !county && !chasePopup && !filtersOpen && !alertDraft && section === "map" && !(showMesh && (meshCollection?.features.length ?? 0) > 0) ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading
@@ -2314,14 +2314,17 @@ export default function HailApp() {
                 const spots = honey?.spots?.[honeyMode] ?? [];
                 const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
                 if (!spot) return;
+                const selection = circlePolygon(spot.lat, spot.lon, 1.8);
                 setForecast({
                   label: spot.name,
-                  lines: buildForecast({
-                    geometry: circlePolygon(spot.lat, spot.lon, 1.8),
-                    fallbackHail: spot.hailIn,
-                    vehicles: spot.vehicles,
-                    homes: spot.homes,
-                  }),
+                  query: {
+                    selection,
+                    selectionHail: spot.hailIn > 0 ? spot.hailIn : 0.75,
+                    selectionIsBand: false,
+                    bands: bandsForSelection(meshCollection?.features, selection, 0, { lon: spot.lon, lat: spot.lat }),
+                    vehicles: spot.vehicles != null && spot.vehicles > 0 ? spot.vehicles : null,
+                    homes: spot.homes != null && spot.homes > 0 ? spot.homes : null,
+                  },
                 });
                 setHoneyOpen(false);
               }}
@@ -2470,25 +2473,29 @@ export default function HailApp() {
                     type="button"
                     className="btn btn-secondary press"
                     data-forecast-open
-                    onClick={() =>
+                    onClick={() => {
+                      const hail = area.minIn ?? area.maxIn ?? 0.75;
                       setForecast({
                         label: area.label,
-                        lines: buildForecast({
-                          geometry: area.geometry,
-                          fallbackHail: area.maxIn ?? area.minIn ?? 0.75,
-                          bands: bandsFromFeatures(meshCollection?.features),
-                        }),
-                      })
-                    }
+                        query: {
+                          selection: area.geometry,
+                          selectionHail: hail,
+                          selectionIsBand: true,
+                          bands: bandsForSelection(meshCollection?.features, area.geometry, hail),
+                          vehicles: null,
+                          homes: null,
+                        },
+                      });
+                    }}
                   >
-                    Storm-to-cash
+                    Storm-to-cash estimate
                   </button>
                 </div>
               </MapDetailSheet>
             </div>
           ) : null}
           {section === "map" && !replay.active && forecast ? (
-            <ForecastSheet label={forecast.label} lines={forecast.lines} onClose={() => setForecast(null)} />
+            <ForecastSheet label={forecast.label} query={forecast.query} onClose={() => setForecast(null)} />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">

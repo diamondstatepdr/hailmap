@@ -95,7 +95,7 @@ export default function HoneyPanel(props: Props) {
       </button>
       {props.onForecast ? (
         <button type="button" className="btn btn-primary press" data-forecast-open disabled={!props.spots.length || props.needsDay} onClick={props.onForecast}>
-          Storm-to-cash
+          Storm-to-cash estimate
         </button>
       ) : null}
       <div className="honey-body">

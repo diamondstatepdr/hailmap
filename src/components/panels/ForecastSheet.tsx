@@ -2,20 +2,85 @@
 
 import { useEffect, useState } from "react";
 import BottomSheet from "@/components/ui/BottomSheet";
-import { DEFAULT_PRICES, moneyLabel, sumDollars, type ForecastLine, type JobPrices } from "@/lib/forecast";
+import {
+  basisTag,
+  captureCount,
+  DEFAULT_PRICES,
+  dollarRange,
+  estimateRange,
+  percentLabel,
+  sumDollars,
+  type ExposureLine,
+  type ForecastQuery,
+  type JobPrices,
+} from "@/lib/forecast";
+import {
+  CREW_CAPTURE_LABEL,
+  CREW_CAPTURE_NOTE,
+  ESTIMATE_BADGE,
+  ESTIMATE_GUIDE,
+  ESTIMATE_METHOD,
+  ESTIMATE_SOURCES,
+  ESTIMATE_TITLE,
+} from "@/lib/forecast-sources";
 
 interface Props {
   label: string;
-  lines: ForecastLine[];
+  query: Omit<ForecastQuery, "selectionHail"> & { selectionHail: number };
   onClose: () => void;
 }
 
-export default function ForecastSheet({ label, lines, onClose }: Props) {
+function countLine(line: ExposureLine): string {
+  const vehicles =
+    line.vehicles == null
+      ? "Vehicles unavailable"
+      : `${line.vehicles.toLocaleString("en-US")} vehicles · ${line.damagedVehicles?.toLocaleString("en-US") ?? 0} damaged (${percentLabel(line.vehicleRate)})`;
+  const roofs = `${line.roofs.toLocaleString("en-US")} roofs · ${line.damagedRoofs.toLocaleString("en-US")} damaged (${percentLabel(line.roofRate)})`;
+  return `${vehicles} · ${roofs}`;
+}
+
+export default function ForecastSheet({ label, query, onClose }: Props) {
   const [prices, setPrices] = useState<JobPrices>(DEFAULT_PRICES);
-  const [note, setNote] = useState<string | null>(null);
+  const [lines, setLines] = useState<ExposureLine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadNote, setLoadNote] = useState<string | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const dollars = sumDollars(lines, prices);
-  const assumed = lines.some((line) => line.vehicleSource === "assumed" || line.roofSource === "assumed");
+  const captureVehicles = dollars.damagedVehicles == null ? null : captureCount(dollars.damagedVehicles);
+  const captureRoofs = captureCount(dollars.damagedRoofs);
+  const showCapture = (captureVehicles ?? 0) > 0 || captureRoofs > 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadNote(null);
+    setLines([]);
+    void fetch("/api/forecast", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(query),
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { lines?: ExposureLine[]; note?: string | null; error?: string };
+        if (cancelled) return;
+        if (!response.ok) {
+          setLoadNote(payload.error ?? "Could not build that estimate.");
+          return;
+        }
+        setLines(payload.lines ?? []);
+        setLoadNote(payload.note ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadNote("Could not build that estimate.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +102,7 @@ export default function ForecastSheet({ label, lines, onClose }: Props) {
 
   async function save() {
     setSaving(true);
-    setNote(null);
+    setSaveNote(null);
     try {
       const response = await fetch("/api/forecast/prices", {
         method: "POST",
@@ -47,75 +112,131 @@ export default function ForecastSheet({ label, lines, onClose }: Props) {
       const payload = (await response.json()) as { error?: string; prices?: JobPrices };
       if (!response.ok) throw new Error(payload.error ?? "Could not save prices");
       if (payload.prices) setPrices(payload.prices);
-      setNote("Saved for this team.");
+      setSaveNote("Saved for this team.");
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "Could not save prices");
+      setSaveNote(error instanceof Error ? error.message : "Could not save prices");
     } finally {
       setSaving(false);
     }
   }
 
+  const pdrText = loading ? "Counting…" : dollars.pdr ? estimateRange(dollars.pdr.low, dollars.pdr.high) : "Unavailable";
+  const roofText = loading ? "Counting…" : lines.length ? estimateRange(dollars.roof.low, dollars.roof.high) : "Unavailable";
+
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-      <BottomSheet label="Storm-to-cash" tone="money" onClose={onClose} expandedMax="min(74dvh, 40rem)" peekHeight={128}>
-        <div data-forecast>
-          <p className="forecast-kicker">Estimate</p>
-          <p className="mt-1 text-lg font-semibold tracking-tight">{label}</p>
-          <div className="forecast-totals">
+      <BottomSheet label={ESTIMATE_TITLE} tone="money" onClose={onClose} expandedMax="min(74dvh, 40rem)" peekHeight={168}>
+        <div data-forecast className="px-4 pb-1">
+          <div className="forecast-head">
+            <h2 className="forecast-title">{ESTIMATE_TITLE}</h2>
+            <span className="forecast-badge" data-estimate-badge>
+              {ESTIMATE_BADGE}
+            </span>
+          </div>
+          <p className="forecast-place">{label}</p>
+          <div className="forecast-totals" data-forecast-totals>
             <div>
               <p>PDR</p>
-              <strong>
-                {moneyLabel(dollars.pdr.low)}–{moneyLabel(dollars.pdr.high)}
-              </strong>
+              <strong>{pdrText}</strong>
             </div>
             <div>
               <p>Roofing</p>
-              <strong>
-                {moneyLabel(dollars.roof.low)}–{moneyLabel(dollars.roof.high)}
-              </strong>
+              <strong>{roofText}</strong>
             </div>
           </div>
-          <ul className="forecast-lines">
-            {lines.map((line) => (
-              <li key={`${line.hailIn}-${line.areaSqMi}`}>
-                <span className="font-semibold">{line.label}</span>
-                <span>
-                  {line.vehicles.toLocaleString("en-US")} vehicles · {line.roofs.toLocaleString("en-US")} roofs
-                </span>
-                <span className="text-muted">{line.areaSqMi.toFixed(2)} sq mi</span>
-              </li>
-            ))}
-          </ul>
-          <p className="forecast-assume">
-            Estimate only. Not a bid or an inspection.
-            {assumed
-              ? " Uncounted bands use 900 vehicles and 450 roofs per square mile. Bands over 40 square miles are left out."
-              : " Counts come from this Money Hole."}{" "}
-            Dollars use the prices below.
+          <p className="forecast-guide" data-forecast-guide>
+            {ESTIMATE_GUIDE}
           </p>
-          <div className="forecast-prices" data-forecast-prices>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Price settings</p>
-            <label>
-              PDR low
-              <input inputMode="numeric" value={prices.pdrLow} onChange={(event) => setField("pdrLow", event.target.value)} />
-            </label>
-            <label>
-              PDR high
-              <input inputMode="numeric" value={prices.pdrHigh} onChange={(event) => setField("pdrHigh", event.target.value)} />
-            </label>
-            <label>
-              Roof low
-              <input inputMode="numeric" value={prices.roofLow} onChange={(event) => setField("roofLow", event.target.value)} />
-            </label>
-            <label>
-              Roof high
-              <input inputMode="numeric" value={prices.roofHigh} onChange={(event) => setField("roofHigh", event.target.value)} />
-            </label>
+          {loading ? <p className="forecast-assume">Counting Census homes and vehicles in each hail band…</p> : null}
+          {!loading && loadNote ? <p className="forecast-assume">{loadNote}</p> : null}
+          {!loading && lines.length ? (
+            <ul className="forecast-lines">
+              {lines.map((line) => {
+                const tag = basisTag(line.roofBasis) ?? basisTag(line.vehicleBasis);
+                const quiet = line.damagedRoofs === 0 && (line.damagedVehicles == null || line.damagedVehicles === 0);
+                const pdr =
+                  line.damagedVehicles == null
+                    ? null
+                    : estimateRange(
+                        dollarRange(line.damagedVehicles, prices.pdrLow, prices.pdrHigh).low,
+                        dollarRange(line.damagedVehicles, prices.pdrLow, prices.pdrHigh).high,
+                      );
+                const roof = estimateRange(
+                  dollarRange(line.damagedRoofs, prices.roofLow, prices.roofHigh).low,
+                  dollarRange(line.damagedRoofs, prices.roofLow, prices.roofHigh).high,
+                );
+                return (
+                  <li key={line.label}>
+                    <span className="forecast-line-top">
+                      <span className="font-semibold">{line.label}</span>
+                      {tag ? <span className="forecast-tag">{tag}</span> : null}
+                    </span>
+                    <span>{countLine(line)}</span>
+                    <span className="text-muted">{quiet ? "No expected damage" : [pdr ? `PDR ${pdr}` : null, `Roofing ${roof}`].filter(Boolean).join(" · ")}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+          {showCapture ? (
+            <div className="forecast-capture" data-forecast-capture>
+              <p className="forecast-line-top">
+                <span className="font-semibold">{CREW_CAPTURE_LABEL}</span>
+                <span className="forecast-tag">assumption</span>
+              </p>
+              <p>
+                {captureVehicles == null ? "Vehicles unavailable" : `${captureVehicles.toLocaleString("en-US")} vehicles`} · {captureRoofs.toLocaleString("en-US")} roofs
+              </p>
+              <p className="text-muted">
+                {captureVehicles != null
+                  ? `PDR ${estimateRange(dollarRange(captureVehicles, prices.pdrLow, prices.pdrHigh).low, dollarRange(captureVehicles, prices.pdrLow, prices.pdrHigh).high)} · `
+                  : ""}
+                Roofing {estimateRange(dollarRange(captureRoofs, prices.roofLow, prices.roofHigh).low, dollarRange(captureRoofs, prices.roofLow, prices.roofHigh).high)}
+              </p>
+              <p className="forecast-assume">{CREW_CAPTURE_NOTE}</p>
+            </div>
+          ) : null}
+          <section className="forecast-method">
+            <p>How this is estimated</p>
+            {ESTIMATE_METHOD.map((paragraph) => (
+              <p key={paragraph} className="forecast-assume">
+                {paragraph}
+              </p>
+            ))}
+            <p className="forecast-sources">
+              {ESTIMATE_SOURCES.map((source) => (
+                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                  {source.name}
+                </a>
+              ))}
+            </p>
+          </section>
+          <div className="forecast-footer">
+            <div className="forecast-prices" data-forecast-prices>
+              <p>Price settings</p>
+              {(
+                [
+                  ["pdrLow", "PDR low", "per car"],
+                  ["pdrHigh", "PDR high", "per car"],
+                  ["roofLow", "Roof low", "per roof"],
+                  ["roofHigh", "Roof high", "per roof"],
+                ] as const
+              ).map(([key, name, unit]) => (
+                <label key={key}>
+                  {name}
+                  <span className="forecast-unit">{unit}</span>
+                  <span className="forecast-money">
+                    <span aria-hidden>$</span>
+                    <input inputMode="numeric" value={prices[key]} onChange={(event) => setField(key, event.target.value)} />
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button type="button" className="btn btn-primary press mt-2 w-full" onClick={() => void save()} disabled={saving}>
+              {saving ? "Saving…" : "Save prices for the team"}
+            </button>
+            {saveNote ? <p className="mt-2 text-xs text-muted">{saveNote}</p> : null}
           </div>
-          <button type="button" className="btn btn-primary press mt-2 w-full" onClick={() => void save()} disabled={saving}>
-            {saving ? "Saving…" : "Save prices for the team"}
-          </button>
-          {note ? <p className="mt-2 text-xs text-muted">{note}</p> : null}
         </div>
       </BottomSheet>
     </div>

@@ -148,6 +148,8 @@ async function createProofFromField(browser) {
   await page.goto(`${base}/?lat=33.415&lon=-111.837&z=14&day=2026-10-20&scheme=light&theme=a`, { waitUntil: "domcontentloaded" });
   await mesh;
   await page.getByRole("button", { name: /^Field/ }).click();
+  await page.locator("[data-field-street]").waitFor({ timeout: 15000 });
+  await page.waitForFunction(() => /Main|Mesa/i.test(document.querySelector("[data-field-street]")?.textContent ?? ""), null, { timeout: 15000 });
   await page.locator("[data-hail-proof]").waitFor({ timeout: 20000 });
   const posted = page.waitForResponse(
     (response) => response.url().includes("/api/hail-proof") && !response.url().includes("/identity") && response.request().method() === "POST",

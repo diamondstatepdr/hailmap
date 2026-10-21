@@ -221,13 +221,12 @@ button {
   background-size: 22px 22px;
 }
 
-/* MapLibre opens the credit on load. Keep it in the info button until that button is used. */
-.maplibregl-ctrl-attrib.maplibregl-compact:not([data-tucked]) .maplibregl-ctrl-attrib-inner,
-.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) .maplibregl-ctrl-attrib-inner {
+/* Closed until the info button sets data-credit. MapLibre's compact-show class is not the source of truth. */
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
   display: none !important;
 }
 
-.maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+.maplibregl-ctrl-attrib[data-credit="open"] .maplibregl-ctrl-attrib-inner {
   display: block !important;
   position: absolute;
   right: 0;
@@ -252,12 +251,12 @@ button {
   color: #1d4ed8;
 }
 
-html.dark .maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+html.dark .maplibregl-ctrl-attrib[data-credit="open"] .maplibregl-ctrl-attrib-inner {
   background: color-mix(in srgb, var(--bg) 94%, white);
   color: var(--text);
 }
 
-html.dark .maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner a {
+html.dark .maplibregl-ctrl-attrib[data-credit="open"] .maplibregl-ctrl-attrib-inner a {
   color: var(--mark) !important;
 }
 

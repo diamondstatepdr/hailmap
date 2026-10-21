@@ -14,6 +14,8 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
+import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
+import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -153,6 +155,11 @@ export interface MapFrame {
   maxZoom?: number;
   /** Pixel inset so the framed storm sits in the map that is not covered by the chrome or replay bar. */
   padding?: { top: number; bottom: number; left: number; right: number };
+  /**
+   * Phone weekly sheet. Padding is computed from the map's own height at fit
+   * time. A window-height guess shrinks the country to the whole Americas.
+   */
+  chaseSheet?: { chromePx: number };
 }
 
 const THREAT_LAYERS = new Set([
@@ -337,7 +344,7 @@ export default function HailMap({
       frameWait.current = true;
       raw.once("idle", () => {
         frameWait.current = false;
-        applyFrame(frameRef.current);
+        if (frameRef.current?.nonce === next.nonce) applyFrame(frameRef.current);
       });
       return;
     }
@@ -375,7 +382,14 @@ export default function HailMap({
             left: 12,
             right: 12,
           }
-      : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
+      : next.chaseSheet && !desktop
+        ? chaseMapPadding({
+            mobile: true,
+            chromePx: next.chaseSheet.chromePx,
+            mapHeight: height,
+            sheet: true,
+          })
+        : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
     try {
       map.fitBounds(
         [
@@ -388,6 +402,7 @@ export default function HailMap({
           maxZoom: next.maxZoom ?? 8.2,
         },
       );
+      publishZoom();
     } catch {
       // A latitude outside the world throws inside MapLibre. Keep the camera where it is.
     }
@@ -427,8 +442,8 @@ export default function HailMap({
     const tick = () => {
       tuckAttribution();
       const root = mapRef.current?.getMap()?.getContainer()?.querySelector(".maplibregl-ctrl-attrib");
-      const tucked = root?.getAttribute("data-tucked") === "1" && !root.classList.contains("maplibregl-compact-show");
-      if (!tucked && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
+      const ready = root?.getAttribute("data-credit") === "open" || root?.getAttribute("data-credit") === "closed";
+      if (!ready && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -445,16 +460,29 @@ export default function HailMap({
     }
   }
 
+  function publishZoom() {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    map.getContainer().dataset.mapZoom = map.getZoom().toFixed(2);
+  }
+
   function tuckAttribution() {
     const map = mapRef.current?.getMap();
     const root = map?.getContainer()?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
     if (!root?.classList.contains("maplibregl-compact")) return;
+    if (root.dataset.credit === "open" || root.dataset.credit === "closed") return;
+    root.dataset.credit = "closed";
     root.classList.remove("maplibregl-compact-show");
-    if (root.dataset.tucked === "1") return;
-    root.dataset.tucked = "1";
-    root.querySelector("summary")?.addEventListener("click", (event) => {
-      event.preventDefault();
-    });
+    root.removeAttribute("open");
+    const summary = root.querySelector("summary");
+    summary?.addEventListener(
+      "click",
+      (event) => {
+        const open = toggleMapCredit(root, event);
+        summary.setAttribute("aria-expanded", open ? "true" : "false");
+      },
+      true,
+    );
   }
 
   function quietBaseStateLayers() {
@@ -560,9 +588,9 @@ export default function HailMap({
     <Map
       ref={mapRef}
       initialViewState={{
-        longitude: focus?.lon ?? -98.2,
-        latitude: focus?.lat ?? 38.4,
-        zoom: focus?.zoom ?? 4.15,
+        longitude: focus?.lon ?? DEFAULT_HOME_VIEW.lon,
+        latitude: focus?.lat ?? DEFAULT_HOME_VIEW.lat,
+        zoom: focus?.zoom ?? DEFAULT_HOME_VIEW.zoom,
       }}
       mapStyle={mapStyle}
       attributionControl={false}
@@ -580,6 +608,7 @@ export default function HailMap({
         installIcons();
         quietBaseStateLayers();
         tuckAttribution();
+        publishZoom();
         applyFrame();
         const raw = mapRef.current?.getMap();
         const bounds = raw ? readMapBounds(raw) : null;
@@ -598,6 +627,7 @@ export default function HailMap({
       }}
       onMoveEnd={(event) => {
         const bounds = readMapBounds(event.target);
+        publishZoom();
         if (!bounds) return;
         onPreviewBounds?.(bounds);
         onViewChange?.(bounds);

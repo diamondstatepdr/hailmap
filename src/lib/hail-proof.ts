@@ -1,5 +1,6 @@
 import { pointInGeometry } from "@/lib/geo";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { parseProofConfirm, type ProofConfirm } from "@/lib/proof-confirm";
 import { measureGeometry, readoutForSelection, statLine } from "@/lib/swath-measure";
 
 export interface ProofStorm {
@@ -30,6 +31,8 @@ export interface HailProof {
   colors: string[];
   /** Length, width, and area from the full swath, matching the swath sheet. */
   swathLine: string;
+  /** NOAA radar scan compared with Local Storm Reports. Null on older proofs. */
+  confirm: ProofConfirm | null;
   createdAt: string;
 }
 
@@ -115,6 +118,7 @@ export function normalizeProof(input: unknown, createdAt = new Date().toISOStrin
     rings,
     colors: rings.map((_, index) => colors[index] || "#f97316"),
     swathLine: clip(row.swathLine, 120),
+    confirm: parseProofConfirm(row.confirm),
     createdAt,
   };
 }

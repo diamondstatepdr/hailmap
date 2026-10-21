@@ -3,6 +3,8 @@ import { takeActionSlot } from "@/lib/accounts";
 import { normalizeProof, proofFilename } from "@/lib/hail-proof";
 import { saveHailProof } from "@/lib/hail-proof-store";
 import { clientIp } from "@/lib/photos";
+import { unavailableConfirm } from "@/lib/proof-confirm";
+import { loadProofConfirm } from "@/lib/proof-confirm-load";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +21,17 @@ export async function POST(request: Request) {
   }
   const proof = normalizeProof(body);
   if ("error" in proof) return Response.json({ error: proof.error }, { status: 400 });
-  const saved = saveHailProof(proof);
+  const requested = body && typeof body === "object" ? (body as { stormDate?: unknown }).stormDate : null;
+  const stormDate = typeof requested === "string" && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : "";
+  let confirm = null;
+  if (stormDate) {
+    try {
+      confirm = await loadProofConfirm({ lat: proof.lat, lon: proof.lon, stormDate });
+    } catch {
+      confirm = unavailableConfirm();
+    }
+  }
+  const saved = saveHailProof({ ...proof, confirm });
   return Response.json(
     {
       id: saved.id,

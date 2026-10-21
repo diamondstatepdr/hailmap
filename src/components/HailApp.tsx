@@ -1540,6 +1540,7 @@ export default function HailApp() {
         rings: bands.map((band) => band.ring),
         colors: bands.map((band) => band.color),
         swathLine: swathCaptionNearPoint(features, input.lat, input.lon),
+        stormDate: historyMode.kind === "day" ? historyMode.date : undefined,
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;

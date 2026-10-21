@@ -2,7 +2,7 @@ import { deflateSync, crc32 } from "node:zlib";
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cellsToSwaths, DEFAULT_MESH_SHAPE, sampleIndexed, indexCells, type MeshCell } from "@/lib/mesh-contour";
-import { gunzipIfNeeded, meshInches, readGribMesh } from "@/lib/grib-mesh";
+import { gunzipIfNeeded, meshInches, readGribMesh, sampleGribInches } from "@/lib/grib-mesh";
 import { dayFetchUrls, planMesh } from "@/lib/mesh-plan";
 import { buildStormReport } from "@/lib/storm-report";
 import type { PlaceHistory } from "@/lib/place";
@@ -187,6 +187,8 @@ describe("GRIB2 MESH decode", () => {
     expect(decoded.cells[0].inches).toBe(1);
     const indexed = indexCells(decoded.cells, decoded.shape);
     expect(sampleIndexed(indexed, decoded.shape, 39.99, -99.99)).toBe(1);
+    expect(sampleGribInches(sampleGrib(), 39.99, -99.99)).toEqual({ validTime: "2024-05-21T18:00:00.000Z", inches: 1 });
+    expect(sampleGribInches(sampleGrib(), 39.99, -80).inches).toBe(0);
   });
 
   it("decodes a live NOAA MESH file when one is cached locally", () => {

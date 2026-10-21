@@ -271,6 +271,16 @@ export function sampleIndexed(
   return max == null ? null : Math.round(max * 100) / 100;
 }
 
+/** Inches in the single grid cell under the point. Neighboring cells are left out so a core does not paint the lots beside it. */
+export function sampleCell(index: Map<number, number>, shape: MeshGridShape, lat: number, lon: number): number | null {
+  if (lat < shape.south || lat > shape.south + shape.ny * shape.step) return null;
+  if (lon < shape.west || lon > shape.west + shape.nx * shape.step) return null;
+  const ix = Math.min(shape.nx - 1, Math.max(0, Math.floor((lon - shape.west) / shape.step)));
+  const iy = Math.min(shape.ny - 1, Math.max(0, Math.floor((lat - shape.south) / shape.step)));
+  const value = index.get(ix + iy * shape.nx);
+  return value == null ? null : Math.round(value * 100) / 100;
+}
+
 export function indexCells(cells: MeshCell[], shape: MeshGridShape): Map<number, number> {
   const index = new Map<number, number>();
   for (const cell of cells) {

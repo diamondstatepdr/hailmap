@@ -1,5 +1,5 @@
 import { readGeocodeCache, writeGeocodeCache } from "@/lib/accounts";
-import { forwardGeocode, reverseStreet, type GeocodeCache } from "@/lib/forward-geocode";
+import { forwardGeocode, reverseLookup, type GeocodeCache } from "@/lib/forward-geocode";
 import { validLatLon } from "@/lib/geo";
 
 export const runtime = "nodejs";
@@ -21,13 +21,14 @@ export async function GET(request: Request) {
   const lon = Number(url.searchParams.get("lon"));
   if (url.searchParams.has("lat") || url.searchParams.has("lon")) {
     if (!validLatLon(lat, lon)) return Response.json({ error: "lat and lon are required" }, { status: 400 });
-    const street = await reverseStreet(lat, lon, cache);
+    const lookup = await reverseLookup(lat, lon, cache);
     return Response.json(
       {
         lat,
         lon,
-        street,
-        streetStatus: street ? "ok" : "unavailable",
+        street: lookup.street,
+        place: lookup.place,
+        streetStatus: lookup.street ? "ok" : "unavailable",
       },
       { headers: { "Cache-Control": "no-store" } },
     );

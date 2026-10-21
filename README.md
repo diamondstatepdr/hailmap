@@ -60,7 +60,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/replay?date=YYYY-MM-DD&west=&south=&east=&north=` — one convective day prepared for playback. Returns 15-minute frame times, spotter reports, and archived severe-thunderstorm and tornado warning polygons inside the box. Reports come from the history index when that day is already stored, otherwise from that day’s SPC CSV. Warnings come from the IEM storm-based warning archive.
 - `GET /api/replay/frame?date=&at=&west=&south=&east=&north=` — radar for one replay time. The swath is MRMS `MESH_Max_1440min` minus the 12:00 UTC baseline, so hail builds through the day. A brighter pulse is the instantaneous MESH scan nearest that time. Scans are cached under `$HAILMAP_DATA_DIR/mesh/replay`.
 - `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
-- `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap
+- `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap. The swath card ranks them by hail size at the lot, with the OSM phone (tap to call) and Google / Apple directions. The field finder stays sorted by distance.
 - `GET /api/income` — county polygons with ACS median household income
 - `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway

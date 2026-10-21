@@ -51,7 +51,7 @@ import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
-import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
+import { boundsCenter, fieldPinPoint, resolveFieldAnchor, FIELD_LOOKUP_MS, type FieldAnchor } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
 import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
@@ -274,7 +274,11 @@ export default function HailApp() {
   const [pins, setPins] = useState<FieldPin[]>([]);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationOn, setLocationOn] = useState(false);
+  const [fieldAnchor, setFieldAnchor] = useState<FieldAnchor | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const centerOnFix = useRef(false);
+  const fieldPan = useRef(false);
   const [street, setStreet] = useState<string | null>(null);
   const [streetStatus, setStreetStatus] = useState<"idle" | "loading" | "unavailable" | "ok">("idle");
   const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
@@ -595,38 +599,27 @@ export default function HailApp() {
   }, [showIncome, income, incomeError]);
 
   useEffect(() => {
-    if (section !== "field") return;
-    const applyFallback = (message: string) => {
-      setUserLocation((current) => {
-        if (current) return current;
-        const fallback = fieldFallbackPoint({ gps: null, searched: placePointRef.current, view: viewBoundsRef.current });
-        if (!fallback) {
-          setGpsError(message);
-          return current;
-        }
-        setGpsError(
-          fallback.source === "search"
-            ? "Location is blocked. Using the address you searched."
-            : "Location is blocked. Using the map center.",
-        );
-        return { lat: fallback.lat, lon: fallback.lon };
-      });
-    };
-    if (!navigator.geolocation) {
-      applyFallback("This browser cannot share location.");
-      return;
-    }
-    setGpsError(null);
-    const timer = window.setTimeout(() => applyFallback("Location is taking too long."), FIELD_LOOKUP_MS);
+    if (!locationOn) return;
+    if (!navigator.geolocation) return;
+    const timer = window.setTimeout(() => {
+      setGpsError((current) => current ?? "Location is taking too long.");
+    }, FIELD_LOOKUP_MS);
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         window.clearTimeout(timer);
-        setUserLocation({ lat: position.coords.latitude, lon: position.coords.longitude });
+        const point = { lat: position.coords.latitude, lon: position.coords.longitude };
+        setUserLocation(point);
         setGpsError(null);
+        if (!centerOnFix.current) return;
+        centerOnFix.current = false;
+        setFieldAnchor({ ...point, source: "gps" });
+        setFocus({ lat: point.lat, lon: point.lon, zoom: 13, nonce: Date.now() });
       },
       () => {
         window.clearTimeout(timer);
-        applyFallback("Location is blocked. Allow location access to drive Field mode.");
+        centerOnFix.current = false;
+        setLocationOn(false);
+        setGpsError("Location is blocked. Allow location access to drive Field mode.");
       },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 8000 },
     );
@@ -634,7 +627,7 @@ export default function HailApp() {
       window.clearTimeout(timer);
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [section]);
+  }, [locationOn]);
 
   useEffect(() => {
     if (!placePoint) return;
@@ -922,10 +915,11 @@ export default function HailApp() {
   }, [calendarOpen, calendarYear, viewBounds, filter.state]);
 
   const fieldHours = useRef(filter.hours);
+  const fieldPlaceRef = useRef(fieldPlace);
+  fieldPlaceRef.current = fieldPlace;
   const activeFieldHours = fieldSpanHours ?? filter.hours;
-  const fieldFix = section === "field" ? fieldFallbackPoint({ gps: userLocation, searched: placePoint, view: viewBounds }) : null;
-  const fieldLat = fieldFix?.lat ?? null;
-  const fieldLon = fieldFix?.lon ?? null;
+  const fieldLat = section === "field" ? (fieldAnchor?.lat ?? null) : null;
+  const fieldLon = section === "field" ? (fieldAnchor?.lon ?? null) : null;
   useEffect(() => {
     if (section !== "field") {
       lastStreetFix.current = null;
@@ -936,49 +930,53 @@ export default function HailApp() {
     const point = { lat: fieldLat, lon: fieldLon };
     const previous = lastStreetFix.current;
     const sameSpot = previous != null && haversineKm(previous.lat, previous.lon, point.lat, point.lon) < 0.2;
-    if (sameSpot && fieldHours.current === activeFieldHours && fieldPlace) return;
+    if (sameSpot && fieldHours.current === activeFieldHours && fieldPlaceRef.current) return;
     fieldHours.current = activeFieldHours;
-    lastStreetFix.current = point;
-    if (!previous) setFocus({ lon: point.lon, lat: point.lat, nonce: Date.now(), zoom: 13 });
     let cancelled = false;
-    setStreetStatus("loading");
-    setStreetStalled(false);
-    const stall = window.setTimeout(() => {
-      if (!cancelled) setStreetStalled(true);
-    }, FIELD_LOOKUP_MS);
-    const params = new URLSearchParams({
-      lat: String(point.lat),
-      lon: String(point.lon),
-      radiusKm: String(milesToKm(DEFAULT_RADIUS_MI)),
-      hours: String(activeFieldHours),
-    });
-    fetch(`/api/place?${params}`)
-      .then(async (response) => {
-        const payload = (await response.json()) as PlaceHistory & { error?: string };
-        if (!response.ok) throw new Error(payload.error ?? "Score unavailable");
-        if (!cancelled) {
-          setFieldPlace(payload);
-          setFieldError(null);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) setFieldError(reason instanceof Error ? reason.message : "Score unavailable");
+    let stall = 0;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      lastStreetFix.current = point;
+      setStreetStatus("loading");
+      setStreetStalled(false);
+      stall = window.setTimeout(() => {
+        if (!cancelled) setStreetStalled(true);
+      }, FIELD_LOOKUP_MS);
+      const params = new URLSearchParams({
+        lat: String(point.lat),
+        lon: String(point.lon),
+        radiusKm: String(milesToKm(DEFAULT_RADIUS_MI)),
+        hours: String(activeFieldHours),
       });
-    fetch(`/api/geocode?lat=${point.lat}&lon=${point.lon}`)
-      .then((response) => response.json())
-      .then((payload: { street?: string | null }) => {
-        if (cancelled) return;
-        setStreet(payload.street ?? null);
-        setStreetStatus(payload.street ? "ok" : "unavailable");
-      })
-      .catch(() => {
-        if (!cancelled) setStreetStatus("unavailable");
-      });
+      fetch(`/api/place?${params}`)
+        .then(async (response) => {
+          const payload = (await response.json()) as PlaceHistory & { error?: string };
+          if (!response.ok) throw new Error(payload.error ?? "Score unavailable");
+          if (!cancelled) {
+            setFieldPlace(payload);
+            setFieldError(null);
+          }
+        })
+        .catch((reason: unknown) => {
+          if (!cancelled) setFieldError(reason instanceof Error ? reason.message : "Score unavailable");
+        });
+      fetch(`/api/geocode?lat=${point.lat}&lon=${point.lon}`)
+        .then((response) => response.json())
+        .then((payload: { street?: string | null }) => {
+          if (cancelled) return;
+          setStreet(payload.street ?? null);
+          setStreetStatus(payload.street ? "ok" : "unavailable");
+        })
+        .catch(() => {
+          if (!cancelled) setStreetStatus("unavailable");
+        });
+    }, 500);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
       window.clearTimeout(stall);
     };
-  }, [section, fieldLat, fieldLon, activeFieldHours, fieldPlace]);
+  }, [section, fieldLat, fieldLon, activeFieldHours]);
 
   const replayFiltered = useMemo(() => {
     if (!replay.active || !replay.manifest || !replay.at) return null;
@@ -1255,8 +1253,42 @@ export default function HailApp() {
     });
   }
 
+  function startLocation(center: boolean) {
+    if (!navigator.geolocation) {
+      setGpsError("This browser cannot share location.");
+      return;
+    }
+    if (center && userLocation) {
+      setFieldAnchor({ lat: userLocation.lat, lon: userLocation.lon, source: "gps" });
+      setFocus({ lat: userLocation.lat, lon: userLocation.lon, zoom: 13, nonce: Date.now() });
+      setLocationOn(true);
+      setGpsError(null);
+      return;
+    }
+    centerOnFix.current = center;
+    setGpsError(null);
+    setLocationOn(true);
+  }
+
+  function enterField(anchor?: FieldAnchor) {
+    if (anchor) {
+      setFieldAnchor(anchor);
+    } else if (section !== "field") {
+      setFieldAnchor(
+        resolveFieldAnchor({
+          selection: selected ? { lat: selected.lat, lon: selected.lon } : null,
+          search: placePoint,
+          map: boundsCenter(viewBoundsRef.current ?? viewBounds),
+          gpsChosen: false,
+        }),
+      );
+    }
+    setSection("field");
+  }
+
   function chooseAddress(hit: AddressHit) {
     userMoved.current = true;
+    setFieldAnchor({ lat: hit.lat, lon: hit.lon, source: "search" });
     const next = beginAddressSelection(hit, radiusMi, filter.hours);
     setPlaceLabel(next.label);
     setPlacePoint({ lat: next.lat, lon: next.lon });
@@ -1273,9 +1305,9 @@ export default function HailApp() {
   }
 
   function searchNearField() {
-    const point = userLocation ?? placePoint ?? (viewBounds ? { lat: (viewBounds.south + viewBounds.north) / 2, lon: (viewBounds.west + viewBounds.east) / 2 } : null);
+    const point = fieldAnchor ?? boundsCenter(viewBoundsRef.current ?? viewBounds);
     if (!point) {
-      setDealerError("Search an address or allow location, then try again.");
+      setDealerError("Move the map or search an address, then try again.");
       setDealers([]);
       return;
     }
@@ -1288,7 +1320,7 @@ export default function HailApp() {
     const north = point.lat + dLat;
     void loadDealers({
       id: "near",
-      label: "Near me",
+      label: "Near this spot",
       source: "view",
       minIn: null,
       maxIn: null,
@@ -1327,7 +1359,11 @@ export default function HailApp() {
   }
 
   async function markPin(statusPin: PinStatus, note: string) {
-    const point = userLocation ?? placePoint;
+    const point = fieldPinPoint({
+      gps: userLocation,
+      locationOn,
+      mapCenter: boundsCenter(viewBoundsRef.current ?? viewBounds),
+    });
     if (!point) return;
     const response = await fetch("/api/field/pins", {
       method: "POST",
@@ -1362,7 +1398,7 @@ export default function HailApp() {
     setDealerNote(null);
     setSelectedDealerId(null);
     try {
-      const near = userLocation ?? placePoint;
+      const near = (section === "field" ? fieldAnchor : null) ?? placePoint;
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 55000);
       let response: Response;
@@ -1704,7 +1740,10 @@ export default function HailApp() {
   return (
     <AppShell
       section={section}
-      onSection={setSection}
+      onSection={(next) => {
+        if (next === "field") enterField();
+        else setSection(next);
+      }}
       theme={theme}
       onToggleTheme={toggleTheme}
       onOpenAppearance={() => setPickerOpen(true)}
@@ -1777,10 +1816,16 @@ export default function HailApp() {
               setSelectedId(id);
               setCounty(null);
               setThreat(null);
+              const report = reports.find((item) => item.id === id);
+              if (report && section === "field") {
+                setFieldAnchor({ lat: report.lat, lon: report.lon, source: "selection" });
+              }
             }}
             onSelectFieldPin={(id) => {
               setSelectedPinId(id);
-              setSection("field");
+              const pin = pins.find((item) => item.id === id);
+              if (pin) enterField({ lat: pin.lat, lon: pin.lon, source: "selection" });
+              else enterField();
             }}
             onSelectCounty={(info) => {
               setCounty(info);
@@ -1800,9 +1845,13 @@ export default function HailApp() {
             }}
             onSelectDealer={(id) => {
               setSelectedDealerId(id);
-              setSection("field");
               const dealer = dealers.find((item) => item.id === id);
-              if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+              if (dealer) {
+                enterField({ lat: dealer.lat, lon: dealer.lon, source: "selection" });
+                setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+              } else {
+                enterField();
+              }
             }}
             onPreviewBounds={(bounds) => {
               viewBoundsRef.current = bounds;
@@ -1810,10 +1859,19 @@ export default function HailApp() {
             onUserMove={() => {
               userMoved.current = true;
               nationalShown.current = false;
+              if (section === "field") fieldPan.current = true;
             }}
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
+              if (section === "field" && fieldPan.current) {
+                fieldPan.current = false;
+                const center = boundsCenter(bounds);
+                if (center) setFieldAnchor({ ...center, source: "map" });
+              } else if (section === "field") {
+                const center = boundsCenter(bounds);
+                if (center) setFieldAnchor((current) => current ?? { ...center, source: "map" });
+              }
               if (!nationalShown.current) {
                 const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
                 writeSavedView({ ...center, zoom: zoomFromBounds(bounds) });
@@ -2327,7 +2385,15 @@ export default function HailApp() {
                   >
                     Alert me here
                   </button>
-                  <button type="button" className="btn btn-secondary press" onClick={() => setSection("field")}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary press"
+                    onClick={() => {
+                      const center = ringCenter(area.geometry);
+                      if (center) enterField({ lat: center.lat, lon: center.lon, source: "selection" });
+                      else enterField();
+                    }}
+                  >
                     Open in field mode
                   </button>
                 </div>
@@ -2380,6 +2446,9 @@ export default function HailApp() {
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
               <FieldSheet
                 gpsError={gpsError}
+                locationOn={locationOn}
+                onMyLocation={() => startLocation(false)}
+                onCenterOnMe={() => startLocation(true)}
                 street={street}
                 streetStatus={streetStatus}
                 lat={fieldLat}
@@ -2402,14 +2471,18 @@ export default function HailApp() {
                 onSelectDealer={(id) => {
                   setSelectedDealerId(id);
                   const dealer = dealers.find((item) => item.id === id);
-                  if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+                  if (!dealer) return;
+                  setFieldAnchor({ lat: dealer.lat, lon: dealer.lon, source: "selection" });
+                  setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
                 }}
                 onSignIn={() => setAuthOpen(true)}
                 onMark={(statusPin, note) => void markPin(statusPin, note)}
                 onSelectPin={(id) => {
                   setSelectedPinId(id);
                   const pin = pins.find((item) => item.id === id);
-                  if (pin) setFocus({ lon: pin.lon, lat: pin.lat, nonce: Date.now(), zoom: 16 });
+                  if (!pin) return;
+                  setFieldAnchor({ lat: pin.lat, lon: pin.lon, source: "selection" });
+                  setFocus({ lon: pin.lon, lat: pin.lat, nonce: Date.now(), zoom: 16 });
                 }}
                 onUpload={uploadFieldPhoto}
                 onClose={() => setSection("map")}

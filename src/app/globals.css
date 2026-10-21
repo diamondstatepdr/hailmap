@@ -3363,14 +3363,12 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .forecast-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin: 0.85rem -1rem 0;
-  padding: 0.75rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+  position: static;
+  margin: 1rem 0 0;
+  padding: 0.85rem 0 0.4rem;
   border-top: 1px solid var(--border);
-  background: var(--panel);
-  box-shadow: 0 -10px 18px color-mix(in srgb, var(--panel) 82%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 
 .forecast-money {

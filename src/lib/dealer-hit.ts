@@ -6,6 +6,11 @@ export interface LotBand {
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
 }
 
+function roundInches(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(Math.min(8, value) * 100) / 100;
+}
+
 export function telHref(phone: string | null): string | null {
   if (!phone) return null;
   const keep = phone.replace(/[^\d+]/g, "");
@@ -22,16 +27,24 @@ export function dealerDirections(lat: number, lon: number): { google: string; ap
   };
 }
 
-export function hailAtLot(lat: number, lon: number, bands: LotBand[], fallback: number): number {
-  let best = 0;
+/**
+ * Hail at a lot is the MESH inches when that sample sits in the heaviest band
+ * covering the point. A sample from a heavier band that does not cover the lot
+ * stays at the covering band's floor instead of the swath peak.
+ */
+export function hailAtLot(lat: number, lon: number, bands: LotBand[], fallback: number, meshIn?: number | null): number {
+  let floor = 0;
   for (const band of bands) {
-    if (!Number.isFinite(band.minIn) || band.minIn <= best) continue;
-    if (pointInGeometry(lon, lat, band.geometry)) best = band.minIn;
+    if (!Number.isFinite(band.minIn) || band.minIn <= floor) continue;
+    if (pointInGeometry(lon, lat, band.geometry)) floor = band.minIn;
   }
-  if (best > 0) return Math.round(Math.min(8, best) * 100) / 100;
-  const n = Number(fallback);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.round(Math.min(8, n) * 100) / 100;
+  const mesh = meshIn != null && Number.isFinite(meshIn) && meshIn > 0 ? meshIn : null;
+  if (mesh != null && (floor === 0 || mesh + 0.02 >= floor)) {
+    return roundInches(Math.max(mesh, floor));
+  }
+  if (floor > 0) return roundInches(floor);
+  if (mesh != null) return roundInches(mesh);
+  return roundInches(Number(fallback));
 }
 
 /** Highest hail at the lot first. Distance order is only the tie break, so the finder stays distance-sorted when hail is equal. */
@@ -41,7 +54,7 @@ export function rankDealersByHail(
   fallback: number,
 ): Array<DealerPin & { hailIn: number }> {
   return dealers
-    .map((dealer) => ({ ...dealer, hailIn: hailAtLot(dealer.lat, dealer.lon, bands, fallback) }))
+    .map((dealer) => ({ ...dealer, hailIn: hailAtLot(dealer.lat, dealer.lon, bands, fallback, dealer.meshIn) }))
     .sort((a, b) => b.hailIn - a.hailIn || a.distanceKm - b.distanceKm || a.name.localeCompare(b.name));
 }
 
@@ -56,7 +69,6 @@ export function lotBands(
     if (!Number.isFinite(minIn) || minIn <= 0 || !geometry) continue;
     if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") continue;
     bands.push({ minIn, geometry });
-    if (bands.length >= 80) break;
   }
   return bands;
 }

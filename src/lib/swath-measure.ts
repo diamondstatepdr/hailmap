@@ -26,6 +26,8 @@ export interface SwathReadout {
   bands: SwathBandStats[];
   total: SwathStats;
   motion: SwathMotion;
+  /** Highest inches that belongs to a band actually listed. */
+  peakIn: number;
 }
 
 const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
@@ -248,16 +250,16 @@ export function readoutForSelection(
   selection: MeasuredSelection,
   features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }> = [],
 ): SwathReadout {
-  const pieces: Array<{ minIn: number; geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon; stats: SwathStats }> = [];
+  const pieces: Array<{ minIn: number; maxIn: number; geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon; stats: SwathStats }> = [];
   const seen = new Set<string>();
-  const add = (minIn: number, geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon) => {
+  const add = (minIn: number, maxIn: number, geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon) => {
     const center = centroid(geometry);
     const key = `${bandOf(minIn).minIn}|${center ? center.lon.toFixed(3) : "x"}|${center ? center.lat.toFixed(3) : "y"}`;
     if (seen.has(key)) return;
     seen.add(key);
-    pieces.push({ minIn, geometry, stats: measureGeometry(geometry) });
+    pieces.push({ minIn, maxIn, geometry, stats: measureGeometry(geometry) });
   };
-  add(selection.minIn ?? selection.maxIn ?? 0, selection.geometry);
+  add(selection.minIn ?? selection.maxIn ?? 0, selection.maxIn ?? selection.minIn ?? 0, selection.geometry);
   for (const feature of features) {
     const geometry = feature.geometry;
     if (!isPoly(geometry)) continue;
@@ -266,7 +268,8 @@ export function readoutForSelection(
     if ((selection.minIn ?? 0) > 0 && hail + 1e-6 < (selection.minIn ?? 0)) continue;
     const center = centroid(geometry);
     if (!center || !pointInOuter(center.lon, center.lat, selection.geometry)) continue;
-    add(hail, geometry);
+    const maxIn = Number(feature.properties?.maxIn ?? feature.properties?.maxSizeIn);
+    add(hail, Number.isFinite(maxIn) ? maxIn : hail, geometry);
   }
   const grouped = new Map<number, { label: string; parts: typeof pieces }>();
   for (const piece of pieces) {
@@ -291,13 +294,19 @@ export function readoutForSelection(
     }
     return { minIn: band.minIn, label: band.label, lengthMi: band.lengthMi, widthMi: band.widthMi, areaSqMi: Math.max(0, areaSqMi), axisDeg: band.axisDeg };
   });
-  const footprint = rawBands.reduce((best, band) => (band.areaSqMi > best.areaSqMi ? band : best), rawBands[0]);
+  const unionGeometry = rawBands.length <= 1 ? rawBands[0]?.geometry : combine(rawBands.map((band) => band.geometry));
+  const unionStats = unionGeometry ? measureGeometry(unionGeometry) : { lengthMi: 0, widthMi: 0, areaSqMi: 0, axisDeg: null };
   const total = {
-    lengthMi: footprint?.lengthMi ?? 0,
-    widthMi: footprint?.widthMi ?? 0,
+    lengthMi: Math.max(unionStats.lengthMi, ...rawBands.map((band) => band.lengthMi), 0),
+    widthMi: Math.max(unionStats.widthMi, ...rawBands.map((band) => band.widthMi), 0),
     areaSqMi: bands.reduce((sum, band) => sum + band.areaSqMi, 0),
-    axisDeg: footprint?.axisDeg ?? null,
+    axisDeg: unionStats.axisDeg,
   };
+  const floors = new Set(bands.map((band) => band.minIn));
+  const peakCandidates = [selection.maxIn, selection.minIn, ...pieces.flatMap((piece) => [piece.maxIn, piece.minIn])].filter(
+    (value): value is number => value != null && Number.isFinite(value) && value > 0 && floors.has(bandOf(value).minIn),
+  );
+  const peakIn = peakCandidates.length ? Math.max(...peakCandidates) : (bands[0]?.minIn ?? 0);
   const direction =
     selection.startLat != null && selection.startLon != null && selection.endLat != null && selection.endLon != null
       ? movingLabel(selection.startLat, selection.startLon, selection.endLat, selection.endLon)
@@ -305,6 +314,7 @@ export function readoutForSelection(
   return {
     bands,
     total,
+    peakIn,
     motion: { direction, startedAt: selection.startedAt ?? null, endedAt: selection.endedAt ?? null },
   };
 }

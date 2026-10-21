@@ -185,6 +185,13 @@ button {
   color: var(--accent-ink);
 }
 
+.swath-kicker {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
 .swath-stats {
   display: grid;
   gap: 0.2rem;
@@ -2446,12 +2453,23 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .dealer-hit li {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.15rem;
   border-radius: 0.8rem;
   background: var(--panel-2);
   padding: 0.45rem 0.55rem;
+}
+
+.dealer-hit-main {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
 }
 
 .dealer-hit-rank {

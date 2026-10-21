@@ -250,6 +250,7 @@ export default function HailApp() {
   const [dealerError, setDealerError] = useState<string | null>(null);
   const [dealerLoading, setDealerLoading] = useState(false);
   const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
+  const [swathPlace, setSwathPlace] = useState<string | null>(null);
   const [radar, setRadar] = useState<RadarSample | null>(null);
   const [radarLoading, setRadarLoading] = useState(false);
   const [income, setIncome] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -1083,23 +1084,46 @@ export default function HailApp() {
   );
   const dealerHits = useMemo(() => {
     if (!area || area.source === "view") return [];
-    return rankDealersByHail(dealers, lotBands([...(meshCollection?.features ?? []), ...(swaths?.features ?? [])]), area.maxIn ?? area.minIn ?? 0);
+    const bandFeatures = meshCollection?.features?.length ? meshCollection.features : (swaths?.features ?? []);
+    return rankDealersByHail(dealers, lotBands(bandFeatures), area.maxIn ?? area.minIn ?? 0);
   }, [area, dealers, meshCollection, swaths]);
   const swathReadout = useMemo(() => {
     if (!area || area.source === "view") return null;
-    return readoutForSelection(area, [...(meshCollection?.features ?? []), ...(swaths?.features ?? [])]);
+    const features = area.source === "reports" ? [...(meshCollection?.features ?? []), ...(swaths?.features ?? [])] : (meshCollection?.features ?? []);
+    return readoutForSelection(area, features);
   }, [area, meshCollection, swaths]);
+  const swathWhen = historyMode.kind === "day" ? formatDay(historyMode.date) : null;
+  const swathSubtitle = [swathWhen, swathPlace].filter(Boolean).join(" · ");
   const sheetTitle = useMemo(() => {
     if (!area) return "";
-    const peak = Math.max(
-      area.maxIn ?? 0,
-      ...(swathReadout?.bands.map((band) => band.minIn) ?? []),
-      ...dealerHits.map((dealer) => dealer.hailIn),
-    );
-    const shown = area.maxIn ?? area.minIn ?? 0;
-    if (peak > shown + 0.001) return swathTitle({ source: area.source, minIn: area.minIn, maxIn: peak });
+    if (swathReadout && swathReadout.peakIn > 0) {
+      return swathTitle({ source: area.source, minIn: area.minIn, maxIn: swathReadout.peakIn });
+    }
     return area.label;
-  }, [area, swathReadout, dealerHits]);
+  }, [area, swathReadout]);
+
+  useEffect(() => {
+    if (!area || area.source === "view") {
+      setSwathPlace(null);
+      return;
+    }
+    const point =
+      area.anchorLat != null && area.anchorLon != null ? { lat: area.anchorLat, lon: area.anchorLon } : ringCenter(area.geometry);
+    if (!point) {
+      setSwathPlace(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/geocode?lat=${point.lat}&lon=${point.lon}`, { signal: controller.signal })
+      .then((response) => response.json())
+      .then((payload: { place?: string | null }) => {
+        if (!controller.signal.aborted) setSwathPlace(payload.place ?? null);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSwathPlace(null);
+      });
+    return () => controller.abort();
+  }, [area]);
 
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -1461,6 +1485,11 @@ export default function HailApp() {
     setPins(list.pins ?? []);
   }
 
+  function focusDealer(id: string) {
+    setSelectedDealerId(id);
+    setDealersOpen(true);
+  }
+
   async function loadDealers(selection: AreaSelection) {
     setArea(selection);
     setDealersOpen(false);
@@ -1477,7 +1506,11 @@ export default function HailApp() {
         response = await fetch("/api/dealers", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ geometry: selection.geometry, near }),
+          body: JSON.stringify({
+            geometry: selection.geometry,
+            near,
+            date: historyMode.kind === "day" ? historyMode.date : meshDate || null,
+          }),
           signal: controller.signal,
         });
       } catch (error) {
@@ -1941,13 +1974,10 @@ export default function HailApp() {
               setSelectedId(null);
               setThreat(null);
               setCounty(null);
-              void loadDealers(selection);
+              void loadDealers(sourceSwath(selection, meshCollection, swaths));
             }}
             onSelectDealer={(id) => {
-              setSelectedDealerId(id);
-              setDealersOpen(true);
-              const dealer = dealers.find((item) => item.id === id);
-              if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
+              focusDealer(id);
             }}
             onPreviewBounds={(bounds) => {
               viewBoundsRef.current = bounds;
@@ -2430,6 +2460,11 @@ export default function HailApp() {
                 <h2 className="text-lg font-semibold tracking-tight" data-swath-title>
                   {sheetTitle || area.label}
                 </h2>
+                {swathSubtitle ? (
+                  <p className="swath-kicker" data-swath-place>
+                    {swathSubtitle}
+                  </p>
+                ) : null}
                 {swathReadout ? (
                   <div className="swath-stats" data-swath-stats>
                     {swathReadout.bands.map((band) => (
@@ -2471,7 +2506,7 @@ export default function HailApp() {
                 </button>
                 {dealersOpen ? (
                   dealerHits.length ? (
-                    <DealerHitList dealers={dealerHits} selectedId={selectedDealerId} />
+                    <DealerHitList dealers={dealerHits} selectedId={selectedDealerId} onSelect={focusDealer} />
                   ) : !dealerLoading ? (
                     <p className="mt-2 text-sm text-muted" data-dealer-empty>
                       No dealerships in this swath.
@@ -2823,6 +2858,25 @@ function MobileOrPage({
       </BottomSheet>
     </div>
   );
+}
+
+function sourceSwath(
+  selection: AreaSelection,
+  mesh: GeoJSON.FeatureCollection | null,
+  reports: GeoJSON.FeatureCollection | null,
+): AreaSelection {
+  const features = [...(mesh?.features ?? []), ...(reports?.features ?? [])];
+  const match = features.find((feature) => String(feature.properties?.id ?? feature.id ?? "") === selection.id);
+  const geometry = match?.geometry;
+  if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon")) return selection;
+  const minIn = Number(match?.properties?.minIn);
+  const maxIn = Number(match?.properties?.maxIn);
+  return {
+    ...selection,
+    geometry,
+    minIn: Number.isFinite(minIn) ? minIn : selection.minIn,
+    maxIn: Number.isFinite(maxIn) ? maxIn : selection.maxIn,
+  };
 }
 
 function ringCenter(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): { lat: number; lon: number } | null {

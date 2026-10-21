@@ -7,9 +7,11 @@ import type { DealerPin } from "@/lib/area-selection";
 export default function DealerHitList({
   dealers,
   selectedId = null,
+  onSelect,
 }: {
   dealers: Array<DealerPin & { hailIn: number }>;
   selectedId?: string | null;
+  onSelect?: (id: string) => void;
 }) {
   useEffect(() => {
     if (!selectedId) return;
@@ -25,13 +27,16 @@ export default function DealerHitList({
           const directions = dealerDirections(dealer.lat, dealer.lon);
           return (
             <li key={dealer.id} data-dealer-id={dealer.id} data-selected={dealer.id === selectedId ? "true" : "false"}>
-              <span className="dealer-hit-rank">{index + 1}</span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">{dealer.name}</span>
-                <span className="block text-xs text-muted">
-                  {dealer.hailIn.toFixed(2)} in hail · {dealer.kind === "lot" ? "Car lot" : "Dealership"}
+              <button type="button" className="dealer-hit-main" onClick={() => onSelect?.(dealer.id)} aria-pressed={dealer.id === selectedId}>
+                <span className="dealer-hit-rank">{index + 1}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{dealer.name}</span>
+                  <span className="block text-xs text-muted">
+                    {dealer.hailIn.toFixed(2)} in hail · {dealer.kind === "lot" ? "Car lot" : "Dealership"}
+                  </span>
                 </span>
-                <span className="dealer-hit-actions">
+              </button>
+              <span className="dealer-hit-actions">
                   {tel ? <a href={tel}>Call</a> : null}
                   <a href={directions.google} target="_blank" rel="noreferrer">
                     Directions
@@ -40,7 +45,6 @@ export default function DealerHitList({
                     Apple Maps
                   </a>
                 </span>
-              </span>
             </li>
           );
         })}

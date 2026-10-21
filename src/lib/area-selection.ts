@@ -11,6 +11,9 @@ export interface AreaSelection {
   startLon?: number | null;
   endLat?: number | null;
   endLon?: number | null;
+  /** Point the user tapped, used for the place subtitle. */
+  anchorLat?: number | null;
+  anchorLon?: number | null;
 }
 
 export interface DealerPin {
@@ -23,6 +26,8 @@ export interface DealerPin {
   kind: "dealership" | "lot";
   /** OpenStreetMap phone tag, when the lot has one. */
   phone: string | null;
+  /** MESH inches at this lot, when the day's grid has a cell there. */
+  meshIn?: number | null;
 }
 
 export interface RadarDay {

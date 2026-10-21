@@ -98,11 +98,10 @@ export async function findKnockRoute(input: {
     pointInGeometry(stop.lon, stop.lat, work),
   );
   const stops = orderKnockStops(ranked, input.focus);
-  const shrunk = work !== input.geometry;
   return {
     stops,
     note: stops.length
-      ? `Named residential streets from OpenStreetMap${shrunk ? ", in the part of this swath around your selection" : ""}. Hardest hail first, then ordered into one route.`
-      : "No named residential streets in this area. OpenStreetMap does not list every block.",
+      ? "Named streets in this swath, hardest hail first."
+      : "No named residential streets in this area.",
   };
 }

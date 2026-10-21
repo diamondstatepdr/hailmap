@@ -21,8 +21,8 @@ export default function KnockRouteSheet({ label, stops, mode, note, onMode, onCl
       <BottomSheet label="Door-knock route" tone="field" onClose={onClose} expandedMax="45dvh" peekHeight={132}>
         <div data-knock-sheet className="knock-sheet">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Door-knock route</p>
-          <p className="mt-1 text-lg font-semibold tracking-tight">{label}</p>
-          <p className="mt-1 text-sm text-muted">{note}</p>
+          <p className="mt-1 text-lg font-semibold tracking-tight" data-knock-label>{label}</p>
+          {note ? <p className="knock-note text-muted">{note}</p> : null}
           <div className="knock-modes" role="group" aria-label="Walk or drive">
             <button type="button" aria-pressed={mode === "walk"} onClick={() => onMode("walk")}>
               Walk

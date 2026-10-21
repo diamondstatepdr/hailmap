@@ -14,7 +14,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
-import { raiseKnockRoute } from "@/lib/knock-route";
+import { raiseKnockRoute, spreadPixelOffsets } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
@@ -283,6 +283,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const [cameraTick, setCameraTick] = useState(0);
   const flownNonce = useRef<number | null>(null);
   const mapStyle = useMapStyle(theme);
   const brand = useBrandPaint(theme);
@@ -475,7 +476,9 @@ export default function HailMap({
     if (!map) return;
     const center = map.getCenter();
     const root = map.getContainer();
-    root.dataset.mapZoom = map.getZoom().toFixed(2);
+    const zoom = map.getZoom();
+    setCameraTick((current) => current + 1);
+    root.dataset.mapZoom = zoom.toFixed(2);
     root.dataset.mapLat = center.lat.toFixed(5);
     root.dataset.mapLon = center.lng.toFixed(5);
   }
@@ -597,6 +600,17 @@ export default function HailMap({
     }
     onBackgroundClick?.();
   }
+
+  const knockOffsets = useMemo(() => {
+    if (!knockStops?.length) return [] as Array<[number, number]>;
+    const map = mapRef.current?.getMap();
+    if (!map) return knockStops.map(() => [0, 0] as [number, number]);
+    const points = knockStops.map((stop) => {
+      const projected = map.project([stop.lon, stop.lat]);
+      return { x: projected.x, y: projected.y };
+    });
+    return spreadPixelOffsets(points);
+  }, [knockStops, cameraTick]);
 
   return (
     <Map
@@ -1117,8 +1131,14 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {knockStops?.map((stop) => (
-        <Marker key={stop.id} longitude={stop.lon} latitude={stop.lat} anchor="center">
+      {knockStops?.map((stop, index) => (
+        <Marker
+          key={stop.id}
+          longitude={stop.lon}
+          latitude={stop.lat}
+          anchor="center"
+          offset={knockOffsets[index]}
+        >
           <span className="knock-pin">{stop.n}</span>
         </Marker>
       ))}

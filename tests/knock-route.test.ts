@@ -5,6 +5,8 @@ import {
   appleMapsHref,
   circlePolygon,
   googleMapsHref,
+  knockHailLabel,
+  knockPinOffsets,
   orderKnockStops,
   raiseKnockRoute,
   streetsFromWays,
@@ -102,6 +104,28 @@ describe("door-knock route", () => {
     expect(raiseKnockRoute(map)).toBe(true);
     expect(order.slice(-2)).toEqual(["knock-casing", "knock-line"]);
     expect(raiseKnockRoute({ getLayer: () => undefined, moveLayer: () => undefined })).toBe(false);
+  });
+
+  it("names the route from the hail on the stops", () => {
+    expect(knockHailLabel([{ hailIn: 1.5 }, { hailIn: 2 }])).toBe('Up to 2" hail');
+    expect(knockHailLabel([{ hailIn: 1.5 }])).toBe('Up to 1.5" hail');
+    expect(knockHailLabel([])).toBe("Door-knock route");
+  });
+
+  it("slides a stacked stop far enough that its number is readable", () => {
+    const same = { lat: 33.415, lon: -111.83 };
+    const offsets = knockPinOffsets([same, same, { lat: 33.43, lon: -111.8 }], 8);
+    expect(offsets[0]).toEqual([0, 0]);
+    expect(Math.hypot(offsets[1][0], offsets[1][1])).toBeGreaterThanOrEqual(30);
+    expect(offsets[2]).toEqual([0, 0]);
+    const pile = knockPinOffsets(Array.from({ length: 8 }, () => same), 8);
+    for (let i = 0; i < pile.length; i += 1) {
+      for (let j = 0; j < i; j += 1) {
+        const dx = pile[i][0] - pile[j][0];
+        const dy = pile[i][1] - pile[j][1];
+        expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(30);
+      }
+    }
   });
 
   it("uses a pin link when the route is a single street", () => {

@@ -67,7 +67,7 @@ import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
-import { circlePolygon, compactBands, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
+import { circlePolygon, compactBands, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -1422,18 +1422,27 @@ export default function HailApp() {
       const payload = (await response.json()) as { stops?: KnockStop[]; note?: string; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not build that route");
       const stops = payload.stops ?? [];
-      setKnock({ label: input.label, stops, mode: "walk", note: payload.note ?? null });
+      setKnock({ label: stops.length ? knockHailLabel(stops) : input.label, stops, mode: "walk", note: payload.note ?? null });
       setHoneyOpen(false);
       if (stops.length) {
         const lons = stops.map((stop) => stop.lon);
         const lats = stops.map((stop) => stop.lat);
         const phone = window.innerWidth < 768;
         const mapHeight = mapStageRef.current?.clientHeight ?? window.innerHeight;
+        const mapWidth = mapStageRef.current?.clientWidth ?? window.innerWidth;
         const chrome = Math.ceil(chromeRef.current?.getBoundingClientRect().height ?? 0);
         const sheet = Math.round(window.innerHeight * 0.45);
-        let top = Math.max(phone ? 148 : 124, chrome + 36);
-        let bottom = sheet + 28;
-        if (top + bottom > mapHeight - 120) bottom = Math.max(160, mapHeight - top - 120);
+        // applyFrame shrinks padding that exceeds this room, which was pulling
+        // the southern stop under the sheet. Fit inside the room and keep the
+        // sheet clearance even when the header is tall.
+        const roomY = Math.max(160, mapHeight - 150);
+        const roomX = Math.max(80, mapWidth - 72);
+        let bottom = sheet + 32;
+        let top = Math.max(chrome + 56, phone ? 156 : chrome + 56);
+        if (top + bottom > roomY) top = Math.max(chrome + 12, roomY - bottom);
+        if (top + bottom > roomY) bottom = Math.max(sheet + 20, roomY - top);
+        let side = phone ? 112 : 128;
+        if (side * 2 > roomX) side = Math.max(48, Math.floor(roomX / 2));
         setFrame({
           west: Math.min(...lons),
           south: Math.min(...lats),
@@ -1441,7 +1450,7 @@ export default function HailApp() {
           north: Math.max(...lats),
           nonce: Date.now(),
           maxZoom: 16,
-          padding: { top, bottom, left: phone ? 44 : 80, right: phone ? 44 : 80 },
+          padding: { top, bottom, left: side, right: side },
         });
       }
     } catch (error) {

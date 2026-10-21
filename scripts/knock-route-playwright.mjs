@@ -99,23 +99,29 @@ async function openSwath(page) {
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no map");
   const points = [
+    [0.5, 0.42],
     [0.5, 0.34],
-    [0.5, 0.5],
-    [0.4, 0.34],
-    [0.5, 0.64],
-    [0.42, 0.46],
+    [0.46, 0.5],
+    [0.54, 0.38],
+    [0.5, 0.58],
+    [0.4, 0.46],
   ];
-  for (const [fx, fy] of points) {
-    await canvas.click({ position: { x: box.width * fx, y: box.height * fy }, force: true });
-    const button = page.locator("[data-knock-route]");
-    try {
-      await button.waitFor({ state: "attached", timeout: 2500 });
-      await button.scrollIntoViewIfNeeded();
-      await button.waitFor({ state: "visible", timeout: 3000 });
-      return;
-    } catch {
-      const close = page.locator(".sheet-dock").getByRole("button", { name: "Close" });
-      if (await close.count()) await close.first().click();
+  for (let round = 0; round < 3; round += 1) {
+    if (round > 0) await page.waitForTimeout(2000);
+    for (const [fx, fy] of points) {
+      const live = await canvas.boundingBox();
+      if (!live) continue;
+      await canvas.click({ position: { x: live.width * fx, y: live.height * fy }, force: true });
+      const button = page.locator("[data-knock-route]");
+      try {
+        await button.waitFor({ state: "attached", timeout: 2000 });
+        await button.scrollIntoViewIfNeeded();
+        await button.waitFor({ state: "visible", timeout: 2500 });
+        return;
+      } catch {
+        const close = page.locator(".sheet-dock").getByRole("button", { name: "Close" });
+        if (await close.count()) await close.first().click().catch(() => undefined);
+      }
     }
   }
   await page.screenshot({ path: `${outDir}/debug-${Date.now()}.png` }).catch(() => undefined);
@@ -130,6 +136,7 @@ async function shoot(browser, label, options, theme, name) {
   const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
   await page.goto(`${base}/?lat=33.389&lon=-111.830&z=12.8&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
   await meshReady;
+  await page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 8000 }).catch(() => undefined);
   await page.waitForFunction(() => {
     const zoom = Number(document.querySelector(".maplibregl-map")?.getAttribute("data-map-zoom"));
     return zoom >= 11 && zoom <= 14;
@@ -162,6 +169,31 @@ async function shoot(browser, label, options, theme, name) {
   if (sheetRatio > 0.52) throw new Error(`route sheet is ${Math.round(sheetRatio * 100)}% of the screen`);
   const hidden = pinBoxes.filter((pin) => pin.y < 70 || pin.y + pin.height > sheetBox.y + 2 || pin.x < 0 || pin.x + pin.width > viewport.width + 1);
   if (hidden.length) throw new Error(`stops outside the map above the sheet: ${JSON.stringify(hidden)}`);
+  const listed = await page.locator("[data-knock-sheet] .knock-list li").count();
+  if (pinBoxes.length !== listed) throw new Error(`map has ${pinBoxes.length} pins and the list has ${listed}`);
+  for (let i = 0; i < pinBoxes.length; i += 1) {
+    for (let j = i + 1; j < pinBoxes.length; j += 1) {
+      const a = pinBoxes[i];
+      const b = pinBoxes[j];
+      const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      if (overlapX > 3 && overlapY > 3) throw new Error(`pins ${a.text} and ${b.text} overlap`);
+    }
+  }
+  const routeLabel = await page.locator("[data-knock-label]").innerText();
+  if (!/^Up to .+ hail$/.test(routeLabel)) throw new Error(`route label is "${routeLabel}"`);
+  const noteBox = await page.locator(".knock-note").boundingBox();
+  if (!noteBox || noteBox.height > 24) throw new Error(`route note is taller than one line (${noteBox?.height})`);
+  const last = page.locator("[data-knock-sheet] .knock-list li").last();
+  await last.scrollIntoViewIfNeeded();
+  const lastBox = await last.boundingBox();
+  const foot = await page.locator(".knock-foot").boundingBox();
+  if (!lastBox || !foot || lastBox.y + lastBox.height > foot.y - 4) {
+    throw new Error(`last stop is under the maps footer ${JSON.stringify({ lastBox, foot })}`);
+  }
+  await page.locator("[data-knock-sheet] .knock-list").evaluate((node) => {
+    node.scrollTop = 0;
+  });
   const replay = page.getByRole("button", { name: "Replay" });
   if ((await replay.count()) && (await replay.first().isVisible())) throw new Error("replay card still covers the route map");
   const help = await page.locator("[data-help-open]").boundingBox();

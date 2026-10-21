@@ -212,6 +212,93 @@ export function appleMapsHref(stops: KnockStop[], mode: KnockMode): { url: strin
   };
 }
 
+/** Sheet title from the hail on the stops, not the polygon that was tapped. */
+export function knockHailLabel(stops: Array<{ hailIn: number }>): string {
+  const max = stops.reduce((best, stop) => Math.max(best, stop.hailIn), 0);
+  if (!(max > 0)) return "Door-knock route";
+  return `Up to ${formatInches(max)}" hail`;
+}
+
+function formatInches(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/** Ground meters covered by one CSS pixel at this latitude and zoom. */
+export function metersPerPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+}
+
+/**
+ * Pixel offsets that keep stacked stop numbers from sitting on each other.
+ * Points are already in screen pixels. The first pin stays put. Later pins
+ * step up and sideways, never down into the sheet. The route line still uses
+ * the real coordinates.
+ */
+export function spreadPixelOffsets(points: Array<{ x: number; y: number }>, gapPx = 36): Array<[number, number]> {
+  const placed = points.map((point) => ({ x: point.x, y: point.y }));
+  const slots = fanSlots(gapPx);
+  const blocked = (index: number, x: number, y: number) => {
+    for (let j = 0; j < placed.length; j += 1) {
+      if (j === index) continue;
+      if (Math.hypot(x - placed[j].x, y - placed[j].y) < gapPx - 0.01) return true;
+    }
+    return false;
+  };
+  for (let i = 1; i < placed.length; i += 1) {
+    if (!blocked(i, placed[i].x, placed[i].y)) continue;
+    const origin = points[i];
+    let found = false;
+    for (const [ox, oy] of slots) {
+      const x = origin.x + ox;
+      const y = origin.y + oy;
+      if (blocked(i, x, y)) continue;
+      placed[i] = { x, y };
+      found = true;
+      break;
+    }
+    if (!found) placed[i] = { x: origin.x + (i % 2 === 0 ? -gapPx : gapPx), y: origin.y - gapPx * i };
+  }
+  return points.map((point, index) => [Math.round(placed[index].x - point.x), Math.round(placed[index].y - point.y)]);
+}
+
+/** Screen offsets on square rings. Positive y is down, so the fan stays at dy <= 0. */
+function fanSlots(gap: number): Array<[number, number]> {
+  const slots: Array<[number, number]> = [];
+  for (let ring = 1; ring <= 5; ring += 1) {
+    const band: Array<[number, number]> = [];
+    for (let dx = -ring; dx <= ring; dx += 1) {
+      for (let dy = -ring; dy <= 0; dy += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        band.push([dx * gap, dy * gap]);
+      }
+    }
+    band.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || Math.abs(a[0]) - Math.abs(b[0]));
+    slots.push(...band);
+  }
+  return slots;
+}
+
+/**
+ * Pixel offsets that keep stacked stop numbers from sitting on each other.
+ * The route line still uses the real coordinates.
+ */
+export function knockPinOffsets(
+  stops: Array<{ lat: number; lon: number }>,
+  metersPerPixel: number,
+  gapPx = 36,
+): Array<[number, number]> {
+  if (!stops.length || !(metersPerPixel > 0) || !Number.isFinite(metersPerPixel)) return stops.map(() => [0, 0]);
+  const origin = stops[0];
+  const lat0 = (origin.lat * Math.PI) / 180;
+  const points = stops.map((stop) => ({
+    x: ((stop.lon - origin.lon) * 111320 * Math.cos(lat0)) / metersPerPixel,
+    y: ((origin.lat - stop.lat) * 110540) / metersPerPixel,
+  }));
+  return spreadPixelOffsets(points, gapPx);
+}
+
 export function routeLine(stops: KnockStop[]): GeoJSON.FeatureCollection {
   if (stops.length < 2) return { type: "FeatureCollection", features: [] };
   return {

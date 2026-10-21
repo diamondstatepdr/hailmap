@@ -3010,11 +3010,19 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
 }
 
 .source-years,
-.year-hail,
-.year-chip {
+.year-hail {
   font-size: 15px;
   line-height: 1.4;
   color: var(--text);
+}
+
+.year-chip {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.year-chip.chip-on {
+  color: var(--accent-ink);
 }
 
 .source-years,
@@ -3030,13 +3038,23 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  min-height: 44px;
 }
 
 .source-years h3,
 .year-hail h3 {
+  margin: 0;
   font-size: 1.125rem;
   font-weight: 700;
+  line-height: 1.2;
+}
+
+.source-years .help-chip {
+  border: 1.5px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: none;
 }
 
 .source-years ul,
@@ -3092,4 +3110,37 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
 .year-chip {
   font-size: 15px;
   font-weight: 700;
+}
+
+.sheet-body > .page-enter > .sheet-band {
+  margin: 0.35rem -1rem 0.9rem;
+}
+
+.address-search {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.address-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  color: var(--text);
+  pointer-events: none;
+}
+
+.address-search-input {
+  min-height: 48px;
+  padding-left: 2.75rem;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.sheet-body .address-search {
+  margin-top: 0.2rem;
 }

@@ -50,7 +50,7 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
-import { chaseFrameResult, describeOpening } from "@/lib/chase-frame";
+import { chaseBlockedBySheet, chaseFrameResult, describeOpening, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
@@ -299,6 +299,8 @@ export default function HailApp() {
   const lockFrame = useRef(true);
   const chaseFly = useRef(false);
   const requestedView = useRef(false);
+  const deepLink = useRef(false);
+  const chaseAutoDecided = useRef(false);
   const userMoved = useRef(false);
   const nationalShown = useRef(false);
   const historyActive = historyMode.kind !== "window";
@@ -357,14 +359,15 @@ export default function HailApp() {
     setChasePopup(false);
   }, [section, chase]);
 
-  useEffect(() => {
-    if (!chase || section !== "map" || replay.active) return;
-    try {
-      if (shouldShowWeeklyChase(localStorage.getItem(chasePopupKey(chase.week)))) setChasePopup(true);
-    } catch {
-      setChasePopup(true);
-    }
-  }, [chase, section, replay.active]);
+  const chaseSheetBlocked = chaseBlockedBySheet({
+    honey: honeyOpen,
+    address: placeCardOpen,
+    replay: replay.active,
+    filters: filtersOpen,
+    report: reportOpen,
+    calendar: calendarOpen || hailDaysOpen,
+    detail: Boolean(selectedId || threat || county || area),
+  });
 
   function followAlertLink(href: string) {
     const target = parseAlertLink(href);
@@ -398,6 +401,7 @@ export default function HailApp() {
     const savedView = readSavedView();
     const opening = describeOpening(params, savedView);
     requestedView.current = opening.requestsView;
+    deepLink.current = suppressesWeeklyChase(params, opening);
     if (opening.day) {
       setHistoryMode({ kind: "day", date: opening.day });
       setMeshDate(opening.day);
@@ -461,6 +465,25 @@ export default function HailApp() {
     // The deep link is read once, when the app opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!chase || chaseAutoDecided.current || section !== "map") return;
+    chaseAutoDecided.current = true;
+    let pending = true;
+    try {
+      pending = shouldShowWeeklyChase(localStorage.getItem(chasePopupKey(chase.week)));
+    } catch {
+      pending = true;
+    }
+    if (weeklyChaseShouldAutoOpen({ pending, deepLink: deepLink.current, sheetOpen: chaseSheetBlocked, onMap: true })) {
+      setChasePopup(true);
+    }
+  }, [chase, section, chaseSheetBlocked]);
+
+  useEffect(() => {
+    if (!chaseSheetBlocked) return;
+    setChasePopup(false);
+  }, [chaseSheetBlocked]);
 
   useEffect(() => {
     if (!pendingReport.current) return;
@@ -1107,6 +1130,13 @@ export default function HailApp() {
     setCustomOpen(false);
     setHoneyOpen(false);
     setFiltersOpen(false);
+    setPlaceCardOpen(false);
+    setReportOpen(false);
+    setSelectedId(null);
+    setThreat(null);
+    setCounty(null);
+    setArea(null);
+    if (replay.active) replay.stop();
     if (!chase) return;
     setChasePopup(true);
     try {
@@ -2010,11 +2040,11 @@ export default function HailApp() {
             </>
             )}
           </div>
-          {section === "map" && !replay.active && !honeyOpen ? (
-            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen || honeyOpen ? "is-covered" : ""}`}>
+          {section === "map" ? (
+            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
               <div className="state-strip">
                 <div className="map-quick-row">
-                  {stateCounts.length ? (
+                  {!honeyOpen && !replay.active && stateCounts.length ? (
                     <button
                       type="button"
                       className="state-toggle press md:hidden"
@@ -2026,7 +2056,7 @@ export default function HailApp() {
                   ) : null}
                   <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
                 </div>
-                {stateCounts.length ? (
+                {!honeyOpen && !replay.active && stateCounts.length ? (
                 <div className={`state-chip-row ${statesOpen ? "is-open" : ""}`} role="toolbar" aria-label="Jump to a state">
                   {stateCounts.slice(0, 12).map(([code, count]) => {
                     const on = filter.state === code;
@@ -2408,7 +2438,7 @@ export default function HailApp() {
               Loading reports…
             </p>
           ) : null}
-          {chasePopup && section === "map" && chase && !replay.active ? (
+          {chasePopup && section === "map" && chase && !chaseSheetBlocked ? (
             <ChasePopup
               mobile={mobile}
               mode={honeyMode}

@@ -58,6 +58,46 @@ export function describeOpening(params: URLSearchParams, saved: SavedView | null
   };
 }
 
+/**
+ * Share and alert links choose a panel or a place. A saved view does not:
+ * opening the app on `/` still gets the weekly sheet.
+ */
+export function suppressesWeeklyChase(params: URLSearchParams, opening: OpeningView): boolean {
+  if (opening.honey || opening.bounds || opening.center || opening.day != null || opening.address) return true;
+  if (params.get("reportId")) return true;
+  if (params.get("replay") === "1") return true;
+  if (params.get("section") === "alerts") return true;
+  return false;
+}
+
+export interface ChaseSheets {
+  honey: boolean;
+  address: boolean;
+  replay: boolean;
+  filters: boolean;
+  report: boolean;
+  calendar: boolean;
+  detail: boolean;
+}
+
+/** Money Holes, address, replay, and the other map sheets. The chase list must not cover these. */
+export function chaseBlockedBySheet(sheets: ChaseSheets): boolean {
+  return sheets.honey || sheets.address || sheets.replay || sheets.filters || sheets.report || sheets.calendar || sheets.detail;
+}
+
+/**
+ * Auto-open only on a plain map visit. A deep link or an open sheet skips it
+ * without marking the week dismissed or seen.
+ */
+export function weeklyChaseShouldAutoOpen(input: {
+  pending: boolean;
+  deepLink: boolean;
+  sheetOpen: boolean;
+  onMap: boolean;
+}): boolean {
+  return input.pending && input.onMap && !input.deepLink && !input.sheetOpen;
+}
+
 export interface ChaseFrameState {
   chaseReady: boolean;
   /** The weekly sheet is on screen. */

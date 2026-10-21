@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { chaseFrameResult, describeOpening, stormDayFromLink, type ChaseFrameState } from "@/lib/chase-frame";
+import {
+  chaseBlockedBySheet,
+  chaseFrameResult,
+  describeOpening,
+  stormDayFromLink,
+  suppressesWeeklyChase,
+  weeklyChaseShouldAutoOpen,
+  type ChaseFrameState,
+  type ChaseSheets,
+} from "@/lib/chase-frame";
 import type { SavedView } from "@/lib/view-scope";
 
 const FORT_WORTH = "/?honey=1&day=2026-04-25&west=-97.55&south=32.55&east=-97.05&north=32.95&mode=pdr";
@@ -46,6 +55,71 @@ describe("opening view", () => {
     expect(describeOpening(params("/"), saved).requestsView).toBe(true);
     expect(describeOpening(params("/"), null).requestsView).toBe(false);
     expect(describeOpening(params("/?day=not-a-day"), null).day).toBeNull();
+  });
+});
+
+const clearSheets: ChaseSheets = {
+  honey: false,
+  address: false,
+  replay: false,
+  filters: false,
+  report: false,
+  calendar: false,
+  detail: false,
+};
+
+describe("weekly chase auto-open", () => {
+  it("opens on a plain map visit and stays closed for share links", () => {
+    const plain = weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: true });
+    expect(plain).toBe(true);
+    const links = [
+      FORT_WORTH,
+      "/?honey=1",
+      "/?focusLat=32.75&focusLon=-97.33&focusZoom=12&card=address&cardLat=32.75&cardLon=-97.33&cardLabel=Fort%20Worth",
+      "/?date=2026-04-25&west=-97.6&south=32.5&east=-97.0&north=33.0",
+      "/?day=2026-04-25",
+      "/?lat=32.75&lon=-97.33&z=11",
+      "/?west=-97.6&south=32.5&east=-97.0&north=33.0",
+      "/?replay=1&date=2026-04-25",
+      "/?reportId=abc&focusLat=32.75&focusLon=-97.33",
+    ];
+    for (const search of links) {
+      const searchParams = params(search);
+      const opening = describeOpening(searchParams, null);
+      expect(suppressesWeeklyChase(searchParams, opening)).toBe(true);
+      expect(
+        weeklyChaseShouldAutoOpen({
+          pending: true,
+          deepLink: true,
+          sheetOpen: chaseBlockedBySheet({ ...clearSheets, honey: opening.honey, address: opening.address }),
+          onMap: true,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("keeps a saved view eligible for the pop-up and does not treat the skip as seen", () => {
+    const opening = describeOpening(params("/"), saved);
+    expect(opening.savedView).toBe(true);
+    expect(suppressesWeeklyChase(params("/"), opening)).toBe(false);
+    expect(weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: true })).toBe(true);
+    expect(weeklyChaseShouldAutoOpen({ pending: false, deepLink: false, sheetOpen: false, onMap: true })).toBe(false);
+  });
+
+  it("stays closed while another sheet is open", () => {
+    expect(chaseBlockedBySheet(clearSheets)).toBe(false);
+    for (const key of ["honey", "address", "replay", "filters", "report", "calendar", "detail"] as const) {
+      expect(chaseBlockedBySheet({ ...clearSheets, [key]: true })).toBe(true);
+      expect(
+        weeklyChaseShouldAutoOpen({
+          pending: true,
+          deepLink: false,
+          sheetOpen: true,
+          onMap: true,
+        }),
+      ).toBe(false);
+    }
+    expect(weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: false })).toBe(false);
   });
 });
 

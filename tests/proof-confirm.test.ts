@@ -22,7 +22,9 @@ describe("proof confirmation window", () => {
       expect(confirm.headline).toBe("Radar + spotter confirmed");
       expect(confirm.reports.length).toBeGreaterThan(0);
       expect(confirm.reports.some((report) => /mPING|PSR|Local Storm Report/.test(report.source))).toBe(true);
-      expect(confirm.radarLine).toContain("UTC");
+      expect(confirm.radarLine).toMatch(/Oct 20, \d{1,2}:\d{2} [AP]M MST \(\d{2}:\d{2} UTC\)/);
+      expect(confirm.radarLine).not.toMatch(/2026-10-21/);
+      expect(confirm.reports.every((report) => !/\d{4}-\d{2}-\d{2}/.test(report.timeUtc))).toBe(true);
       expect(confirm.disclaimer).toContain("not a meteorologist certification");
     },
     180000,

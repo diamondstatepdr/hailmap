@@ -190,10 +190,12 @@ describe("hail proof document", () => {
     expect(confirmed.reports[0]?.source).toContain("mPING");
     expect(confirmed.reports[0]?.source).toContain("PSR");
     expect(confirmed.reports[0]?.distanceMi).toBe(3.1);
-    expect(confirmed.reports[0]?.timeUtc).toContain("05:10");
-    expect(confirmed.reports[0]?.timeLocal).toMatch(/MST|10:10/);
-    expect(confirmed.radarLine).toContain("05:12");
-    expect(confirmed.radarLine).toContain("UTC");
+    expect(confirmed.reports[0]?.timeUtc).toBe("05:10 UTC");
+    expect(confirmed.reports[0]?.timeLocal).toMatch(/Oct 20, 10:10 PM/);
+    expect(confirmed.radarLine).toContain("Oct 20, 10:12 PM MST");
+    expect(confirmed.radarLine).toContain("(05:12 UTC)");
+    expect(confirmed.radarLine).not.toMatch(/2026-10-21/);
+    expect(confirmed.radarUtc).toBe("05:12 UTC");
     expect(confirmed.disclaimer).toContain("not a meteorologist certification");
     expect(confirmed.disclaimer).toContain("not an insurance decision");
 
@@ -258,11 +260,22 @@ describe("hail proof document", () => {
     );
     if ("error" in sealed) throw new Error(sealed.error);
     const sealedText = renderHailProofPdf(sealed).toString("latin1");
-    expect(sealedText).toContain("Radar + spotter confirmed");
+    expect(sealedText).toContain("RADAR +");
+    expect(sealedText).toContain("SPOTTER");
+    expect(sealedText).toContain("CONFIRMED");
+    expect(sealedText).toContain("Oct 20, 10:12 PM MST");
+    expect(sealedText).toContain("05:12 UTC");
+    expect(sealedText).not.toMatch(/2026-10-21/);
     expect(sealedText).toContain("mPING");
     expect(sealedText).toContain("3.1 mi");
     expect(sealedText).toContain("not an insurance decision");
     expect(sealedText).not.toContain("certified meteorologist");
+    const emptyNearby = normalizeProof({ ...draft, nearby: [], confirm: confirmed }, "2026-04-26T12:00:00.000Z");
+    if ("error" in emptyNearby) throw new Error(emptyNearby.error);
+    const emptyText = renderHailProofPdf(emptyNearby).toString("latin1");
+    expect(emptyText).not.toMatch(/No nearby reports/i);
+    expect(emptyText).not.toMatch(/None in this view/i);
+    expect(emptyText).not.toContain("Nearby reports");
   });
 
   it("rejects a proof with no address and serves a saved PDF", async () => {
@@ -336,8 +349,11 @@ describe("hail proof document", () => {
       });
       const forgedText = Buffer.from(await forgedPdf.arrayBuffer()).toString("latin1");
       expect(forgedText).toContain("Radar only");
-      expect(forgedText).not.toContain("Radar + spotter confirmed");
+      expect(forgedText).not.toContain("RADAR +");
       expect(forgedText).toContain("24-hour radar maximum");
+      expect(forgedText).toContain("Oct 20, 2026");
+      expect(forgedText).toContain("Oct 21, 5:00 AM MST");
+      expect(forgedText).not.toContain("2026-10-21 12:00");
     } finally {
       globalThis.fetch = originalFetch;
     }

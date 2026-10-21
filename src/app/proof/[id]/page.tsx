@@ -52,7 +52,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
             </div>
             <div>
               <dt>Storm dates</dt>
-              <dd>{dates.length ? dates.join(", ") : "None in this view"}</dd>
+              <dd>{dates.length ? dates.join(", ") : "—"}</dd>
             </div>
           </dl>
           {proof.confirm ? (
@@ -63,7 +63,20 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
                     Radar only
                   </p>
                 )}
-                <p className="proof-radar-line">{proof.confirm.radarLine}</p>
+                <p className="proof-radar-line">
+                  {proof.confirm.radarLocal && proof.confirm.radarUtc ? (
+                    <>
+                      {proof.confirm.radarKind === "daily" ? "24-hour radar maximum ending" : "Radar scan"}
+                      {proof.confirm.radarKind === "scan" && proof.confirm.radarIn != null
+                        ? ` ${proof.confirm.radarIn.toFixed(2)} in`
+                        : ""}{" "}
+                      <span className="proof-local">{proof.confirm.radarLocal}</span>{" "}
+                      <span className="proof-utc">({proof.confirm.radarUtc})</span>
+                    </>
+                  ) : (
+                    proof.confirm.radarLine
+                  )}
+                </p>
                 {proof.confirm.reports.length ? (
                   <ul className="proof-spotters">
                     {proof.confirm.reports.map((report) => (
@@ -71,8 +84,8 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
                         <span className="spot-size">
                           {report.sizeIn.toFixed(2)} in · {report.distanceMi.toFixed(1)} mi · {report.where}
                         </span>
-                        <span className="spot-meta">
-                          {report.timeUtc} · {report.timeLocal}
+                        <span className="spot-when">
+                          {report.timeLocal} <span className="proof-utc">({report.timeUtc})</span>
                         </span>
                         <span className="spot-meta">{report.source}</span>
                       </li>
@@ -83,34 +96,47 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
                 <p className="proof-confirm-note">{proof.confirm.disclaimer}</p>
               </div>
               {proof.confirm.seal ? (
-                <p className="proof-seal" data-proof-seal>
-                  Radar +
-                  <br />
-                  spotter
-                  <br />
-                  confirmed
-                </p>
+                <div className="proof-seal" data-proof-seal>
+                  <svg className="proof-seal-check" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M5 12.5 10 17.5 19.5 7"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="proof-seal-title">
+                    Radar +
+                    <br />
+                    spotter
+                    <br />
+                    confirmed
+                  </span>
+                  {dates[0] ? <span className="proof-seal-date">{dates[0]}</span> : null}
+                </div>
               ) : null}
             </section>
           ) : null}
           <div className="proof-map" dangerouslySetInnerHTML={{ __html: map }} />
           <p className="text-[11px] text-muted">Streets © OpenStreetMap contributors</p>
           {swathLine ? <p className="text-sm font-semibold">{swathLine}</p> : null}
-          <h3>Nearby reports</h3>
           {proof.nearby.length ? (
-            <ul className="proof-list">
-              {proof.nearby.map((report) => (
-                <li key={`${report.when}-${report.where}-${report.detail}`}>
-                  <span className="font-semibold">{report.detail}</span>
-                  <span className="text-muted">
-                    {report.when} · {report.where}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted">No nearby reports in this view.</p>
-          )}
+            <>
+              <h3>Nearby reports</h3>
+              <ul className="proof-list">
+                {proof.nearby.map((report) => (
+                  <li key={`${report.when}-${report.where}-${report.detail}`}>
+                    <span className="font-semibold">{report.detail}</span>
+                    <span className="text-muted">
+                      {report.when} · {report.where}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           <h3>Damage score</h3>
           <p className="text-sm leading-relaxed">{proof.summary}</p>
           <p className="proof-disclaimer">

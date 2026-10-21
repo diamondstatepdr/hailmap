@@ -343,7 +343,7 @@ export default function HailMap({
     if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
-    if (width < 768) {
+    if (width < 768 || next.padding) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
     const desktop = width >= 768;

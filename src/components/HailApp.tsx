@@ -1428,6 +1428,12 @@ export default function HailApp() {
         const lons = stops.map((stop) => stop.lon);
         const lats = stops.map((stop) => stop.lat);
         const phone = window.innerWidth < 768;
+        const mapHeight = mapStageRef.current?.clientHeight ?? window.innerHeight;
+        const chrome = Math.ceil(chromeRef.current?.getBoundingClientRect().height ?? 0);
+        const sheet = Math.round(window.innerHeight * 0.45);
+        let top = Math.max(phone ? 148 : 124, chrome + 36);
+        let bottom = sheet + 28;
+        if (top + bottom > mapHeight - 120) bottom = Math.max(160, mapHeight - top - 120);
         setFrame({
           west: Math.min(...lons),
           south: Math.min(...lats),
@@ -1435,9 +1441,7 @@ export default function HailApp() {
           north: Math.max(...lats),
           nonce: Date.now(),
           maxZoom: 16,
-          padding: phone
-            ? { top: 280, bottom: 460, left: 48, right: 48 }
-            : { top: 160, bottom: 340, left: 72, right: 72 },
+          padding: { top, bottom, left: phone ? 44 : 80, right: phone ? 44 : 80 },
         });
       }
     } catch (error) {

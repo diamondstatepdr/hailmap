@@ -118,6 +118,7 @@ async function openSwath(page) {
       if (await close.count()) await close.first().click();
     }
   }
+  await page.screenshot({ path: `${outDir}/debug-${Date.now()}.png` }).catch(() => undefined);
   throw new Error("swath click did not open the area card");
 }
 
@@ -129,6 +130,11 @@ async function shoot(browser, label, options, theme, name) {
   const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
   await page.goto(`${base}/?lat=33.389&lon=-111.830&z=12.8&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
   await meshReady;
+  await page.waitForFunction(() => {
+    const zoom = Number(document.querySelector(".maplibregl-map")?.getAttribute("data-map-zoom"));
+    return zoom >= 11 && zoom <= 14;
+  }, { timeout: 20000 }).catch(() => undefined);
+  await page.waitForTimeout(1800);
   await openSwath(page);
   await page.locator("[data-knock-route]").waitFor();
   await page.waitForTimeout(300);
@@ -137,11 +143,28 @@ async function shoot(browser, label, options, theme, name) {
   console.log("wrote", card);
   await page.locator("[data-knock-route]").click();
   await page.locator("[data-knock-sheet] .knock-list li").first().waitFor({ timeout: 100000 });
-  await page.waitForTimeout(2800);
+  await page.waitForFunction(() => {
+    const listed = document.querySelectorAll("[data-knock-sheet] .knock-list li").length;
+    const pins = document.querySelectorAll(".maplibregl-marker .knock-pin").length;
+    return listed > 0 && pins >= listed;
+  }, { timeout: 15000 });
+  await page.waitForTimeout(600);
+  const viewport = page.viewportSize();
+  const sheetBox = await page.locator("[data-bottom-sheet]").boundingBox();
+  const pinBoxes = await page.locator(".maplibregl-marker .knock-pin").evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height, text: node.textContent };
+    }),
+  );
+  if (!sheetBox || !viewport) throw new Error("route sheet was not measured");
+  const sheetRatio = sheetBox.height / viewport.height;
+  if (sheetRatio > 0.52) throw new Error(`route sheet is ${Math.round(sheetRatio * 100)}% of the screen`);
+  const hidden = pinBoxes.filter((pin) => pin.y < 70 || pin.y + pin.height > sheetBox.y + 2 || pin.x < 0 || pin.x + pin.width > viewport.width + 1);
+  if (hidden.length) throw new Error(`stops outside the map above the sheet: ${JSON.stringify(hidden)}`);
   const replay = page.getByRole("button", { name: "Replay" });
   if ((await replay.count()) && (await replay.first().isVisible())) throw new Error("replay card still covers the route map");
   const help = await page.locator("[data-help-open]").boundingBox();
-  const viewport = page.viewportSize();
   if (!help || !viewport || help.x < 0 || help.x + help.width > viewport.width + 1) throw new Error("help chip is clipped");
   const route = `${outDir}/${label}-${name}-route.png`;
   await page.screenshot({ path: route });

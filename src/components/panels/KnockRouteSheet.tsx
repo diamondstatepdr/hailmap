@@ -18,7 +18,7 @@ export default function KnockRouteSheet({ label, stops, mode, note, onMode, onCl
   const trimmed = google.count < stops.length || apple.count < stops.length;
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-      <BottomSheet label="Door-knock route" tone="field" onClose={onClose} expandedMax="min(58dvh, 32rem)" peekHeight={132}>
+      <BottomSheet label="Door-knock route" tone="field" onClose={onClose} expandedMax="45dvh" peekHeight={132}>
         <div data-knock-sheet className="knock-sheet">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Door-knock route</p>
           <p className="mt-1 text-lg font-semibold tracking-tight">{label}</p>

@@ -1,5 +1,7 @@
 import { confidenceRank, type Confidence } from "@/lib/confidence";
 import { haversineKm, project, unproject, validLatLon, type Xy } from "@/lib/geo";
+import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { separateBandFills } from "@/lib/swath-bands";
 
 export const SWATH_RADIUS_KM = 45;
 export const SWATH_WINDOW_HOURS = 3;
@@ -89,10 +91,11 @@ function round5(value: number): number {
 export function bufferPoints(
   points: Array<{ lon: number; lat: number }>,
   bufferKm: number,
+  origin?: { lon: number; lat: number },
 ): Array<{ lon: number; lat: number }> {
   if (points.length === 0 || bufferKm <= 0) return [];
-  const originLon = points.reduce((sum, point) => sum + point.lon, 0) / points.length;
-  const originLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length;
+  const originLon = origin?.lon ?? points.reduce((sum, point) => sum + point.lon, 0) / points.length;
+  const originLat = origin?.lat ?? points.reduce((sum, point) => sum + point.lat, 0) / points.length;
   const local = points.map((point) => project(point.lon, point.lat, originLon, originLat));
   const hull = convexHullXY(local);
   const seeds = hull.length ? hull : local;
@@ -161,28 +164,97 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
   const features: GeoJSON.Feature[] = [];
 
   clusters.forEach((cluster, index) => {
-    const ring = bufferPoints(
-      cluster.map((point) => ({ lon: point.lon, lat: point.lat })),
-      bufferKm,
-    );
-    if (ring.length < 4) return;
     const times = cluster.map((point) => Date.parse(point.occurredAt)).sort((a, b) => a - b);
-    const sizes = cluster.map((point) => point.sizeIn).filter((size): size is number => size != null);
-    features.push({
-      type: "Feature",
-      id: `swath-${index}`,
-      geometry: {
-        type: "Polygon",
-        coordinates: [ring.map((point) => [point.lon, point.lat])],
-      },
-      properties: {
-        count: cluster.length,
-        maxSizeIn: sizes.length ? Math.max(...sizes) : null,
-        startedAt: new Date(times[0]).toISOString(),
-        endedAt: new Date(times[times.length - 1]).toISOString(),
-        confidence: bestConfidence(cluster),
-      },
-    });
+    const startedAt = new Date(times[0]).toISOString();
+    const endedAt = new Date(times[times.length - 1]).toISOString();
+    const confidence = bestConfidence(cluster);
+    const sized = cluster.filter((point) => point.sizeIn != null && point.sizeIn >= MESH_LEGEND[0].minIn);
+    if (!sized.length) {
+      const ring = bufferPoints(
+        cluster.map((point) => ({ lon: point.lon, lat: point.lat })),
+        bufferKm,
+      );
+      if (ring.length < 4) return;
+      features.push({
+        type: "Feature",
+        id: `swath-${index}`,
+        geometry: {
+          type: "Polygon",
+          coordinates: [ring.map((point) => [point.lon, point.lat])],
+        },
+        properties: {
+          count: cluster.length,
+          maxSizeIn: null,
+          minIn: null,
+          label: null,
+          color: "#64748b",
+          ink: "#ffffff",
+          halo: true,
+          showLabel: false,
+          startedAt,
+          endedAt,
+          confidence,
+        },
+      });
+      features.push({
+        type: "Feature",
+        properties: { halo: true, kind: "edge" },
+        geometry: { type: "LineString", coordinates: ring.map((point) => [point.lon, point.lat]) },
+      });
+      return;
+    }
+    const batch: GeoJSON.Feature[] = [];
+    const origin = {
+      lon: sized.reduce((sum, point) => sum + point.lon, 0) / sized.length,
+      lat: sized.reduce((sum, point) => sum + point.lat, 0) / sized.length,
+    };
+    let pending: { key: string; band: (typeof MESH_LEGEND)[number]; points: SwathPoint[] } | null = null;
+    const emit = (row: { band: (typeof MESH_LEGEND)[number]; points: SwathPoint[] }) => {
+      const ring = bufferPoints(
+        row.points.map((point) => ({ lon: point.lon, lat: point.lat })),
+        bufferKm,
+        origin,
+      );
+      if (ring.length < 4) return;
+      const maxSizeIn = Math.max(...row.points.map((point) => point.sizeIn ?? row.band.minIn));
+      batch.push({
+        type: "Feature",
+        id: `swath-${index}-${row.band.minIn}`,
+        geometry: {
+          type: "Polygon",
+          coordinates: [ring.map((point) => [point.lon, point.lat])],
+        },
+        properties: {
+          count: row.points.length,
+          maxSizeIn,
+          minIn: row.band.minIn,
+          label: row.band.label,
+          mapLabel: row.band.mapLabel,
+          color: row.band.color,
+          ink: row.band.ink,
+          startedAt,
+          endedAt,
+          confidence,
+        },
+      });
+    };
+    for (const band of MESH_LEGEND) {
+      const points = sized.filter((point) => (point.sizeIn ?? 0) >= band.minIn);
+      if (!points.length) continue;
+      const key = points
+        .map((point) => `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`)
+        .sort()
+        .join("|");
+      if (pending && pending.key === key) {
+        pending.band = band;
+        pending.points = points;
+        continue;
+      }
+      if (pending) emit(pending);
+      pending = { key, band, points };
+    }
+    if (pending) emit(pending);
+    features.push(...separateBandFills(batch));
   });
 
   return { type: "FeatureCollection", features };

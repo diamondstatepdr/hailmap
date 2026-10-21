@@ -53,9 +53,9 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
-import { chaseBlockedBySheet, chaseFrameResult, describeOpening, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
+import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
-import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
+import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
@@ -397,7 +397,7 @@ export default function HailApp() {
     const params = new URL(window.location.href).searchParams;
     const savedView = readSavedView();
     const opening = describeOpening(params, savedView);
-    requestedView.current = opening.requestsView;
+    requestedView.current = linkClaimsCamera(opening);
     deepLink.current = suppressesWeeklyChase(params, opening);
     if (opening.day) {
       setHistoryMode({ kind: "day", date: opening.day });
@@ -1159,6 +1159,7 @@ export default function HailApp() {
   function openChaseStop(stop: ChaseStop) {
     chaseFly.current = true;
     userMoved.current = true;
+    nationalShown.current = false;
     dismissChase();
     setSection("map");
     setHoneyOpen(false);
@@ -1175,6 +1176,8 @@ export default function HailApp() {
     setShowPoints(true);
     lockFrame.current = true;
     pickStormDay(stop.date);
+    // Drop the country fit so a deferred fitBounds cannot pull the camera back.
+    setFrame(null);
     setFocus({ lat: stop.lat, lon: stop.lon, zoom: 9.5, nonce: Date.now() });
   }
 
@@ -1613,11 +1616,22 @@ export default function HailApp() {
       nationalShown: nationalShown.current,
     });
     lockFrame.current = decision.lockFrame;
+    if (decision.restoreHome) {
+      nationalShown.current = false;
+      setFrame(null);
+      const home = homeViewAfterChase(readSavedView());
+      setFocus({ lat: home.lat, lon: home.lon, zoom: home.zoom, nonce: Date.now() });
+      return;
+    }
     if (!decision.frameUnitedStates) return;
     nationalShown.current = true;
-    const mapHeight = Math.round(document.querySelector(".maplibregl-map")?.clientHeight || window.innerHeight);
-    const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: mobile });
-    setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.2 : 4.6, padding });
+    setFrame({
+      ...UNITED_STATES_FRAME,
+      nonce: Date.now(),
+      maxZoom: 6,
+      padding: mobile ? undefined : chaseMapPadding({ mobile: false, chromePx, mapHeight: 0, sheet: false }),
+      chaseSheet: mobile ? { chromePx } : undefined,
+    });
   }, [chasePopup, chase, mobile, chromePx, replay.active, section]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
@@ -1795,12 +1809,15 @@ export default function HailApp() {
             }}
             onUserMove={() => {
               userMoved.current = true;
+              nationalShown.current = false;
             }}
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
-              const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
-              writeSavedView({ ...center, zoom: zoomFromBounds(bounds) });
+              if (!nationalShown.current) {
+                const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
+                writeSavedView({ ...center, zoom: zoomFromBounds(bounds) });
+              }
               if (Date.now() < holdRankUntil.current) return;
               setRankBounds(bounds);
             }}
@@ -2110,9 +2127,14 @@ export default function HailApp() {
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
                 {showPoints ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="hail-scale" />
+                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-semibold">Hail</span>
+                    {MESH_LEGEND.map((band) => (
+                      <span key={band.label} className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
+                        {band.label}
+                      </span>
+                    ))}
                     <span className="inline-flex items-center gap-1">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#1d4ed8" }} />
                       Wind
@@ -2144,7 +2166,7 @@ export default function HailApp() {
             </div>
           ) : null}
           {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
-            <p className="glass pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
+            <p className="map-empty glass pointer-events-none absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
               {historyLoading
                 ? "Loading storm history…"
                 : historyActive

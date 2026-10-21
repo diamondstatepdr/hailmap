@@ -14,6 +14,9 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
+import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
+import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -44,19 +47,10 @@ function useMapStyle(theme: "light" | "dark") {
 }
 
 const hailSizeColor = [
-  "interpolate",
-  ["linear"],
+  "step",
   ["get", "sizeIn"],
-  0.25,
-  "#16a34a",
-  1,
-  "#ca8a04",
-  1.75,
-  "#ea580c",
-  2.5,
-  "#dc2626",
-  4,
-  "#7c3aed",
+  MESH_LEGEND[0].color,
+  ...MESH_LEGEND.slice(1).flatMap((band) => [band.minIn, band.color]),
 ];
 
 const windColor = [
@@ -116,26 +110,7 @@ const stateCoreWidth = ["interpolate", ["linear"], ["zoom"], 2, 1.5, 3.6, 2.15, 
 const stateCasingWidth = ["interpolate", ["linear"], ["zoom"], 2, 3.6, 3.6, 4.6, 6, 5.4, 9, 6.4];
 const stateTextSize = ["interpolate", ["linear"], ["zoom"], 3, 12, 4.5, 15, 6.5, 18, 9, 23];
 
-const swathColor = [
-  "case",
-  ["==", ["typeof", ["get", "maxSizeIn"]], "number"],
-  [
-    "interpolate",
-    ["linear"],
-    ["get", "maxSizeIn"],
-    0.25,
-    "#16a34a",
-    1,
-    "#ca8a04",
-    1.75,
-    "#ea580c",
-    2.5,
-    "#dc2626",
-    4,
-    "#7c3aed",
-  ],
-  "#64748b",
-];
+const swathColor = ["coalesce", ["get", "color"], "#64748b"] as const;
 
 export interface MapFocus {
   lon: number;
@@ -153,6 +128,11 @@ export interface MapFrame {
   maxZoom?: number;
   /** Pixel inset so the framed storm sits in the map that is not covered by the chrome or replay bar. */
   padding?: { top: number; bottom: number; left: number; right: number };
+  /**
+   * Phone weekly sheet. Padding is computed from the map's own height at fit
+   * time. A window-height guess shrinks the country to the whole Americas.
+   */
+  chaseSheet?: { chromePx: number };
 }
 
 const THREAT_LAYERS = new Set([
@@ -337,7 +317,7 @@ export default function HailMap({
       frameWait.current = true;
       raw.once("idle", () => {
         frameWait.current = false;
-        applyFrame(frameRef.current);
+        if (frameRef.current?.nonce === next.nonce) applyFrame(frameRef.current);
       });
       return;
     }
@@ -375,7 +355,14 @@ export default function HailMap({
             left: 12,
             right: 12,
           }
-      : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
+      : next.chaseSheet && !desktop
+        ? chaseMapPadding({
+            mobile: true,
+            chromePx: next.chaseSheet.chromePx,
+            mapHeight: height,
+            sheet: true,
+          })
+        : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
     try {
       map.fitBounds(
         [
@@ -388,6 +375,7 @@ export default function HailMap({
           maxZoom: next.maxZoom ?? 8.2,
         },
       );
+      publishZoom();
     } catch {
       // A latitude outside the world throws inside MapLibre. Keep the camera where it is.
     }
@@ -427,8 +415,8 @@ export default function HailMap({
     const tick = () => {
       tuckAttribution();
       const root = mapRef.current?.getMap()?.getContainer()?.querySelector(".maplibregl-ctrl-attrib");
-      const tucked = root?.getAttribute("data-tucked") === "1" && !root.classList.contains("maplibregl-compact-show");
-      if (!tucked && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
+      const ready = root?.getAttribute("data-credit") === "open" || root?.getAttribute("data-credit") === "closed";
+      if (!ready && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -445,16 +433,29 @@ export default function HailMap({
     }
   }
 
+  function publishZoom() {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    map.getContainer().dataset.mapZoom = map.getZoom().toFixed(2);
+  }
+
   function tuckAttribution() {
     const map = mapRef.current?.getMap();
     const root = map?.getContainer()?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
     if (!root?.classList.contains("maplibregl-compact")) return;
+    if (root.dataset.credit === "open" || root.dataset.credit === "closed") return;
+    root.dataset.credit = "closed";
     root.classList.remove("maplibregl-compact-show");
-    if (root.dataset.tucked === "1") return;
-    root.dataset.tucked = "1";
-    root.querySelector("summary")?.addEventListener("click", (event) => {
-      event.preventDefault();
-    });
+    root.removeAttribute("open");
+    const summary = root.querySelector("summary");
+    summary?.addEventListener(
+      "click",
+      (event) => {
+        const open = toggleMapCredit(root, event);
+        summary.setAttribute("aria-expanded", open ? "true" : "false");
+      },
+      true,
+    );
   }
 
   function quietBaseStateLayers() {
@@ -560,9 +561,9 @@ export default function HailMap({
     <Map
       ref={mapRef}
       initialViewState={{
-        longitude: focus?.lon ?? -98.2,
-        latitude: focus?.lat ?? 38.4,
-        zoom: focus?.zoom ?? 4.15,
+        longitude: focus?.lon ?? DEFAULT_HOME_VIEW.lon,
+        latitude: focus?.lat ?? DEFAULT_HOME_VIEW.lat,
+        zoom: focus?.zoom ?? DEFAULT_HOME_VIEW.zoom,
       }}
       mapStyle={mapStyle}
       attributionControl={false}
@@ -580,6 +581,7 @@ export default function HailMap({
         installIcons();
         quietBaseStateLayers();
         tuckAttribution();
+        publishZoom();
         applyFrame();
         const raw = mapRef.current?.getMap();
         const bounds = raw ? readMapBounds(raw) : null;
@@ -598,6 +600,7 @@ export default function HailMap({
       }}
       onMoveEnd={(event) => {
         const bounds = readMapBounds(event.target);
+        publishZoom();
         if (!bounds) return;
         onPreviewBounds?.(bounds);
         onViewChange?.(bounds);
@@ -705,39 +708,19 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
       {showSwaths ? (
-        <Source id="swaths" type="geojson" data={swaths}>
-          <Layer
-            id="swath-fill"
-            type="fill"
-            paint={{
-              "fill-color": swathColor as never,
-              "fill-opacity": theme === "dark" ? 0.34 : 0.3,
-            }}
-          />
-          <Layer
-            id="swath-glow"
-            type="line"
-            layout={{ "line-join": "round", "line-cap": "round" }}
-            paint={{
-              "line-color": theme === "dark" ? "#f7fbff" : "#102033",
-              "line-width": 5.4,
-              "line-opacity": theme === "dark" ? 0.9 : 0.82,
-              "line-blur": 0.35,
-            }}
-          />
-          <Layer
-            id="swath-line"
-            type="line"
-            paint={{
-              "line-color": swathColor as never,
-              "line-width": 1.8,
-              "line-opacity": 0.92,
-            }}
-          />
-        </Source>
+        <SwathSource
+          id="swath"
+          data={swaths}
+          fill={theme === "dark" ? 0.48 : 0.52}
+          lineWidth={1.75}
+          lineOpacity={1}
+          blur={0}
+          theme={theme}
+          labels
+        />
       ) : null}
+      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
       {showThreats && alertData.features.length ? (
         <Source id="alerts" type="geojson" data={alertData}>
           <Layer
@@ -1213,15 +1196,15 @@ function MeshContours({
 }) {
   const meshFade = useCrossfade(mesh);
   const pulseFade = useCrossfade(meshPulse);
-  const fill = faded ? (theme === "dark" ? 0.16 : 0.18) : emphasis ? (theme === "dark" ? 0.58 : 0.66) : theme === "dark" ? 0.34 : 0.4;
-  const lineWidth = emphasis ? 2.2 : 1.25;
-  const lineOpacity = (emphasis ? 0.95 : 0.72) * (faded ? 0.45 : 1);
-  const pulseFill = (theme === "dark" ? 0.72 : 0.8) * (faded ? 0.4 : 1);
+  const fill = faded ? 0.28 : theme === "dark" ? 0.48 : 0.52;
+  const lineWidth = 1.75;
+  const lineOpacity = faded ? 0.7 : 1;
+  const pulseFill = 0.55 * (faded ? 0.5 : 1);
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} theme={theme} />
-        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} theme={theme} />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels />
+        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={lineWidth} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
   }
@@ -1235,8 +1218,9 @@ function MeshContours({
           fill={meshFade.current === index ? fill : 0}
           lineWidth={lineWidth}
           lineOpacity={meshFade.current === index ? lineOpacity : 0}
-          blur={0.2}
+          blur={0}
           fade
+          labels={meshFade.current === index}
           theme={theme}
         />
       ))}
@@ -1265,6 +1249,7 @@ function SwathSource({
   lineOpacity,
   blur,
   fade = false,
+  labels = false,
   theme,
 }: {
   id: string;
@@ -1274,19 +1259,22 @@ function SwathSource({
   lineOpacity: number;
   blur: number;
   fade?: boolean;
+  labels?: boolean;
   theme: "light" | "dark";
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
   const halo = theme === "dark" ? "#f7fbff" : "#102033";
+  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
         id={`${id}-fill`}
         type="fill"
+        filter={["==", ["geometry-type"], "Polygon"]}
         paint={
           {
-            "fill-color": ["get", "color"],
+            "fill-color": swathColor as never,
             "fill-opacity": fill,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
@@ -1295,13 +1283,14 @@ function SwathSource({
       <Layer
         id={`${id}-halo`}
         type="line"
+        filter={["==", ["geometry-type"], "LineString"]}
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
             "line-color": halo,
-            "line-width": lineWidth + 3.1,
-            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity + 0.22) : 0,
-            "line-blur": 0.45,
+            "line-width": lineWidth + 3.2,
+            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
+            "line-blur": Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
@@ -1309,17 +1298,40 @@ function SwathSource({
       <Layer
         id={`${id}-line`}
         type="line"
+        filter={["==", ["geometry-type"], "Polygon"]}
+        layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": ["get", "color"],
+            "line-color": contour,
             "line-width": lineWidth,
             "line-opacity": lineOpacity,
-            "line-blur": blur,
+            "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
-        layout={{ "line-join": "round", "line-cap": "round" }}
       />
+      {labels ? (
+        <Layer
+          id={`${id}-label`}
+          type="symbol"
+          minzoom={9}
+          filter={["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "showLabel"], true]]}
+          layout={{
+            "text-field": ["coalesce", ["get", "mapLabel"], ""],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 9, 12, 12, 15],
+            "text-allow-overlap": false,
+            "text-padding": 6,
+            "text-optional": true,
+          }}
+          paint={{
+            "text-color": "#ffffff",
+            "text-halo-color": "#102033",
+            "text-halo-width": 2,
+            "text-halo-blur": 0.15,
+          }}
+        />
+      ) : null}
     </Source>
   );
 }

@@ -104,7 +104,7 @@ export interface ChaseFrameState {
   popupOpen: boolean;
   /** The sheet opened on its own for a week the visitor has not dismissed. */
   autoOpen: boolean;
-  /** `?honey=1`, a bounds/center/day link, an address link, or a saved view. */
+  /** A share or alert link chose the camera. A saved view on plain `/` did not. */
   requestedView: boolean;
   /** The visitor panned, zoomed, searched, or started a replay. */
   userMoved: boolean;
@@ -119,21 +119,28 @@ export interface ChaseFrameResult {
   frameUnitedStates: boolean;
   /** Keep mesh and geolocation from replacing the camera. */
   lockFrame: boolean;
+  /** The sheet closed without a row tap. Put the saved view, or the default US view, back. */
+  restoreHome: boolean;
+}
+
+/** A share or alert link chose the camera. A saved view on plain `/` did not. */
+export function linkClaimsCamera(opening: OpeningView): boolean {
+  return opening.honey || opening.bounds || opening.center || opening.day != null || opening.address;
 }
 
 /**
- * The country frame is only for the weekly sheet auto-opening on a map
- * nobody else has claimed. Share links, saved views, replays, and a
- * camera the visitor already moved stay where they are, lock included.
+ * The country frame is for the weekly sheet auto-opening on a plain visit,
+ * including one that has a saved view. Share links, replays, a row-tap
+ * flight, and a camera the visitor already moved stay put. Closing the
+ * sheet without a row tap restores the saved view or the default US view.
  */
+const holdCamera: ChaseFrameResult = { frameUnitedStates: false, lockFrame: true, restoreHome: false };
+
 export function chaseFrameResult(state: ChaseFrameState): ChaseFrameResult {
-  if (!state.chaseReady) return { frameUnitedStates: false, lockFrame: true };
-  if (state.requestedView || state.userMoved || state.replayActive || state.flyingToStop) {
-    return { frameUnitedStates: false, lockFrame: true };
-  }
-  if (state.popupOpen && state.autoOpen) return { frameUnitedStates: true, lockFrame: true };
-  if (state.popupOpen || state.autoOpen || state.nationalShown) {
-    return { frameUnitedStates: false, lockFrame: true };
-  }
-  return { frameUnitedStates: false, lockFrame: false };
+  if (!state.chaseReady) return holdCamera;
+  if (state.requestedView || state.userMoved || state.replayActive || state.flyingToStop) return holdCamera;
+  if (state.popupOpen && state.autoOpen) return { frameUnitedStates: true, lockFrame: true, restoreHome: false };
+  if (!state.popupOpen && state.nationalShown) return { frameUnitedStates: false, lockFrame: true, restoreHome: true };
+  if (state.popupOpen || state.autoOpen || state.nationalShown) return holdCamera;
+  return { frameUnitedStates: false, lockFrame: false, restoreHome: false };
 }

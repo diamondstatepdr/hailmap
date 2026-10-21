@@ -3,6 +3,7 @@ import {
   chaseBlockedBySheet,
   chaseFrameResult,
   describeOpening,
+  linkClaimsCamera,
   stormDayFromLink,
   suppressesWeeklyChase,
   weeklyChaseShouldAutoOpen,
@@ -127,33 +128,47 @@ describe("national chase frame", () => {
   it("does not frame the US or drop the lock when a share link, map link, or saved view is open", () => {
     const loaded = chaseFrameResult(state({ requestedView: true, popupOpen: false, autoOpen: true }));
     const popped = chaseFrameResult(state({ requestedView: true, popupOpen: true, autoOpen: true }));
-    expect(loaded).toEqual({ frameUnitedStates: false, lockFrame: true });
-    expect(popped).toEqual({ frameUnitedStates: false, lockFrame: true });
+    expect(loaded).toEqual({ frameUnitedStates: false, lockFrame: true, restoreHome: false });
+    expect(popped).toEqual({ frameUnitedStates: false, lockFrame: true, restoreHome: false });
+    expect(linkClaimsCamera(describeOpening(params("/?lat=32.75&lon=-97.33&z=11"), saved))).toBe(true);
+    expect(linkClaimsCamera(describeOpening(params("/"), saved))).toBe(false);
+    expect(linkClaimsCamera(describeOpening(params(FORT_WORTH), null))).toBe(true);
   });
 
   it("frames the US only when the weekly popup auto-opens with no other view", () => {
     expect(chaseFrameResult(state({ popupOpen: true, autoOpen: true }))).toEqual({
       frameUnitedStates: true,
       lockFrame: true,
+      restoreHome: false,
     });
     expect(chaseFrameResult(state({ popupOpen: false, autoOpen: true }))).toEqual({
       frameUnitedStates: false,
       lockFrame: true,
+      restoreHome: false,
     });
   });
 
-  it("does not frame the US when the sheet is opened from the map, after it closes, or before chase loads", () => {
-    expect(chaseFrameResult(state({ popupOpen: true, autoOpen: false }))).toEqual({
-      frameUnitedStates: false,
-      lockFrame: true,
-    });
+  it("restores the home camera when the auto sheet closes, and does not when a row is flying", () => {
     expect(chaseFrameResult(state({ popupOpen: false, autoOpen: false, nationalShown: true }))).toEqual({
       frameUnitedStates: false,
       lockFrame: true,
+      restoreHome: true,
+    });
+    expect(chaseFrameResult(state({ popupOpen: false, nationalShown: true, flyingToStop: true })).restoreHome).toBe(false);
+    expect(chaseFrameResult(state({ popupOpen: false, nationalShown: true, userMoved: true })).restoreHome).toBe(false);
+    expect(chaseFrameResult(state({ popupOpen: false, nationalShown: true, requestedView: true })).restoreHome).toBe(false);
+  });
+
+  it("does not frame the US when the sheet is opened from the map or before chase loads", () => {
+    expect(chaseFrameResult(state({ popupOpen: true, autoOpen: false }))).toEqual({
+      frameUnitedStates: false,
+      lockFrame: true,
+      restoreHome: false,
     });
     expect(chaseFrameResult(state({ chaseReady: false, popupOpen: true, autoOpen: true }))).toEqual({
       frameUnitedStates: false,
       lockFrame: true,
+      restoreHome: false,
     });
   });
 
@@ -171,6 +186,6 @@ describe("national chase frame", () => {
   });
 
   it("releases the lock only when chase is idle and nobody asked for a view", () => {
-    expect(chaseFrameResult(state({}))).toEqual({ frameUnitedStates: false, lockFrame: false });
+    expect(chaseFrameResult(state({}))).toEqual({ frameUnitedStates: false, lockFrame: false, restoreHome: false });
   });
 });

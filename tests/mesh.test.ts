@@ -131,17 +131,43 @@ describe("MESH contours", () => {
       label: "Last 24 hours",
     });
     const bands = collection.features.map((feature) => feature.properties?.minIn);
-    expect(bands).toContain(0.75);
     expect(bands).toContain(1);
     expect(bands).toContain(1.5);
     expect(bands).toContain(2);
+    expect(bands).not.toContain(2.5);
     const severe = collection.features.find((feature) => feature.properties?.minIn === 2);
     expect(severe?.properties?.maxIn).toBe(2.4);
+    expect(severe?.properties?.color).toBe("#e11d48");
+    const yellow = collection.features.find((feature) => feature.properties?.minIn === 1 && feature.geometry.type === "Polygon");
+    expect(yellow?.geometry.type === "Polygon" ? yellow.geometry.coordinates.length : 0).toBeGreaterThan(1);
     const ring = severe?.geometry.type === "Polygon" ? severe.geometry.coordinates[0] : [];
     expect(ring.length).toBeGreaterThan(5);
     const indexed = indexCells(cells, shape);
     expect(sampleIndexed(indexed, shape, 40.03, -99.97)).toBe(2.4);
     expect(sampleIndexed(indexed, shape, 41, -90)).toBeNull();
+  });
+
+  it("keeps a 2.5 inch core as its own saturated band", () => {
+    const cells: MeshCell[] = [
+      { ix: 1, iy: 1, inches: 0.8 },
+      { ix: 2, iy: 1, inches: 2.8 },
+      { ix: 1, iy: 2, inches: 1.2 },
+      { ix: 2, iy: 2, inches: 1.6 },
+    ];
+    const collection = cellsToSwaths(cells, shape, {
+      product: "MESH_Max_1440min",
+      validTime: null,
+      label: "test",
+    });
+    const core = collection.features.find((feature) => feature.properties?.minIn === 2.5 && feature.geometry.type === "Polygon");
+    expect(core?.properties?.color).toBe("#d946ef");
+    expect(core?.properties?.label).toBe('2.5"+');
+    expect(core?.properties?.mapLabel).toBe("2.5+");
+    expect(String(core?.properties?.mapLabel)).not.toMatch(/["“”]/);
+    expect(core?.properties?.showLabel).toBe(true);
+    const mid = collection.features.find((feature) => feature.properties?.minIn === 1.5 && feature.geometry.type === "Polygon");
+    expect(mid?.geometry.type === "Polygon" ? mid.geometry.coordinates.length : 0).toBeGreaterThan(1);
+    expect(collection.features.some((feature) => feature.properties?.minIn === 2 && feature.geometry.type === "Polygon")).toBe(false);
   });
 
   it("uses the default CONUS bin for an empty sample", () => {

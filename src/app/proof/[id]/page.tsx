@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LogoMark } from "@/components/brand/Logo";
 import ProofActions from "@/components/hail-proof/ProofActions";
-import { proofFilename, proofMapSvg } from "@/lib/hail-proof";
+import { proofFilename, proofMapSvg, proofSwathStat } from "@/lib/hail-proof";
 import { readHailProof } from "@/lib/hail-proof-store";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +51,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
             </div>
           </dl>
           <div className="proof-map" dangerouslySetInnerHTML={{ __html: proofMapSvg(proof) }} />
+          {proofSwathStat(proof.rings) ? <p className="text-sm font-semibold">{proofSwathStat(proof.rings)}</p> : null}
           <h3>Nearby reports</h3>
           {proof.nearby.length ? (
             <ul className="proof-list">

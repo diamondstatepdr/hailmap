@@ -1,4 +1,5 @@
 import { buildPdf, pdfText, wrapPdfText } from "@/lib/pdf-doc";
+import { measureGeometry, statLine } from "@/lib/swath-measure";
 
 export interface ProofStorm {
   date: string;
@@ -143,6 +144,18 @@ function project(bounds: Box, frame: { x: number; y: number; w: number; h: numbe
   return { x, y };
 }
 
+/** Length, width, and area of the largest stored swath ring. */
+export function proofSwathStat(rings: number[][][]): string | null {
+  let best: ReturnType<typeof measureGeometry> | null = null;
+  for (const ring of rings) {
+    if (ring.length < 4) continue;
+    const stats = measureGeometry({ type: "Polygon", coordinates: [ring] });
+    if (!best || stats.areaSqMi > best.areaSqMi) best = stats;
+  }
+  if (!best || (best.areaSqMi <= 0 && best.lengthMi <= 0)) return null;
+  return statLine(best);
+}
+
 export function proofMapSvg(proof: HailProof): string {
   const width = 640;
   const height = 280;
@@ -192,7 +205,8 @@ export function renderHailProofPdf(proof: HailProof): Buffer {
   }
   const pin = project(bounds, frame, proof.lon, proof.lat);
   map += `0.04 0.12 0.43 rg ${pin.x.toFixed(1)} ${pin.y.toFixed(1)} 5 0 360 arc f\n`;
-  map += text("F1", 9, 48, 582, "Swath map", "0.24 0.30 0.40");
+  const measured = proofSwathStat(proof.rings);
+  map += text("F1", 9, 48, 582, measured ? `Swath · ${measured}` : "Swath map", "0.24 0.30 0.40");
 
   const summary = wrapPdfText(proof.summary, 92).slice(0, 3);
   let nearby = "";

@@ -2336,12 +2336,16 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .leads-card {
-  margin: 1rem 0 1.25rem;
+  margin: 0 0 1.25rem;
   max-width: 48rem;
   border: 1px solid var(--border);
   border-radius: 1.1rem;
   background: var(--panel);
   padding: 0.9rem 1rem 1rem;
+}
+
+[data-tone="reports"] > .sheet-band {
+  margin-bottom: 0.7rem;
 }
 
 .leads-list {

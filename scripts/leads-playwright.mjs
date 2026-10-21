@@ -55,20 +55,28 @@ async function install(page) {
       body: JSON.stringify({
         leads: [
           {
-            address: "3500 W 7th St, Fort Worth",
+            address: "East Main Street, Mesa, AZ",
             status: "interested",
             rep: "Alex",
-            note: "Call tonight",
-            date: "2026-04-25",
-            hailIn: 1.75,
+            note: "Hood and roof, call tonight",
+            date: "2026-10-20",
+            hailIn: 2,
           },
           {
-            address: "8 Main St, Fort Worth",
+            address: "East Broadway Road, Mesa, AZ",
             status: "signed",
-            rep: "Blake",
+            rep: "Jordan",
             note: "Roof and hood",
-            date: "2026-04-26",
-            hailIn: 2,
+            date: "2026-10-20",
+            hailIn: 1.5,
+          },
+          {
+            address: "West Main Street, Mesa, AZ",
+            status: "interested",
+            rep: "Sam",
+            note: "Left a card",
+            date: "2026-10-20",
+            hailIn: 1,
           },
         ],
       }),
@@ -81,7 +89,7 @@ async function shoot(browser, label, options, theme, name) {
   const page = await context.newPage();
   await hideDev(page);
   await install(page);
-  await page.goto(`${base}/?theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${base}/?lat=33.415&lon=-111.837&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
   const reports = page.getByRole("button", { name: /^Reports/ });
   await reports.waitFor({ timeout: 20000 });
   await reports.click();
@@ -89,9 +97,12 @@ async function shoot(browser, label, options, theme, name) {
   await page.getByLabel("Name").fill("Alex");
   await page.getByLabel("Team passcode").fill("team-pass");
   await page.locator("form").getByRole("button", { name: "Sign in" }).click();
-  await page.locator("[data-leads]").getByText("3500 W 7th St, Fort Worth").waitFor({ timeout: 10000 });
+  await page.locator("[data-leads]").getByText("East Main Street, Mesa, AZ").waitFor({ timeout: 10000 });
   await page.locator("[data-leads-sheets]").waitFor();
-  await page.locator("[data-leads]").evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await page.locator(".page-enter[data-tone='reports']").evaluate((el) => {
+    el.scrollTop = 0;
+    el.parentElement?.scrollTo?.({ top: 0 });
+  });
   await page.waitForTimeout(300);
   const file = `${outDir}/${label}-${name}.png`;
   await page.screenshot({ path: file });

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { chromium } from "playwright";
 
 const base = process.env.BASE_URL ?? "http://127.0.0.1:3210";
@@ -10,64 +10,6 @@ const themes = [
   ["b", "supercell"],
   ["c", "ice-swath"],
 ];
-
-const mesa = { lat: 33.415, lon: -111.837 };
-
-function contains(ring, lon, lat) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const xi = ring[i][0];
-    const yi = ring[i][1];
-    const xj = ring[j][0];
-    const yj = ring[j][1];
-    const crosses = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
-function mesaBands() {
-  const file = "/tmp/mesh-oct20.json";
-  if (!existsSync(file)) return { rings: [], colors: [] };
-  const doc = JSON.parse(readFileSync(file, "utf8"));
-  const features = doc.collection?.features ?? [];
-  const frame = { west: mesa.lon - 0.012, east: mesa.lon + 0.012, south: mesa.lat - 0.01, north: mesa.lat + 0.01 };
-  const corners = [
-    [frame.west, frame.south],
-    [frame.east, frame.south],
-    [frame.east, frame.north],
-    [frame.west, frame.north],
-  ];
-  const bands = [];
-  for (const feature of features) {
-    const ring = feature.geometry?.coordinates?.[0];
-    if (!Array.isArray(ring) || ring.length < 4) continue;
-    const hit = contains(ring, mesa.lon, mesa.lat) || corners.some(([lon, lat]) => contains(ring, lon, lat));
-    if (!hit) continue;
-    const step = Math.max(1, Math.ceil(ring.length / 80));
-    const simplified = ring.filter((_, index) => index % step === 0).slice(0, 80);
-    bands.push({ ring: simplified, color: feature.properties?.color ?? "#f97316", minIn: feature.properties?.minIn ?? 0 });
-  }
-  bands.sort((a, b) => a.minIn - b.minIn);
-  return { rings: bands.map((band) => band.ring), colors: bands.map((band) => band.color) };
-}
-
-const meshBands = mesaBands();
-const draft = {
-  address: "East Main Street, Mesa, AZ",
-  lat: mesa.lat,
-  lon: mesa.lon,
-  company: "Diamond State PDR",
-  phone: "480-800-0148",
-  maxHailIn: 2.53,
-  score: 72,
-  level: "High",
-  summary: "Radar hail on Oct 20, 2026 covers this Mesa block. Treat the score as an estimate.",
-  storms: [{ date: "2026-10-20", label: "Oct 20, 2026", hailIn: 2.53 }],
-  nearby: [{ when: "Oct 20, 2026", where: "3 ENE Mesa", detail: "2.00 in hail" }],
-  rings: meshBands.rings,
-  colors: meshBands.colors,
-};
 
 function placePayload(lat, lon) {
   return {
@@ -113,8 +55,10 @@ async function shootProof(browser, id) {
       await page.goto(`${base}/proof/${id}?scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
       await page.locator("[data-hail-proof-page]").waitFor();
       await page.locator("h2", { hasText: "East Main Street, Mesa" }).waitFor();
-      await page.getByText("Diamond State PDR").waitFor();
       await page.locator(".proof-map svg").waitFor();
+      const proofText = await page.locator("[data-hail-proof-page]").innerText();
+      if (/480-|Diamond State|Company · phone/i.test(proofText)) throw new Error(`proof page shipped a contact line: ${proofText.slice(0, 240)}`);
+      if ((await page.locator(".proof-company").count()) !== 0) throw new Error("blank company line still rendered");
       const file = `${outDir}/${label}-${name}-proof.png`;
       await page.screenshot({ path: file, fullPage: true });
       console.log("wrote", file);
@@ -158,13 +102,14 @@ async function shootField(browser) {
       await page.locator("[data-field-street]").waitFor({ timeout: 15000 });
       await page.waitForFunction(() => /Main|Mesa/i.test(document.querySelector("[data-field-street]")?.textContent ?? ""), null, { timeout: 15000 });
       await page.getByText("Damage probability").waitFor({ timeout: 15000 });
-      await page.getByLabel("Company name").fill("Diamond State PDR");
-      await page.getByLabel("Phone").fill("480-800-0148");
+      const company = page.getByLabel("Your company");
+      const phoneField = page.getByLabel("Your phone");
+      await company.waitFor({ timeout: 15000 });
+      if ((await company.inputValue()) || (await phoneField.inputValue())) {
+        throw new Error("company and phone should start empty");
+      }
       await page.locator("[data-hail-proof]").waitFor({ timeout: 15000 });
-      await page.locator("[data-sheet-scroll]").evaluate((el) => {
-        const button = el.querySelector("[data-hail-proof]");
-        button?.scrollIntoView({ block: "center" });
-      });
+      await page.locator(".proof-launch").evaluate((el) => el.scrollIntoView({ block: "center" }));
       await page.waitForTimeout(400);
       const file = `${outDir}/${label}-${name}-field.png`;
       await page.screenshot({ path: file });
@@ -174,25 +119,58 @@ async function shootField(browser) {
   }
 }
 
+async function createProofFromField(browser) {
+  const context = await browser.newContext({ ...phone, serviceWorkers: "block" });
+  const page = await context.newPage();
+  await hideDev(page);
+  await page.route("**/api/geocode?**", async (route) => {
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        lat: Number(url.searchParams.get("lat")),
+        lon: Number(url.searchParams.get("lon")),
+        street: "East Main Street, Mesa, AZ",
+        streetStatus: "ok",
+      }),
+    });
+  });
+  await page.route("**/api/place?**", async (route) => {
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(placePayload(Number(url.searchParams.get("lat")), Number(url.searchParams.get("lon")))),
+    });
+  });
+  const mesh = page.waitForResponse((response) => response.url().includes("/api/mesh") && response.ok(), { timeout: 25000 });
+  await page.goto(`${base}/?lat=33.415&lon=-111.837&z=14&day=2026-10-20&scheme=light&theme=a`, { waitUntil: "domcontentloaded" });
+  await mesh;
+  await page.getByRole("button", { name: /^Field/ }).click();
+  await page.locator("[data-hail-proof]").waitFor({ timeout: 20000 });
+  const posted = page.waitForResponse(
+    (response) => response.url().includes("/api/hail-proof") && !response.url().includes("/identity") && response.request().method() === "POST",
+    { timeout: 20000 },
+  );
+  await page.locator("[data-hail-proof]").click();
+  const response = await posted;
+  const payload = await response.json();
+  const body = response.request().postDataJSON();
+  console.log("swathLine", body?.swathLine);
+  if (!body?.swathLine || !/mi long/.test(body.swathLine)) throw new Error(`missing swath caption: ${body?.swathLine}`);
+  if (body.company || body.phone) throw new Error("generated proof included a company or phone");
+  await context.close();
+  if (response.status() !== 201 || !payload?.id) throw new Error("could not create proof from the field");
+  return payload.id;
+}
+
 async function main() {
   mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto(base, { waitUntil: "domcontentloaded" });
-  const created = await page.evaluate(async (body) => {
-    const response = await fetch("/api/hail-proof", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json();
-    return { status: response.status, payload };
-  }, draft);
-  console.log("created", JSON.stringify(created));
-  if (created.status !== 201 || !created.payload?.id) throw new Error("could not create proof");
-  await context.close();
-  await shootProof(browser, created.payload.id);
+  const id = await createProofFromField(browser);
+  console.log("created", id);
+  await shootProof(browser, id);
   await shootField(browser);
   await browser.close();
 }

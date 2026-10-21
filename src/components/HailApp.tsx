@@ -59,7 +59,7 @@ import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
 import { beginAddressSelection } from "@/lib/address-lookup";
 import { ADDRESS_SPANS, HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
-import { nearbyLines, ringsNearPoint, stormsFromDaily } from "@/lib/hail-proof";
+import { nearbyLines, ringsNearPoint, stormsFromDaily, swathCaptionNearPoint } from "@/lib/hail-proof";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
@@ -1688,7 +1688,8 @@ export default function HailApp() {
   }) {
     setProofBusy(true);
     try {
-      const bands = ringsNearPoint(meshCollection?.features ?? [], input.lat, input.lon);
+      const features = meshCollection?.features ?? [];
+      const bands = ringsNearPoint(features, input.lat, input.lon);
       await shareHailProof({
         address: input.address,
         lat: input.lat,
@@ -1703,6 +1704,7 @@ export default function HailApp() {
         nearby: nearbyLines(input.nearby),
         rings: bands.map((band) => band.ring),
         colors: bands.map((band) => band.color),
+        swathLine: swathCaptionNearPoint(features, input.lat, input.lon),
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;

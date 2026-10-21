@@ -77,7 +77,7 @@ import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBo
 import { showHoneyRanking } from "@/lib/honey";
 import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
-import { bandsFromFeatures, buildForecast, type ForecastLine } from "@/lib/forecast";
+import { bandsForSelection, type ForecastQuery } from "@/lib/forecast";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -220,7 +220,7 @@ export default function HailApp() {
   const [knock, setKnock] = useState<{ label: string; stops: KnockStop[]; mode: KnockMode; note: string | null } | null>(null);
   const [knockBusy, setKnockBusy] = useState(false);
   const [knockError, setKnockError] = useState<string | null>(null);
-  const [forecast, setForecast] = useState<{ label: string; lines: ForecastLine[] } | null>(null);
+  const [forecast, setForecast] = useState<{ label: string; query: ForecastQuery } | null>(null);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
@@ -2481,7 +2481,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showMesh || showPoints || showOutlook || (user && canvass.stops.length > 0)) && !honeyOpen && !knock && !replay.active && !reportOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && section === "map" && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook || (user && canvass.stops.length > 0)) && !honeyOpen && !knock && !replay.active && !reportOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && !forecast && !place && section === "map" && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex flex-col items-start gap-1.5">
               {user && canvass.stops.length > 0 ? (
                 <div className="canvass-key glass pointer-events-auto" data-canvass-key>
@@ -2554,7 +2554,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && !knock && !canvassBoard && !chasePopup && !area && !placeCardOpen && !selected && !threat && !dealersOpen && !overlay && !filtersOpen && !alertDraft && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
+          {!loading && !replay.active && !honeyOpen && !knock && !canvassBoard && !chasePopup && !area && !placeCardOpen && !selected && !threat && !dealersOpen && !overlay && !filtersOpen && !alertDraft && !forecast && !county && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading
@@ -2609,14 +2609,17 @@ export default function HailApp() {
                 const spots = honey?.spots?.[honeyMode] ?? [];
                 const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
                 if (!spot) return;
+                const selection = circlePolygon(spot.lat, spot.lon, 1.8);
                 setForecast({
                   label: spot.name,
-                  lines: buildForecast({
-                    geometry: circlePolygon(spot.lat, spot.lon, 1.8),
-                    fallbackHail: spot.hailIn,
-                    vehicles: spot.vehicles,
-                    homes: spot.homes,
-                  }),
+                  query: {
+                    selection,
+                    selectionHail: spot.hailIn > 0 ? spot.hailIn : 0.75,
+                    selectionIsBand: false,
+                    bands: bandsForSelection(meshCollection?.features, selection, 0, { lon: spot.lon, lat: spot.lat }),
+                    vehicles: spot.vehicles != null && spot.vehicles > 0 ? spot.vehicles : null,
+                    homes: spot.homes != null && spot.homes > 0 ? spot.homes : null,
+                  },
                 });
                 setHoneyOpen(false);
               }}
@@ -2853,18 +2856,22 @@ export default function HailApp() {
                     type="button"
                     className="btn btn-secondary press"
                     data-forecast-open
-                    onClick={() =>
+                    onClick={() => {
+                      const hail = area.minIn ?? area.maxIn ?? 0.75;
                       setForecast({
                         label: area.label,
-                        lines: buildForecast({
-                          geometry: area.geometry,
-                          fallbackHail: area.maxIn ?? area.minIn ?? 0.75,
-                          bands: bandsFromFeatures(meshCollection?.features),
-                        }),
-                      })
-                    }
+                        query: {
+                          selection: area.geometry,
+                          selectionHail: hail,
+                          selectionIsBand: true,
+                          bands: bandsForSelection(meshCollection?.features, area.geometry, hail),
+                          vehicles: null,
+                          homes: null,
+                        },
+                      });
+                    }}
                   >
-                    Storm-to-cash
+                    Storm-to-cash estimate
                   </button>
                 </div>
                 <button
@@ -2900,7 +2907,7 @@ export default function HailApp() {
             />
           ) : null}
           {section === "map" && !replay.active && forecast ? (
-            <ForecastSheet label={forecast.label} lines={forecast.lines} onClose={() => setForecast(null)} />
+            <ForecastSheet label={forecast.label} query={forecast.query} onClose={() => setForecast(null)} />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">

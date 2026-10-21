@@ -110,7 +110,7 @@ export default function HoneyPanel(props: Props) {
       {props.routeError ? <p className="honey-note">{props.routeError}</p> : null}
       {props.onForecast ? (
         <button type="button" className="btn btn-primary press" data-forecast-open disabled={!props.spots.length || props.needsDay} onClick={props.onForecast}>
-          Storm-to-cash
+          Storm-to-cash estimate
         </button>
       ) : null}
       <div className="honey-body">

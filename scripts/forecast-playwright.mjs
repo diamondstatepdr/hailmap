@@ -10,13 +10,6 @@ const themes = [
   ["b", "supercell"],
   ["c", "ice-swath"],
 ];
-const ring = [
-  [-97.36, 32.72],
-  [-97.3, 32.72],
-  [-97.3, 32.78],
-  [-97.36, 32.78],
-  [-97.36, 32.72],
-];
 
 async function hideDev(page) {
   await page.addInitScript(() => {
@@ -26,80 +19,48 @@ async function hideDev(page) {
   });
 }
 
-async function install(page) {
-  await page.route("**/api/reports**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ reports: [], swaths: { type: "FeatureCollection", features: [] }, fetchedAt: new Date().toISOString(), status: [] }),
-    }),
-  );
-  await page.route("**/api/mesh?**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        label: "Radar hail",
-        collection: {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              properties: { id: "band", minIn: 1.75, maxIn: 1.75, label: "1.75 in" },
-              geometry: { type: "Polygon", coordinates: [ring] },
-            },
-          ],
-        },
-      }),
-    }),
-  );
-  await page.route("**/api/dealers", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ dealers: [], note: "None" }) }),
-  );
-  await page.route("**/api/chase", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        version: 3,
-        week: "2026-W16",
-        generatedAt: new Date().toISOString(),
-        quiet: true,
-        partial: false,
-        windowStart: "2026-04-13",
-        windowEnd: "2026-04-19",
-        fresh: { pdr: [], roof: [] },
-        fallback: { pdr: [], roof: [] },
-      }),
-    }),
-  );
-  await page.route("**/api/forecast/prices", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ prices: { pdrLow: 175, pdrHigh: 450, roofLow: 6500, roofHigh: 14000 }, estimate: true }),
-    }),
-  );
-}
-
 async function shoot(browser, label, options, theme, name) {
   const context = await browser.newContext({ ...options, serviceWorkers: "block" });
   const page = await context.newPage();
   await hideDev(page);
-  await install(page);
-  await page.goto(`${base}/?lat=32.75&lon=-97.33&z=13&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh") && response.ok(), { timeout: 60000 });
+  await page.goto(`${base}/?lat=33.50&lon=-111.73&z=11&day=2026-10-20&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await meshReady;
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ timeout: 30000 });
-  await page.waitForTimeout(500);
+  await page.locator("[data-radar-label]").filter({ hasText: "Oct 20" }).waitFor({ timeout: 30000 });
+  await page.waitForTimeout(1200);
   const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  if (!box) throw new Error("map canvas missing");
   const open = page.locator("[data-forecast-open]").last();
-  await open.waitFor({ timeout: 10000 });
+  const spots = [
+    [0.5, 0.58],
+    [0.42, 0.66],
+    [0.62, 0.5],
+    [0.35, 0.72],
+    [0.7, 0.62],
+  ];
+  for (const [px, py] of spots) {
+    await canvas.click({ position: { x: box.width * px, y: box.height * py }, force: true });
+    try {
+      await open.waitFor({ timeout: 2500 });
+      break;
+    } catch {
+      const close = page.locator("[data-bottom-sheet] button[aria-label='Close']");
+      if (await close.count()) await close.first().click();
+    }
+  }
+  await open.waitFor({ timeout: 8000 });
   await open.click();
-  await page.locator("[data-forecast]").waitFor();
-  await page.getByText("Price settings").waitFor();
-  await page.locator("[data-forecast]").evaluate((el) => el.scrollIntoView({ block: "start" }));
-  await page.waitForTimeout(250);
+  await page.locator("[data-forecast-guide]").waitFor({ timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("[data-forecast]");
+      return Boolean(root && !root.textContent?.includes("Counting Census"));
+    },
+    { timeout: 90000 },
+  );
+  await page.waitForTimeout(400);
   const file = `${outDir}/${label}-${name}.png`;
   await page.screenshot({ path: file });
   console.log("wrote", file);

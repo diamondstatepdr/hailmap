@@ -24,7 +24,7 @@ async function shoot(browser, label, options, theme, name) {
   const page = await context.newPage();
   await hideDev(page);
   const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh") && response.ok(), { timeout: 60000 });
-  await page.goto(`${base}/?lat=33.50&lon=-111.73&z=11&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${base}/?lat=33.389&lon=-111.830&z=12.8&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
   await meshReady;
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ timeout: 30000 });
@@ -34,14 +34,12 @@ async function shoot(browser, label, options, theme, name) {
   if (!box) throw new Error("map canvas missing");
   const open = page.locator("[data-forecast-open]").last();
   const spots = [
-    [0.5, 0.58],
-    [0.42, 0.66],
+    [0.5, 0.34],
+    [0.4, 0.34],
+    [0.5, 0.64],
+    [0.5, 0.5],
+    [0.42, 0.46],
     [0.62, 0.5],
-    [0.35, 0.72],
-    [0.7, 0.62],
-    [0.48, 0.5],
-    [0.55, 0.42],
-    [0.38, 0.48],
   ];
   let opened = false;
   for (const [px, py] of spots) {

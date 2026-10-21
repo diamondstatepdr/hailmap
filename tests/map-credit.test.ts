@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toggleMapCredit, type CreditControl, type CreditEvent } from "@/lib/map-credit";
 
@@ -55,5 +56,13 @@ describe("map credit toggle", () => {
     expect(root.getAttribute("data-credit")).toBe("closed");
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(toggleMapCredit(root, tap())).toBe(true);
+  });
+});
+
+describe("map credit while Money Holes is open", () => {
+  it("lifts the phone credit above the bottom sheet", () => {
+    const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+    expect(css).toMatch(/div:has\(> \.honey-dock\) \.maplibregl-ctrl-bottom-right\s*\{[^}]*bottom:\s*calc\(var\(--honey-stack, min\(48dvh, 28rem\)\) \+ 1\.15rem\)/);
+    expect(css).toMatch(/@media \(min-width: 768px\)\s*\{\s*\.honey-dock\s*\{[^}]*top:/);
   });
 });

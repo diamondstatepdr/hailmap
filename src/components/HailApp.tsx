@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CloudHail, Gem, Moon, Palette, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
@@ -195,6 +195,8 @@ export default function HailApp() {
   const [showOutlook, setShowOutlook] = useState(true);
   const [showHeat, setShowHeat] = useState(false);
   const [honeyOpen, setHoneyOpen] = useState(false);
+  const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
+  const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
   const [showHoney, setShowHoney] = useState(false);
   const [honey, setHoney] = useState<HoneyResponse | null>(null);
@@ -1749,6 +1751,24 @@ export default function HailApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, pickerOpen, overlay, customOpen, placeExpanded]);
 
+  useLayoutEffect(() => {
+    const stage = mapStageRef.current;
+    if (!stage || section !== "map" || !honeyOpen) {
+      setHoneyStackPx(null);
+      return;
+    }
+    const dock = stage.querySelector<HTMLElement>(".honey-dock");
+    if (!dock) return;
+    const apply = () => {
+      const height = Math.ceil(dock.getBoundingClientRect().height);
+      if (height > 0) setHoneyStackPx((current) => (current === height ? current : height));
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [section, honeyOpen]);
+
   return (
     <AppShell
       section={section}
@@ -1767,11 +1787,13 @@ export default function HailApp() {
       stormsNew={chaseUnseen && section !== "storms"}
     >
       <div
+          ref={mapStageRef}
           className={showMap ? "absolute inset-0" : "hidden"}
           style={
             {
               "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
               "--chase-map-gap": "13.5rem",
+              "--honey-stack": honeyStackPx != null ? `${honeyStackPx}px` : undefined,
             } as CSSProperties
           }
         >

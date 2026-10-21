@@ -203,6 +203,14 @@ button {
   z-index: 3;
 }
 
+/* The phone Money Holes sheet covers the bottom of the map. --honey-stack is the sheet's height. */
+@media (max-width: 767px) {
+  div:has(> .honey-dock) .maplibregl-ctrl-bottom-right {
+    z-index: 34;
+    bottom: calc(var(--honey-stack, min(48dvh, 28rem)) + 1.15rem);
+  }
+}
+
 .maplibregl-ctrl-attrib.maplibregl-compact {
   margin: 0 !important;
   min-height: 44px;

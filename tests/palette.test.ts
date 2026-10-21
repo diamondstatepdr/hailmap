@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { paletteFromParam, themeBootScript } from "@/lib/palette";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
@@ -26,6 +27,54 @@ function block(css: string, selector: string) {
   return vars;
 }
 
+function boot(search: string, storage: Record<string, string>) {
+  const store = { ...storage };
+  const html = {
+    palette: "",
+    dark: false,
+    scheme: "",
+    meta: "",
+  };
+  const context = createContext({
+    URLSearchParams,
+    location: { search },
+    localStorage: {
+      getItem(key: string) {
+        return store[key] ?? null;
+      },
+      setItem(key: string, value: string) {
+        store[key] = value;
+      },
+    },
+    document: {
+      documentElement: {
+        setAttribute(name: string, value: string) {
+          if (name === "data-palette") html.palette = value;
+        },
+        classList: {
+          add(name: string) {
+            if (name === "dark") html.dark = true;
+          },
+        },
+        style: {
+          set colorScheme(value: string) {
+            html.scheme = value;
+          },
+        },
+      },
+      querySelector() {
+        return {
+          setAttribute(_name: string, value: string) {
+            html.meta = value;
+          },
+        };
+      },
+    },
+  });
+  runInContext(themeBootScript(), context);
+  return { palette: html.palette, dark: html.dark, paletteStored: store["swathline-palette"], schemeStored: store["hailmap-theme"], meta: html.meta };
+}
+
 const css = readFileSync(new URL("../src/app/themes.css", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 const TONES = ["map", "storms", "addresses", "field", "reports", "alerts", "money", "chase"];
@@ -49,12 +98,22 @@ describe("Swathline palettes", () => {
     expect(paletteFromParam(null)).toBeNull();
   });
 
-  it("keeps the saved light/dark key and does not store the review palette", () => {
+  it("keeps the saved light/dark key and restores the palette before paint", () => {
     const source = themeBootScript();
     expect(source).toContain('localStorage.getItem("hailmap-theme")');
+    expect(source).toContain('localStorage.getItem("swathline-palette")');
+    expect(source).toContain('localStorage.setItem("swathline-palette"');
     expect(source).toContain('setAttribute("data-palette"');
-    expect(source).not.toContain("swathline-theme");
-    expect(source).not.toContain("localStorage.setItem(\"swathline");
+    expect(source).not.toContain("hailmap-palette");
+    expect(boot("", {})).toMatchObject({ palette: "a", dark: false, paletteStored: undefined });
+    expect(boot("", { "swathline-palette": "c", "hailmap-theme": "dark" })).toMatchObject({ palette: "c", dark: true });
+    expect(boot("?theme=b", { "swathline-palette": "a" })).toMatchObject({ palette: "b", paletteStored: "b" });
+    expect(boot("?theme=light", { "swathline-palette": "b", "hailmap-theme": "dark" })).toMatchObject({
+      palette: "b",
+      dark: false,
+      schemeStored: "light",
+    });
+    expect(boot("?scheme=dark", { "swathline-palette": "c" })).toMatchObject({ palette: "c", dark: true, schemeStored: "dark" });
   });
 
   it("keeps hail-size legend colors out of the theme files", () => {
@@ -118,8 +177,11 @@ describe("Swathline palettes", () => {
       return JSON.stringify(style.layers.find((layer: { id: string }) => layer.id === "highway_motorway_inner").paint["line-color"]);
     });
     expect(new Set(motorways).size).toBe(3);
-    expect(motorways[0]).toContain("#22d3ee");
-    expect(motorways[1]).toContain("#fbbf24");
-    expect(motorways[2]).toContain("#5eead4");
+    expect(motorways[0]).toContain("#1ba2ba");
+    expect(motorways[0]).not.toContain("#22d3ee");
+    expect(motorways[1]).toContain("#c1941f");
+    expect(motorways[1]).not.toContain("#fbbf24");
+    expect(motorways[2]).toContain("#4ab5a5");
+    expect(motorways[2]).not.toContain("#5eead4");
   });
 });

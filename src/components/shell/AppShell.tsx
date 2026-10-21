@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Bell, CloudHail, FileText, House, Map, Moon, Navigation, SunMedium } from "lucide-react";
+import { Bell, CloudHail, FileText, House, Map, Moon, Navigation, Palette, SunMedium } from "lucide-react";
 import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
 export type AppSection = "map" | "storms" | "properties" | "field" | "reports" | "alerts";
@@ -21,6 +21,8 @@ interface Props {
   onSection: (section: AppSection) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  onOpenAppearance: () => void;
+  paletteLabel: string;
   userName: string | null;
   authConfigured: boolean;
   onSignIn: () => void;
@@ -35,6 +37,8 @@ export default function AppShell({
   onSection,
   theme,
   onToggleTheme,
+  onOpenAppearance,
+  paletteLabel,
   userName,
   authConfigured,
   onSignIn,
@@ -45,9 +49,18 @@ export default function AppShell({
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-app text-ink">
       <aside className="shell-rail hidden w-[248px] shrink-0 flex-col md:flex">
-        <div className="flex items-center gap-3 px-4 pb-3 pt-5">
-          <LogoMark size={40} />
-          <Wordmark />
+        <div className="px-3 pb-3 pt-4">
+          <button type="button" className="brand-launcher press" aria-label="Swathline appearance" onClick={onOpenAppearance}>
+            <LogoMark size={40} />
+            <Wordmark />
+          </button>
+          <button type="button" className="appearance-open press" onClick={onOpenAppearance}>
+            <Palette size={16} />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold tracking-tight">Appearance</span>
+              <span className="block text-[11px] text-muted">{paletteLabel}</span>
+            </span>
+          </button>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Sections">
           {NAV.map((item) => {

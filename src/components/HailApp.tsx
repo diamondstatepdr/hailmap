@@ -2,13 +2,14 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { CloudHail, Gem, Moon, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
+import { CloudHail, Gem, Moon, Palette, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
 import { BrandSplash, LogoMark, Wordmark } from "@/components/brand/Logo";
-import { applyScheme } from "@/lib/palette";
+import { applyPalette, applyScheme, activePalette, paletteName, type PaletteId } from "@/lib/palette";
+import ThemePicker from "@/components/theme/ThemePicker";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
 import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
@@ -175,6 +176,8 @@ function readTheme(): "light" | "dark" {
 export default function HailApp() {
   const [section, setSection] = useState<AppSection>("map");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [palette, setPalette] = useState<PaletteId>("a");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [holdSplash, setHoldSplash] = useState(false);
   const [reports, setReports] = useState<HailReport[]>([]);
   const [rawCount, setRawCount] = useState(0);
@@ -486,6 +489,7 @@ export default function HailApp() {
 
   useEffect(() => {
     setTheme(readTheme());
+    setPalette(activePalette());
     fetch("/api/auth/session")
       .then((response) => response.json())
       .then((payload: { user?: { id: string; name: string } | null; configured?: boolean }) => {
@@ -1056,11 +1060,19 @@ export default function HailApp() {
     setHoldSplash(params.get("splash") === "1");
   }, []);
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
+  function setScheme(next: "light" | "dark") {
     setTheme(next);
     applyScheme(next);
     localStorage.setItem("hailmap-theme", next);
+  }
+
+  function toggleTheme() {
+    setScheme(theme === "dark" ? "light" : "dark");
+  }
+
+  function choosePalette(id: PaletteId) {
+    setPalette(id);
+    applyPalette(id);
   }
 
   function frameFilter(next: typeof filter) {
@@ -1653,7 +1665,7 @@ export default function HailApp() {
 
   const mapDetailOpen = section === "map" && Boolean(selected || threat || county || area);
   useEffect(() => {
-    if (alertDraft || authOpen || reportOpen) return;
+    if (alertDraft || authOpen || reportOpen || pickerOpen) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (filtersOpen) {
@@ -1673,7 +1685,7 @@ export default function HailApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, overlay, customOpen, placeExpanded]);
+  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, pickerOpen, overlay, customOpen, placeExpanded]);
 
   return (
     <AppShell
@@ -1681,6 +1693,8 @@ export default function HailApp() {
       onSection={setSection}
       theme={theme}
       onToggleTheme={toggleTheme}
+      onOpenAppearance={() => setPickerOpen(true)}
+      paletteLabel={paletteName(palette)}
       userName={user?.name ?? null}
       authConfigured={authConfigured}
       onSignIn={() => setAuthOpen(true)}
@@ -1799,9 +1813,14 @@ export default function HailApp() {
           />
           <div ref={chromeRef} data-tone="map" className="map-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
             <div className="map-topbar pointer-events-auto">
-              <div className="map-brand">
-                <LogoMark size={30} title="Swathline" />
-                <Wordmark subtitle={null} />
+              <div className="map-brand-row">
+                <button type="button" className="map-brand press" aria-label="Swathline appearance" onClick={() => setPickerOpen(true)}>
+                  <LogoMark size={30} title="Swathline" />
+                  <Wordmark subtitle={null} />
+                </button>
+                <button type="button" className="icon-btn press" aria-label="Appearance" onClick={() => setPickerOpen(true)}>
+                  <Palette size={18} />
+                </button>
               </div>
               <div className="map-controls">
               <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
@@ -2561,6 +2580,15 @@ export default function HailApp() {
             setUser(next);
             setAuthOpen(false);
           }}
+        />
+      ) : null}
+      {pickerOpen ? (
+        <ThemePicker
+          palette={palette}
+          scheme={theme}
+          onPalette={choosePalette}
+          onScheme={setScheme}
+          onClose={() => setPickerOpen(false)}
         />
       ) : null}
       {holdSplash ? (

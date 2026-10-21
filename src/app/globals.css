@@ -1806,11 +1806,29 @@ html.dark .replay-range::-moz-range-thumb {
     0 14px 32px color-mix(in srgb, var(--chrome) 48%, transparent);
 }
 
-.map-brand {
+.map-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.map-brand,
+.brand-launcher {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.map-brand {
+  flex: 1;
 }
 
 .map-topbar .swath-name {
@@ -2062,6 +2080,194 @@ html.dark .replay-range::-moz-range-thumb {
     padding-right: 2rem;
     padding-left: 2rem;
   }
+}
+
+.brand-launcher {
+  width: 100%;
+  border-radius: 0.9rem;
+  padding: 0.35rem 0.35rem 0.45rem;
+}
+
+.brand-launcher:hover,
+.appearance-open:hover {
+  background: color-mix(in srgb, var(--chrome-ink) 10%, transparent);
+}
+
+.appearance-open {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.65rem;
+  font: inherit;
+  margin-top: 0.35rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--chrome-ink) 8%, transparent);
+  padding: 0.55rem 0.7rem;
+  color: var(--chrome-ink);
+  text-align: left;
+}
+
+.theme-picker-root {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.theme-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: color-mix(in srgb, #05070f 46%, transparent);
+}
+
+.theme-picker {
+  position: relative;
+  display: flex;
+  width: min(26rem, 100%);
+  max-height: min(86dvh, 40rem);
+  flex-direction: column;
+  gap: 0.85rem;
+  overflow: auto;
+  border-radius: 1.35rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.95rem;
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+}
+
+.theme-picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.theme-picker-kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.theme-picker h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.theme-picker-close {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.theme-picker-scheme {
+  background: var(--bg);
+}
+
+.theme-swatches {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.theme-swatch {
+  display: grid;
+  gap: 0.55rem;
+  font: inherit;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.05rem;
+  background: var(--panel-2);
+  padding: 0.45rem;
+  color: var(--text);
+  text-align: left;
+}
+
+.theme-swatch[aria-checked="true"] {
+  border-color: transparent;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.theme-swatch-sky {
+  position: relative;
+  display: block;
+  height: 4.4rem;
+  overflow: hidden;
+  border-radius: 0.8rem;
+}
+
+.theme-swatch-road {
+  position: absolute;
+  top: 1.55rem;
+  right: -10%;
+  left: -10%;
+  height: 0.42rem;
+  transform: rotate(-14deg);
+  border-radius: 999px;
+}
+
+.theme-swatch-hail {
+  position: absolute;
+  top: 0.85rem;
+  left: 18%;
+  width: 58%;
+  height: 2.3rem;
+  border-radius: 40% 60% 45% 55%;
+  background: linear-gradient(100deg, #65a30d, #ca8a04 38%, #ea580c 68%, #dc2626);
+  opacity: 0.92;
+  transform: rotate(-8deg);
+}
+
+.theme-swatch-dots {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.4rem;
+  display: flex;
+  gap: 0.28rem;
+}
+
+.theme-swatch-dots span {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.theme-swatch-copy {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0 0.25rem 0.2rem;
+}
+
+.theme-swatch-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.98rem;
+  font-weight: 740;
+  letter-spacing: -0.02em;
+}
+
+.theme-swatch-line {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 @media (prefers-reduced-motion: reduce) {

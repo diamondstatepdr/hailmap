@@ -132,7 +132,7 @@ export function separateBandFills(features: Feature[]): Feature[] {
     if (!insideLower) {
       edges.push({
         type: "Feature",
-        properties: { halo: true, kind: "edge" },
+        properties: { halo: true, kind: "edge", color: feature.properties?.color ?? "#64748b" },
         geometry: { type: "LineString", coordinates: ring },
       });
     }

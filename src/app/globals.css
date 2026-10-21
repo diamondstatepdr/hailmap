@@ -207,7 +207,9 @@ button {
 @media (max-width: 767px) {
   div:has(> .honey-dock) .maplibregl-ctrl-bottom-right {
     z-index: 34;
-    bottom: calc(var(--honey-stack, min(48dvh, 28rem)) + 1.15rem);
+    right: auto;
+    left: 0.55rem;
+    bottom: calc(var(--honey-stack, calc(min(48dvh, 28rem) + 0.5rem)) + 1.35rem);
   }
 }
 
@@ -242,8 +244,8 @@ button {
   display: block !important;
   position: absolute;
   right: 0;
-  /* Percentage offsets collapse on this control, so clear the button and the legend row directly. */
-  bottom: 7rem;
+  /* Sit the credit line just above the info button, clear of the money-spot sheet. */
+  bottom: 3.35rem;
   width: max-content;
   max-width: min(18.5rem, calc(100vw - 1.5rem));
   min-height: 0 !important;
@@ -1928,6 +1930,10 @@ html.dark .replay-range::-moz-range-thumb {
   padding-left: 0.75rem;
 }
 
+.map-chrome-rest.is-empty {
+  display: none;
+}
+
 .map-chip {
   border: 1px solid var(--chrome-line);
   background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
@@ -2336,4 +2342,528 @@ html.dark .replay-range::-moz-range-thumb {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* First-run welcome, help, and readable phone copy. */
+.tab-item {
+  min-height: 44px;
+  font-size: 0.75rem;
+}
+
+.honey-note,
+.honey-meta,
+.honey-head p,
+.chase-head p,
+.sheet-sub,
+.empty-state,
+.map-empty,
+.welcome-copy,
+.help-card,
+.help-glossary dd,
+.explain-pop,
+.app-menu button,
+.plain-action,
+.help-open {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.plain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.plain-action,
+.help-open,
+.menu-open,
+.welcome-skip,
+.welcome-next,
+.help-close,
+.explain-btn,
+.app-menu button {
+  min-height: 44px;
+}
+
+.menu-open,
+.plain-action,
+.help-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid var(--chrome-line);
+  border-radius: 0.95rem;
+  background: var(--chrome-fill);
+  color: var(--chrome-ink);
+  padding: 0 0.75rem;
+  font-weight: 700;
+}
+
+.plain-action[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.help-open {
+  width: 100%;
+  background: transparent;
+  font-weight: 680;
+}
+
+.app-menu {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.app-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 0.9rem;
+  background: var(--chrome-fill);
+  color: var(--chrome-ink);
+  padding: 0 0.8rem;
+  font-weight: 680;
+  text-align: left;
+}
+
+.explain {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.explain-btn {
+  width: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 750;
+}
+
+.explain-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  width: min(18rem, 70vw);
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.9rem;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.welcome,
+.help-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: end center;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--bg) 28%, transparent);
+}
+
+.welcome-card,
+.help-card {
+  width: min(28rem, 100%);
+  max-height: min(92dvh, 40rem);
+  overflow: auto;
+  border-radius: 1.4rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 1rem 1rem 1.1rem;
+  box-shadow: var(--shadow-lg);
+  animation: welcome-in 280ms ease;
+}
+
+.welcome-card h1,
+.help-card h2 {
+  font-size: 1.7rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.welcome-skip {
+  float: right;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 0.4rem;
+}
+
+.welcome-art {
+  display: block;
+  width: 100%;
+  height: 9.5rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.welcome-map {
+  fill: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+}
+
+.welcome-card-shape {
+  fill: color-mix(in srgb, var(--accent) 16%, var(--panel-2));
+}
+
+.welcome-path {
+  fill: none;
+  stroke: var(--swath, var(--accent));
+  stroke-width: 14;
+  stroke-linecap: round;
+}
+
+.welcome-accent {
+  fill: var(--accent);
+}
+
+.welcome-swath {
+  fill: var(--swath, var(--mark));
+}
+
+.welcome-mark {
+  fill: var(--mark, var(--accent-2));
+}
+
+.welcome-pin {
+  fill: none;
+  stroke: var(--accent-ink, white);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.welcome-dots {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.85rem 0;
+}
+
+.welcome-dots span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.welcome-dots span[data-on="true"] {
+  width: 1.4rem;
+  background: var(--accent);
+}
+
+.welcome-next,
+.help-close {
+  width: 100%;
+}
+
+.help-steps {
+  margin: 0.8rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.help-steps li + li {
+  margin-top: 0.45rem;
+}
+
+.help-glossary {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0;
+}
+
+.help-glossary dt {
+  font-weight: 750;
+}
+
+.empty-next {
+  margin-top: 0.7rem;
+}
+
+@keyframes welcome-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* One chip row, one legend, inline help, and a dimmer welcome. */
+.plain-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-topbar .plain-actions {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.map-topbar .plain-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.map-topbar .plain-actions .range-control,
+.map-topbar .plain-actions .plain-action,
+.map-topbar .plain-actions .chase-open {
+  height: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 0.35rem;
+  padding-inline: 0.75rem;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+}
+
+.map-topbar .plain-actions .chase-open {
+  gap: 0.28rem;
+  padding-inline: 0.45rem;
+}
+
+.help-chip {
+  display: inline-flex;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chrome-line);
+  border-radius: 999px;
+  background: var(--chrome-fill);
+  color: var(--chrome-ink);
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.map-key {
+  border-radius: 999px;
+  color: var(--chrome-ink);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
+}
+
+.map-key[open] {
+  border-radius: 1rem;
+}
+
+.map-key summary {
+  display: flex;
+  min-height: 2.15rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.7rem 0.2rem 0.55rem;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.map-key summary::-webkit-details-marker {
+  display: none;
+}
+
+.map-key summary::after {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  margin-left: 0.15rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.map-key[open] summary::after {
+  transform: rotate(225deg) translateY(-1px);
+}
+
+.map-key-dots,
+.map-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.map-key-dots {
+  gap: 0.18rem;
+}
+
+.map-key-dots i,
+.map-key-item i {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border-radius: 0.16rem;
+}
+
+.map-key-item i.is-round {
+  border-radius: 999px;
+}
+
+.map-key-item i.is-dash {
+  background: transparent;
+  border: 1.5px dashed;
+}
+
+.map-key-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  max-width: min(18rem, calc(100vw - 5.5rem));
+  padding: 0 0.7rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.map-key-label,
+.map-key-back {
+  font-weight: 720;
+}
+
+.map-key-back {
+  color: var(--accent);
+}
+
+.app-menu .menu-states {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.app-menu .menu-states p {
+  margin: 0.15rem 0 0;
+  color: color-mix(in srgb, var(--chrome-ink) 72%, transparent);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-menu .menu-states div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.app-menu .menu-states button {
+  width: auto;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 0 0.65rem;
+}
+
+.app-menu .menu-states button[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.honey-kicker .explain {
+  display: inline-flex;
+  align-items: center;
+}
+
+.honey-kicker .explain-btn,
+.explain-btn {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.1rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.honey-dock .honey-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: unset;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.welcome {
+  background: rgba(2, 6, 14, 0.84);
+}
+
+.welcome-frame {
+  fill: color-mix(in srgb, var(--panel-2) 82%, var(--accent));
+  stroke: color-mix(in srgb, var(--accent) 62%, white);
+  stroke-width: 1.5;
+}
+
+.welcome-ground {
+  fill: color-mix(in srgb, var(--bg) 78%, #07111c);
+}
+
+.welcome-grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 16%, transparent);
+  stroke-width: 1;
+}
+
+.welcome-band {
+  opacity: 0.94;
+}
+
+.welcome-pin-shape {
+  fill: var(--accent);
+}
+
+.welcome-pin-core {
+  fill: var(--accent-ink, #fff);
+}
+
+.welcome-rank rect,
+.welcome-work-card rect {
+  fill: color-mix(in srgb, var(--panel) 88%, var(--accent));
+  stroke: color-mix(in srgb, var(--accent) 50%, transparent);
+  stroke-width: 1;
+}
+
+.welcome-rank-dot {
+  fill: var(--accent);
+}
+
+.welcome-rank-num {
+  fill: var(--accent-ink, #fff);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.welcome-rank-label,
+.welcome-rank-sub {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.welcome-rank-sub {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 640;
+}
+
+.welcome-route {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--accent));
 }

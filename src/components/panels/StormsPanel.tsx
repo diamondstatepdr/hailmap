@@ -28,10 +28,10 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8" data-tone="storms">
       <header className="sheet-band">
-        <p className="sheet-kicker">Live window</p>
+        <p className="sheet-kicker">This week</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Storms</h1>
-        <p className="sheet-sub mt-1 max-w-xl text-sm leading-relaxed">
-          Official reports in the current map view. Hail is on by default. Community photos stay labeled as community.
+        <p className="sheet-sub mt-1 max-w-xl leading-relaxed">
+          The Chase List is this week&apos;s best stops. Reports below are what people and radar saw in the map you were looking at.
         </p>
       </header>
       {chase ? (
@@ -60,8 +60,8 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
       {!loading && !reports.length ? (
         <div className="empty-state max-w-xl">
           <CloudHail className="mx-auto mb-2 text-accent" size={28} />
-          <p className="text-sm font-semibold text-ink">No reports match these filters.</p>
-          <p className="mt-1 text-sm">Widen the time window or turn a hazard back on.</p>
+          <p className="font-semibold text-ink">No hail here this week.</p>
+          <p className="mt-1">See this week&apos;s biggest storms in the Chase List above.</p>
         </div>
       ) : null}
       <ul className="storm-list">
@@ -95,7 +95,7 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
         <Feed label="SPC" value={status?.spc ?? "checking"} />
         <Feed label="IEM" value={status?.iem ?? "checking"} />
         <Feed label="NWS" value={status?.nws ?? "checking"} />
-        <Feed label="Radar" value={status?.mesh === "skipped" ? "swaths on" : (status?.mesh ?? "checking")} />
+        <Feed label="Hail size" value={status?.mesh === "skipped" ? "hail paths on" : (status?.mesh ?? "checking")} />
         {syncedAt ? <span className="self-center">Updated {formatWhen(syncedAt)}</span> : null}
         {filter.state ? <span className="self-center">State {filter.state}</span> : null}
       </div>

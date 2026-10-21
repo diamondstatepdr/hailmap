@@ -18,10 +18,11 @@ export default function ChaseMapButton({ unseen, expanded, onClick }: Props) {
       data-chase-open
       aria-expanded={expanded}
       aria-haspopup="dialog"
+      aria-label="Chase list"
       onClick={onClick}
     >
-      <Flag size={15} aria-hidden />
-      Chase List
+      <Flag size={16} aria-hidden />
+      Chase
       {unseen ? <span className="chase-dot" data-chase-new /> : null}
       {unseen ? <span className="sr-only">New chase list</span> : null}
     </button>

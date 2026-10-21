@@ -911,8 +911,8 @@ export default function HailMap({
           type="geojson"
           data={points}
           cluster={clusterPoints}
-          clusterRadius={clusterPoints ? 52 : undefined}
-          clusterMaxZoom={clusterPoints ? 5 : undefined}
+          clusterRadius={clusterPoints ? 78 : undefined}
+          clusterMaxZoom={clusterPoints ? 7 : undefined}
         >
           <Layer
             id="hail-cluster-halo"
@@ -953,9 +953,9 @@ export default function HailMap({
             type="circle"
             filter={["!", ["has", "point_count"]]}
             paint={{
-              "circle-color": pointColor as never,
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 11, 6, 14, 10, 18],
-              "circle-opacity": 0.18,
+              "circle-color": brand.halo,
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 5, 6, 7, 10, 10],
+              "circle-opacity": 0.28,
             }}
           />
           <Layer
@@ -973,41 +973,31 @@ export default function HailMap({
             type="circle"
             filter={["!", ["has", "point_count"]]}
             paint={{
-              "circle-color": pointColor as never,
-              "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                3,
-                ["+", 7, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
-                6,
-                ["+", 10, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
-                10,
-                ["+", 13, ["min", 18, ["*", 0.08, ["max", 0, ["-", ["coalesce", ["get", "clusterCount"], 1], 1]]]]],
-              ] as never,
+              "circle-color": [...pointColor.slice(0, -1), brand.cluster] as never,
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 3.2, 6, 4.6, 9, 6.5, 12, 9],
               "circle-stroke-color": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
                 brand.select,
                 ["==", ["get", "hasPhoto"], 1],
                 brand.select,
-                "#ffffff",
+                brand.halo,
               ] as never,
               "circle-stroke-width": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
-                3.5,
+                2.4,
                 ["==", ["get", "hasPhoto"], 1],
-                2.5,
-                1.6,
+                1.8,
+                1,
               ] as never,
-              "circle-opacity": 0.98,
+              "circle-opacity": 0.94,
             }}
           />
           <Layer
             id="history-cluster-count"
             type="symbol"
-            filter={[">", ["coalesce", ["get", "clusterCount"], 0], 1]}
+            filter={["all", [">", ["zoom"], 8], [">", ["coalesce", ["get", "clusterCount"], 0], 1], ["!", ["has", "point_count"]]]}
             layout={{
               "text-field": ["to-string", ["get", "clusterCount"]],
               "text-size": 11,
@@ -1015,17 +1005,6 @@ export default function HailMap({
               "text-allow-overlap": true,
             }}
             paint={{ "text-color": "#ffffff" }}
-          />
-          <Layer
-            id="hail-point-shine"
-            type="circle"
-            filter={["!", ["has", "point_count"]]}
-            paint={{
-              "circle-color": "#ffffff",
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 8, 3],
-              "circle-opacity": 0.45,
-              "circle-translate": [-1.5, -2],
-            }}
           />
           <Layer
             id="hazard-mark"
@@ -1275,8 +1254,6 @@ function SwathSource({
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
-  const halo = theme === "dark" ? "#f7fbff" : "#102033";
-  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1298,7 +1275,7 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": halo,
+            "line-color": swathColor as never,
             "line-width": lineWidth + 3.2,
             "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": Math.min(blur, 0.15),
@@ -1313,7 +1290,7 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": contour,
+            "line-color": swathColor as never,
             "line-width": lineWidth,
             "line-opacity": lineOpacity,
             "line-blur": 0,

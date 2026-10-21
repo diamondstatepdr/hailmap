@@ -267,7 +267,28 @@ describe("hail proof document", () => {
     expect(sealedText).toContain("05:12 UTC");
     expect(sealedText).not.toMatch(/2026-10-21/);
     expect(sealedText).toContain("mPING");
+    expect(sealedText).toContain("PSR");
     expect(sealedText).toContain("3.1 mi");
+    const longSource = normalizeProof(
+      {
+        ...draft,
+        confirm: {
+          ...confirmed,
+          reports: [
+            {
+              ...confirmed.reports[0],
+              where: "3 ENE Mesa, Maricopa, AZ",
+              source: "SPC Local Storm Report · trained spotter · PSR",
+            },
+          ],
+        },
+      },
+      "2026-04-26T12:00:00.000Z",
+    );
+    if ("error" in longSource) throw new Error(longSource.error);
+    const longText = renderHailProofPdf(longSource).toString("latin1");
+    expect(longText).toContain("trained spotter");
+    expect(longText).toContain("PSR");
     expect(sealedText).toContain("not an insurance decision");
     expect(sealedText).not.toContain("certified meteorologist");
     const emptyNearby = normalizeProof({ ...draft, nearby: [], confirm: confirmed }, "2026-04-26T12:00:00.000Z");

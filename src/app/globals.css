@@ -2497,8 +2497,18 @@ html.dark .replay-range::-moz-range-thumb {
   font-weight: 750;
 }
 
-.proof-spotters .spot-meta {
+.proof-spotters .spot-when {
+  font-weight: 700;
+}
+
+.proof-spotters .spot-meta,
+.proof-utc {
   color: var(--muted);
+}
+
+.proof-utc {
+  font-size: 0.82em;
+  font-weight: 650;
 }
 
 .proof-confirm-note {
@@ -2510,24 +2520,51 @@ html.dark .replay-range::-moz-range-thumb {
 
 .proof-seal {
   box-sizing: border-box;
-  display: grid;
-  place-items: center;
-  width: 7.4rem;
-  height: 7.4rem;
-  margin: 0.15rem 0.2rem 0 auto;
-  padding: 0.85rem;
-  border: 3px solid var(--accent);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  width: 12.75rem;
+  height: 12.75rem;
+  margin: 0.1rem 0 0 auto;
+  padding: 1.15rem 1rem 1rem;
   border-radius: 50%;
-  outline: 1px solid var(--accent);
-  outline-offset: -7px;
-  color: var(--text);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1.15;
+  background: radial-gradient(circle at 32% 26%, color-mix(in srgb, white 36%, var(--accent)), var(--accent) 52%, color-mix(in srgb, black 22%, var(--accent)));
+  color: var(--accent-ink);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, white 62%, transparent),
+    inset 0 0 0 7px color-mix(in srgb, black 28%, var(--accent)),
+    0 0 0 3px var(--panel-2),
+    0 0 0 6px var(--accent),
+    0 12px 22px color-mix(in srgb, var(--accent) 32%, transparent);
   text-align: center;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.proof-seal-check {
+  width: 1.85rem;
+  height: 1.85rem;
+  margin-bottom: 0.05rem;
+}
+
+.proof-seal-title {
+  max-width: 9.2rem;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  line-height: 1.05;
   text-transform: uppercase;
-  transform: rotate(-8deg);
+}
+
+.proof-seal-date {
+  margin-top: 0.12rem;
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .proof-launch {
@@ -2643,7 +2680,29 @@ html.dark .replay-range::-moz-range-thumb {
 
   .proof-seal {
     order: -1;
+    width: 11.5rem;
+    height: 11.5rem;
     margin: 0.15rem auto 0.35rem;
+  }
+
+  .proof-seal-title {
+    font-size: 0.9rem;
+  }
+}
+
+@media print {
+  .proof-seal {
+    width: 1.9in;
+    height: 1.9in;
+    break-inside: avoid;
+  }
+
+  .proof-seal-title {
+    font-size: 11pt;
+  }
+
+  .proof-seal-date {
+    font-size: 9pt;
   }
 }
 

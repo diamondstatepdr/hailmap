@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
-import { normalizeProof, proofFilename } from "@/lib/hail-proof";
+import { normalizeProof, proofFilename, type HailProof } from "@/lib/hail-proof";
 import { saveHailProof } from "@/lib/hail-proof-store";
+import { formatStormDate } from "@/lib/mesh-plan";
 import { clientIp } from "@/lib/photos";
 import { unavailableConfirm } from "@/lib/proof-confirm";
 import { loadProofConfirm } from "@/lib/proof-confirm-load";
+
+function rememberStormDate(proof: HailProof, stormDate: string, hailIn: number | null): HailProof {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(stormDate) || proof.storms.some((storm) => storm.date === stormDate)) return proof;
+  return {
+    ...proof,
+    storms: [{ date: stormDate, label: formatStormDate(stormDate), hailIn }, ...proof.storms].slice(0, 8),
+  };
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +40,7 @@ export async function POST(request: Request) {
       confirm = unavailableConfirm();
     }
   }
-  const saved = saveHailProof({ ...proof, confirm });
+  const saved = saveHailProof(rememberStormDate({ ...proof, confirm }, stormDate, confirm?.radarIn ?? proof.maxHailIn));
   return Response.json(
     {
       id: saved.id,

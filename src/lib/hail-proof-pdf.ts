@@ -22,42 +22,67 @@ function companyContact(proof: HailProof): string[] {
   return line ? [text("F1", 10, 36, 670, line, "0.28 0.35 0.46")] : [];
 }
 
+function textWidth(value: string, size: number): number {
+  return value.length * size * 0.56;
+}
+
+function centerText(size: number, cx: number, y: number, value: string, color: string): string {
+  return text("F2", size, cx - textWidth(value, size) / 2, y, value, color);
+}
+
+/** Filled medallion. The date is the convective day, never the UTC calendar date. */
+function sealBadge(date: string): string {
+  const cx = 508;
+  const cy = 378;
+  const r = 58;
+  const ink = "1 1 1";
+  return [
+    "0.114 0.306 0.847 RG 3.2 w",
+    `${cx} ${cy} ${r + 5} 0 360 arc S`,
+    "0.114 0.306 0.847 rg",
+    `${cx} ${cy} ${r} 0 360 arc f`,
+    "1 1 1 RG 1.3 w",
+    `${cx} ${cy} ${r - 6} 0 360 arc S`,
+    "1 1 1 RG 2.6 w 1 J 1 j",
+    `${cx - 14} ${cy + 28} m ${cx - 6} ${cy + 20} l ${cx + 16} ${cy + 42} l S`,
+    centerText(9, cx, cy + 8, "RADAR +", ink),
+    centerText(9, cx, cy - 4, "SPOTTER", ink),
+    centerText(9, cx, cy - 16, "CONFIRMED", ink),
+    date ? centerText(8, cx, cy - 32, date, ink) : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function confirmBlock(proof: HailProof): string {
   const confirm = proof.confirm;
   if (!confirm) return "";
-  let y = 438;
   const lines: string[] = [];
+  const width = confirm.seal ? 72 : 105;
   if (confirm.seal) {
-    lines.push("0.55 0.32 0.05 RG 1.5 w 516 430 15 0 360 arc S\n");
-    lines.push("0.55 0.32 0.05 RG 0.6 w 516 430 11 0 360 arc S\n");
-    lines.push(text("F2", 11, 36, y, confirm.headline));
+    const date = proof.storms[0]?.label || "";
+    lines.push(sealBadge(date));
   } else {
-    lines.push(text("F2", 11, 36, y, "Radar only", "0.28 0.35 0.46"));
+    lines.push(text("F2", 11, 36, 438, "Radar only", "0.28 0.35 0.46"));
   }
-  y = 422;
-  lines.push(text("F1", 8, 36, y, confirm.radarLine.slice(0, 100), "0.20 0.26 0.36"));
-  y = 404;
+  let y = confirm.seal ? 424 : 422;
+  lines.push(text("F1", 8, 36, y, confirm.radarLine.slice(0, width), "0.20 0.26 0.36"));
+  y -= 16;
   for (const report of confirm.reports.slice(0, 3)) {
-    lines.push(
-      text(
-        "F1",
-        8,
-        36,
-        y,
-        `${report.sizeIn.toFixed(2)} in · ${report.distanceMi.toFixed(1)} mi · ${report.timeUtc} · ${report.timeLocal}`.slice(0, 105),
-      ),
-    );
+    const when = `${report.timeLocal} (${report.timeUtc})`;
+    lines.push(text("F1", 8, 36, y, `${report.sizeIn.toFixed(2)} in · ${report.distanceMi.toFixed(1)} mi · ${when}`.slice(0, width)));
     y -= 11;
-    lines.push(text("F1", 8, 36, y, `${report.where} · ${report.source}`.slice(0, 105), "0.20 0.26 0.36"));
-    y -= 11;
+    lines.push(text("F1", 8, 36, y, `${report.where} · ${report.source}`.slice(0, width), "0.20 0.26 0.36"));
+    y -= 12;
   }
+  const wrap = confirm.seal ? 68 : 108;
   if (confirm.note) {
-    for (const line of wrapPdfText(confirm.note, 108).slice(0, 2)) {
+    for (const line of wrapPdfText(confirm.note, wrap).slice(0, 2)) {
       y -= 11;
       lines.push(text("F1", 8, 36, y, line, "0.28 0.35 0.46"));
     }
   }
-  for (const line of wrapPdfText(confirm.disclaimer, 108).slice(0, 2)) {
+  for (const line of wrapPdfText(confirm.disclaimer, wrap).slice(0, 2)) {
     y -= 11;
     lines.push(text("F1", 8, 36, y, line, "0.28 0.35 0.46"));
   }
@@ -66,9 +91,9 @@ function confirmBlock(proof: HailProof): string {
 
 export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): Buffer {
   const hailLine = proof.maxHailIn != null ? `${proof.maxHailIn.toFixed(2)} in` : "No hail size";
-  const dates = proof.storms.map((storm) => storm.label || storm.date).join(", ") || "No storm date in this view";
+  const dates = proof.storms.map((storm) => storm.label || storm.date).join(", ") || "—";
   const bounds = streetFrame(proof.lat, proof.lon);
-  const mapY = proof.confirm ? 456 : 392;
+  const mapY = proof.confirm ? 460 : 392;
   const mapH = proof.confirm ? 132 : 200;
   const frame = { x: 36, y: mapY, w: 540, h: mapH };
   const clip = `q 36 ${mapY} 540 ${mapH} re W n\n`;
@@ -94,11 +119,13 @@ export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): B
   const nearbyTop = proof.confirm ? 286 : 348;
   const nearbyCount = proof.confirm ? 3 : 6;
   let nearby = "";
-  proof.nearby.slice(0, nearbyCount).forEach((report, index) => {
-    const y = nearbyTop - index * 14;
-    nearby += text("F1", 9, 40, y, `${report.when}   ${report.detail}   ${report.where}`.slice(0, 96));
-  });
-  if (!proof.nearby.length) nearby = text("F1", 9, 40, nearbyTop, "No nearby reports in this view.");
+  if (proof.nearby.length) {
+    nearby += text("F2", 11, 36, proof.confirm ? 302 : 368, "Nearby reports");
+    proof.nearby.slice(0, nearbyCount).forEach((report, index) => {
+      const y = nearbyTop - index * 14;
+      nearby += text("F1", 9, 40, y, `${report.when}   ${report.detail}   ${report.where}`.slice(0, 96));
+    });
+  }
 
   const contact = companyContact(proof);
   const content = [
@@ -118,7 +145,6 @@ export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): B
     text("F2", 10, 360, 616, dates.slice(0, 42)),
     map,
     confirmBlock(proof),
-    text("F2", 11, 36, proof.confirm ? 302 : 368, "Nearby reports"),
     nearby,
     text("F2", 11, 36, proof.confirm ? 236 : 250, "Damage score"),
     ...summary.map((line, index) => text("F1", 10, 36, (proof.confirm ? 218 : 232) - index * 14, line, "0.24 0.30 0.40")),

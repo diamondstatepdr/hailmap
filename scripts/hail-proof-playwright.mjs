@@ -60,14 +60,22 @@ async function shootProof(browser, id) {
       if (/480-|Diamond State|Company · phone/i.test(proofText)) throw new Error(`proof page shipped a contact line: ${proofText.slice(0, 240)}`);
       if ((await page.locator(".proof-company").count()) !== 0) throw new Error("blank company line still rendered");
       const confirmText = await page.locator("[data-proof-confirm]").innerText();
+      if (!/Oct 20, 2026/.test(proofText)) throw new Error(`storm date missing: ${proofText.slice(0, 500)}`);
+      if (/none in this view|no nearby reports/i.test(proofText)) throw new Error(`empty section still says none: ${proofText.slice(0, 800)}`);
       if (!/radar \+\s*spotter\s*confirmed|radar only/i.test(confirmText)) throw new Error(`missing radar status: ${confirmText.slice(0, 300)}`);
-      if (!/UTC/.test(confirmText)) throw new Error("radar time is missing UTC");
       if (!/not a meteorologist certification/i.test(confirmText) || !/not an insurance decision/i.test(confirmText)) {
         throw new Error(`disclaimer missing: ${confirmText.slice(0, 400)}`);
       }
       const sealed = /radar \+\s*spotter\s*confirmed/i.test(confirmText);
       if (sealed) {
         if ((await page.locator("[data-proof-seal]").count()) !== 1) throw new Error("confirmed proof has no seal");
+        if ((await page.locator("[data-proof-seal] svg").count()) !== 1) throw new Error("seal is missing the check");
+        const sealText = await page.locator("[data-proof-seal]").innerText();
+        if (!/Oct 20, 2026/.test(sealText)) throw new Error(`seal is missing the storm date: ${sealText}`);
+        if (!/[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} [AP]M/.test(confirmText)) throw new Error(`local time missing: ${confirmText.slice(0, 400)}`);
+        if (!/\(\d{2}:\d{2} UTC\)/.test(confirmText)) throw new Error(`UTC clock missing: ${confirmText.slice(0, 400)}`);
+        if (/\d{4}-\d{2}-\d{2}/.test(confirmText)) throw new Error(`confirm shows an ISO date: ${confirmText.slice(0, 500)}`);
+        if (/nearby reports/i.test(confirmText) || /nearby reports/i.test(proofText)) throw new Error("empty nearby section is still on the page");
         if (!/Local Storm Report/.test(confirmText)) throw new Error("confirmed proof is missing the spotter source");
         if (!/\d+\.\d+ mi/.test(confirmText)) throw new Error("confirmed proof is missing distance");
       } else if ((await page.locator("[data-proof-seal]").count()) !== 0) {

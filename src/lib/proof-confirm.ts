@@ -80,6 +80,10 @@ export interface ProofConfirm {
   radarIn: number | null;
   radarAt: string | null;
   radarKind: "scan" | "daily" | "unavailable";
+  /** Local clock at the address, such as "Oct 20, 10:20 PM MST". */
+  radarLocal: string;
+  /** UTC clock only, such as "05:20 UTC", with no calendar date. */
+  radarUtc: string;
   radarLine: string;
   note: string;
   reports: ProofSpotter[];
@@ -107,6 +111,13 @@ export function formatUtcStamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/** Clock only, so a UTC date cannot look like a different storm day. */
+export function formatUtcClock(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.toISOString().slice(11, 16)} UTC`;
 }
 
 export function formatLocalStamp(iso: string, timeZone: string): string {
@@ -147,19 +158,42 @@ function clip(value: string, max: number): string {
   return value.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-function radarLineFor(input: {
+function clockOnly(stamp: string): string {
+  const match = stamp.match(/(\d{2}:\d{2})\s*UTC/i);
+  return match ? `${match[1]} UTC` : stamp.replace(/\d{4}-\d{2}-\d{2}\s*/g, "").trim();
+}
+
+const LOCAL_STAMP = /[A-Z][a-z]{2,8} \d{1,2}, \d{1,2}:\d{2} [AP]M [A-Z]{2,5}/;
+
+function radarParts(input: {
   radarKind: ProofConfirm["radarKind"];
   radarIn: number | null;
   radarAt: string | null;
   timeZone: string;
-}): string {
-  if (!input.radarAt) return "Radar scan time is not available for this day.";
-  const utc = formatUtcStamp(input.radarAt);
-  const local = formatLocalStamp(input.radarAt, input.timeZone);
+}): { radarLocal: string; radarUtc: string; radarLine: string } {
+  if (!input.radarAt || input.radarKind === "unavailable") {
+    return { radarLocal: "", radarUtc: "", radarLine: "Radar scan time is not available for this day." };
+  }
+  const radarUtc = formatUtcClock(input.radarAt);
+  const radarLocal = formatLocalStamp(input.radarAt, input.timeZone);
   const size = input.radarIn != null ? `${input.radarIn.toFixed(2)} in · ` : "";
-  if (input.radarKind === "daily") return `24-hour radar maximum ending ${utc} · ${local}`;
-  if (input.radarKind === "scan") return `Radar scan ${size}${utc} · ${local}`;
-  return "Radar scan time is not available for this day.";
+  if (input.radarKind === "daily") {
+    return { radarLocal, radarUtc, radarLine: `24-hour radar maximum ending ${radarLocal} (${radarUtc})` };
+  }
+  if (input.radarKind === "scan") {
+    return { radarLocal, radarUtc, radarLine: `Radar scan ${size}${radarLocal} (${radarUtc})` };
+  }
+  return { radarLocal: "", radarUtc: "", radarLine: "Radar scan time is not available for this day." };
+}
+
+/** Turn an older "2026-10-21 05:20 UTC · Oct 20, 10:20 PM MST" line into local time first. */
+function localFirstLine(line: string, radarKind: ProofConfirm["radarKind"], radarIn: number | null): { radarLocal: string; radarUtc: string; radarLine: string } {
+  const local = line.match(LOCAL_STAMP)?.[0] ?? "";
+  const utc = clockOnly((line.match(/(\d{2}:\d{2})\s*UTC/i)?.[0] ?? "").trim());
+  if (!local || !utc) return { radarLocal: local, radarUtc: utc, radarLine: line };
+  const size = radarIn != null ? `${radarIn.toFixed(2)} in · ` : "";
+  const radarLine = radarKind === "daily" ? `24-hour radar maximum ending ${local} (${utc})` : `Radar scan ${size}${local} (${utc})`;
+  return { radarLocal: local, radarUtc: utc, radarLine };
 }
 
 /**
@@ -191,7 +225,7 @@ export function decideConfirmation(input: {
           const where = clip(report.where, 80) || "Nearby";
           return [
             {
-              timeUtc: formatUtcStamp(report.occurredAt),
+              timeUtc: formatUtcClock(report.occurredAt),
               timeLocal: formatLocalStamp(report.occurredAt, timeZone),
               sizeIn: Math.round(report.sizeIn * 100) / 100,
               distanceMi: Math.round(distanceMi * 10) / 10,
@@ -221,13 +255,16 @@ export function decideConfirmation(input: {
     note = "Spotter reports are listed. Radar hail is under 1 inch, so there is no seal.";
   }
 
+  const times = radarParts({ radarKind: input.radarKind, radarIn, radarAt: input.radarAt, timeZone });
   return {
     seal,
     headline: seal ? "Radar + spotter confirmed" : "Radar only",
     radarIn,
     radarAt: input.radarAt,
     radarKind: input.radarKind,
-    radarLine: radarLineFor({ radarKind: input.radarKind, radarIn, radarAt: input.radarAt, timeZone }),
+    radarLocal: times.radarLocal,
+    radarUtc: times.radarUtc,
+    radarLine: times.radarLine,
     note,
     reports: matches,
     disclaimer: CONFIRM_DISCLAIMER,
@@ -245,7 +282,7 @@ export function parseProofConfirm(value: unknown): ProofConfirm | null {
     const report = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
     const sizeIn = Number(report.sizeIn);
     const distanceMi = Number(report.distanceMi);
-    const timeUtc = clip(String(report.timeUtc ?? ""), 40);
+    const timeUtc = clockOnly(clip(String(report.timeUtc ?? ""), 40));
     const timeLocal = clip(String(report.timeLocal ?? ""), 40);
     const source = clip(String(report.source ?? ""), 90);
     const where = clip(String(report.where ?? ""), 80);
@@ -253,14 +290,26 @@ export function parseProofConfirm(value: unknown): ProofConfirm | null {
     return [{ timeUtc, timeLocal: timeLocal || timeUtc, sizeIn: Math.round(sizeIn * 100) / 100, distanceMi: Math.round(distanceMi * 10) / 10, source: source || "Local Storm Report", where: where || "Nearby" }];
   });
   const seal = radarKind === "scan" && radarIn != null && radarIn >= SEAL_MIN_IN && reports.length > 0;
-  const timeZone = "UTC";
+  const storedLine = clip(String(row.radarLine ?? ""), 180);
+  const rebuilt = localFirstLine(storedLine, radarKind, radarIn);
+  const radarUtc = clockOnly(clip(String(row.radarUtc ?? ""), 16)) || rebuilt.radarUtc || (radarAt ? formatUtcClock(radarAt) : "");
+  const radarLocal = clip(String(row.radarLocal ?? ""), 48) || rebuilt.radarLocal;
+  const size = radarIn != null ? `${radarIn.toFixed(2)} in · ` : "";
+  const radarLine =
+    radarLocal && radarUtc && radarKind === "daily"
+      ? `24-hour radar maximum ending ${radarLocal} (${radarUtc})`
+      : radarLocal && radarUtc && radarKind === "scan"
+        ? `Radar scan ${size}${radarLocal} (${radarUtc})`
+        : storedLine || "Radar scan time is not available for this day.";
   return {
     seal,
     headline: seal ? "Radar + spotter confirmed" : "Radar only",
     radarIn,
     radarAt,
     radarKind,
-    radarLine: clip(String(row.radarLine ?? ""), 160) || radarLineFor({ radarKind, radarIn, radarAt, timeZone }),
+    radarLocal,
+    radarUtc,
+    radarLine,
     note: clip(String(row.note ?? ""), 220),
     reports,
     disclaimer: CONFIRM_DISCLAIMER,
@@ -274,6 +323,8 @@ export function unavailableConfirm(note = "The 2-minute radar scan is not availa
     radarIn: null,
     radarAt: null,
     radarKind: "unavailable",
+    radarLocal: "",
+    radarUtc: "",
     radarLine: "Radar scan time is not available for this day.",
     note,
     reports: [],

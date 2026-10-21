@@ -83,5 +83,43 @@ describe("Swathline palettes", () => {
       seen.add(color.toLowerCase());
     }
     expect(seen.size).toBe(TONES.length);
+    expect(contrast(vars["accent-2"], vars["accent-ink"]), "accent-2").toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(palettes.slice(0, 3))("%s chrome, bands, and glows stay AA and distinct", (_name, selector) => {
+    const vars = block(css, selector);
+    for (const stop of ["chrome", "chrome-2", "chrome-3"]) {
+      expect(contrast(vars["chrome-ink"], vars[stop]), stop).toBeGreaterThanOrEqual(4.5);
+    }
+    const bands = new Set<string>();
+    const glows = new Set<string>();
+    for (const tone of TONES) {
+      const from = vars[`band-${tone}-from`];
+      const to = vars[`band-${tone}-to`];
+      expect(contrast(vars["band-ink"], from), `${tone} band from`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(vars["band-ink"], to), `${tone} band to`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(vars[`glow-${tone}`], vars[`glow-${tone}-ink`]), `${tone} glow`).toBeGreaterThanOrEqual(4.5);
+      bands.add(from.toLowerCase());
+      glows.add(vars[`glow-${tone}`].toLowerCase());
+    }
+    expect(bands.size).toBe(TONES.length);
+    expect(glows.size).toBe(TONES.length);
+  });
+
+  it("tints each dark basemap to its theme", () => {
+    const read = (file: string) => JSON.parse(readFileSync(new URL(`../public/map/${file}`, import.meta.url), "utf8"));
+    const backgrounds = ["night-a.json", "night-b.json", "night-c.json"].map((file) => {
+      const style = read(file);
+      return style.layers.find((layer: { id: string }) => layer.id === "background").paint["background-color"];
+    });
+    expect(new Set(backgrounds).size).toBe(3);
+    const motorways = ["night-a.json", "night-b.json", "night-c.json"].map((file) => {
+      const style = read(file);
+      return JSON.stringify(style.layers.find((layer: { id: string }) => layer.id === "highway_motorway_inner").paint["line-color"]);
+    });
+    expect(new Set(motorways).size).toBe(3);
+    expect(motorways[0]).toContain("#22d3ee");
+    expect(motorways[1]).toContain("#fbbf24");
+    expect(motorways[2]).toContain("#5eead4");
   });
 });

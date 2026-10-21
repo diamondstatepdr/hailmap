@@ -21,7 +21,27 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const states = stateOverlay as FeatureCollection;
 
 const LIGHT_STYLE = "/map/light.json";
-const DARK_STYLE = "/map/night.json";
+
+function nightStyle(palette: string | undefined): string {
+  if (palette === "b") return "/map/night-b.json";
+  if (palette === "c") return "/map/night-c.json";
+  return "/map/night-a.json";
+}
+
+function useMapStyle(theme: "light" | "dark") {
+  const [palette, setPalette] = useState<"a" | "b" | "c">("a");
+  useEffect(() => {
+    const read = () => {
+      const value = document.documentElement.dataset.palette;
+      setPalette(value === "b" || value === "c" ? value : "a");
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-palette"] });
+    return () => observer.disconnect();
+  }, []);
+  return theme === "dark" ? nightStyle(palette) : LIGHT_STYLE;
+}
 
 const hailSizeColor = [
   "interpolate",
@@ -278,6 +298,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const mapStyle = useMapStyle(theme);
   const brand = useBrandPaint(theme);
   const iconsBound = useRef(false);
   const frameRef = useRef(frame);
@@ -518,7 +539,7 @@ export default function HailMap({
         latitude: focus?.lat ?? 38.4,
         zoom: focus?.zoom ?? 4.15,
       }}
-      mapStyle={theme === "dark" ? DARK_STYLE : LIGHT_STYLE}
+      mapStyle={mapStyle}
       attributionControl={false}
       onLoad={() => {
         const map = mapRef.current?.getMap();

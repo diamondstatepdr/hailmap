@@ -44,7 +44,7 @@ export default function AppShell({
 }: Props) {
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-app text-ink">
-      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-line bg-panel md:flex">
+      <aside className="shell-rail hidden w-[248px] shrink-0 flex-col md:flex">
         <div className="flex items-center gap-3 px-4 pb-3 pt-5">
           <LogoMark size={40} />
           <Wordmark />
@@ -107,7 +107,7 @@ export default function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">{children}</div>
         <nav
-          className="grid grid-cols-6 border-t border-line bg-panel/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(16,36,56,0.06)] backdrop-blur-md md:hidden"
+          className="tab-bar grid grid-cols-6 pb-[max(0.25rem,env(safe-area-inset-bottom))] md:hidden"
           aria-label="Sections"
         >
           {NAV.map((item) => {

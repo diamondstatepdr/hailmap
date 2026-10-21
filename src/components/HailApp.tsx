@@ -7,7 +7,7 @@ import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
-import { BrandSplash } from "@/components/brand/Logo";
+import { BrandSplash, LogoMark, Wordmark } from "@/components/brand/Logo";
 import { applyScheme } from "@/lib/palette";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
@@ -175,6 +175,7 @@ function readTheme(): "light" | "dark" {
 export default function HailApp() {
   const [section, setSection] = useState<AppSection>("map");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [holdSplash, setHoldSplash] = useState(false);
   const [reports, setReports] = useState<HailReport[]>([]);
   const [rawCount, setRawCount] = useState(0);
   const [status, setStatus] = useState<SourceStatus | null>(null);
@@ -1050,6 +1051,11 @@ export default function HailApp() {
     [pins],
   );
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHoldSplash(params.get("splash") === "1");
+  }, []);
+
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -1791,8 +1797,13 @@ export default function HailApp() {
               setPlaceExpanded(false);
             }}
           />
-          <div ref={chromeRef} data-tone="map" className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
-            <div className="pointer-events-auto flex items-start gap-2">
+          <div ref={chromeRef} data-tone="map" className="map-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
+            <div className="map-topbar pointer-events-auto">
+              <div className="map-brand">
+                <LogoMark size={30} title="Swathline" />
+                <Wordmark subtitle={null} />
+              </div>
+              <div className="map-controls">
               <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
                 <SlidersHorizontal size={18} />
@@ -1822,7 +1833,9 @@ export default function HailApp() {
               >
                 <Gem size={18} />
               </button>
+              </div>
             </div>
+            <div className="map-chrome-rest">
             {honeyOpen ? null : (
             <>
             {replay.active ? null : (
@@ -2008,7 +2021,7 @@ export default function HailApp() {
               </div>
             ) : null}
             {showMesh ? (
-              <div className="pointer-events-auto glass flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
+              <div className="map-chip pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
                 <span className="shrink-0 font-semibold">{replay.active ? "Hail size" : "Radar"}</span>
                 {replay.active ? null : (
                   <span className="shrink-0 font-semibold" data-radar-label>
@@ -2030,6 +2043,7 @@ export default function HailApp() {
             ) : null}
             </>
             )}
+            </div>
           </div>
           {section === "map" ? (
             <div data-tone="map" className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
@@ -2548,6 +2562,11 @@ export default function HailApp() {
             setAuthOpen(false);
           }}
         />
+      ) : null}
+      {holdSplash ? (
+        <div className="splash-hold" data-splash>
+          <BrandSplash />
+        </div>
       ) : null}
     </AppShell>
   );

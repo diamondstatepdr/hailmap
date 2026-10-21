@@ -274,10 +274,10 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
 
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8" data-tone="alerts">
-      <header className="mb-5 max-w-3xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Phone alerts</p>
+      <header className="sheet-band">
+        <p className="sheet-kicker">Phone alerts</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Alerts</h1>
-        <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
+        <p className="sheet-sub mt-1 max-w-xl text-sm leading-relaxed">
           Get a ping when hail reaches a spot, a state, or wherever this phone is. No account. One alert per storm cell, with quiet hours if you want them.
         </p>
       </header>

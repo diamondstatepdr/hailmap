@@ -62,7 +62,7 @@ export default function HoneyPanel(props: Props) {
       data-honey-status={props.loading && !props.needsDay ? "loading" : props.spots.length ? "ready" : "empty"}
       aria-label="Money Hole"
     >
-      <header className="honey-head">
+      <header className="honey-head sheet-band">
         <div className="min-w-0">
           <p className="honey-kicker">
             <Gem size={13} />

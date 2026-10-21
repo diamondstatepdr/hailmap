@@ -39,10 +39,10 @@ export default function ReportsPanel({
 }: Props) {
   return (
     <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8" data-tone="reports">
-      <header className="mb-5 max-w-3xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Printable</p>
+      <header className="sheet-band">
+        <p className="sheet-kicker">Printable</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Reports</h1>
-        <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
+        <p className="sheet-sub mt-1 max-w-xl text-sm leading-relaxed">
           A printable storm report with radar hail size, nearby warnings, a map snapshot, damage probability, and your field photos if you are signed in.
         </p>
       </header>

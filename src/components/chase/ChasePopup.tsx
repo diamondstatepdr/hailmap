@@ -21,7 +21,7 @@ interface Props {
 export default function ChasePopup({ mobile, mode, payload, preview, onMode, onClose, onSeeAll, onSelect }: Props) {
   const body = (
     <div className="chase-body">
-      <header className="chase-head">
+      <header className="chase-head sheet-band">
         <div className="min-w-0">
           <p className="honey-kicker">
             <Gem size={13} />

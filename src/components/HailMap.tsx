@@ -15,6 +15,7 @@ import Map, {
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
+import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
@@ -46,19 +47,10 @@ function useMapStyle(theme: "light" | "dark") {
 }
 
 const hailSizeColor = [
-  "interpolate",
-  ["linear"],
+  "step",
   ["get", "sizeIn"],
-  0.25,
-  "#16a34a",
-  1,
-  "#ca8a04",
-  1.75,
-  "#ea580c",
-  2.5,
-  "#dc2626",
-  4,
-  "#7c3aed",
+  MESH_LEGEND[0].color,
+  ...MESH_LEGEND.slice(1).flatMap((band) => [band.minIn, band.color]),
 ];
 
 const windColor = [
@@ -118,26 +110,7 @@ const stateCoreWidth = ["interpolate", ["linear"], ["zoom"], 2, 1.5, 3.6, 2.15, 
 const stateCasingWidth = ["interpolate", ["linear"], ["zoom"], 2, 3.6, 3.6, 4.6, 6, 5.4, 9, 6.4];
 const stateTextSize = ["interpolate", ["linear"], ["zoom"], 3, 12, 4.5, 15, 6.5, 18, 9, 23];
 
-const swathColor = [
-  "case",
-  ["==", ["typeof", ["get", "maxSizeIn"]], "number"],
-  [
-    "interpolate",
-    ["linear"],
-    ["get", "maxSizeIn"],
-    0.25,
-    "#16a34a",
-    1,
-    "#ca8a04",
-    1.75,
-    "#ea580c",
-    2.5,
-    "#dc2626",
-    4,
-    "#7c3aed",
-  ],
-  "#64748b",
-];
+const swathColor = ["coalesce", ["get", "color"], "#64748b"] as const;
 
 export interface MapFocus {
   lon: number;
@@ -735,39 +708,19 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
       {showSwaths ? (
-        <Source id="swaths" type="geojson" data={swaths}>
-          <Layer
-            id="swath-fill"
-            type="fill"
-            paint={{
-              "fill-color": swathColor as never,
-              "fill-opacity": theme === "dark" ? 0.34 : 0.3,
-            }}
-          />
-          <Layer
-            id="swath-glow"
-            type="line"
-            layout={{ "line-join": "round", "line-cap": "round" }}
-            paint={{
-              "line-color": theme === "dark" ? "#f7fbff" : "#102033",
-              "line-width": 5.4,
-              "line-opacity": theme === "dark" ? 0.9 : 0.82,
-              "line-blur": 0.35,
-            }}
-          />
-          <Layer
-            id="swath-line"
-            type="line"
-            paint={{
-              "line-color": swathColor as never,
-              "line-width": 1.8,
-              "line-opacity": 0.92,
-            }}
-          />
-        </Source>
+        <SwathSource
+          id="swath"
+          data={swaths}
+          fill={theme === "dark" ? 0.8 : 0.86}
+          lineWidth={1.2}
+          lineOpacity={0.95}
+          blur={0}
+          theme={theme}
+          labels
+        />
       ) : null}
+      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
       {showThreats && alertData.features.length ? (
         <Source id="alerts" type="geojson" data={alertData}>
           <Layer
@@ -1243,15 +1196,15 @@ function MeshContours({
 }) {
   const meshFade = useCrossfade(mesh);
   const pulseFade = useCrossfade(meshPulse);
-  const fill = faded ? (theme === "dark" ? 0.16 : 0.18) : emphasis ? (theme === "dark" ? 0.58 : 0.66) : theme === "dark" ? 0.34 : 0.4;
-  const lineWidth = emphasis ? 2.2 : 1.25;
-  const lineOpacity = (emphasis ? 0.95 : 0.72) * (faded ? 0.45 : 1);
-  const pulseFill = (theme === "dark" ? 0.72 : 0.8) * (faded ? 0.4 : 1);
+  const fill = faded ? (theme === "dark" ? 0.36 : 0.4) : emphasis ? (theme === "dark" ? 0.86 : 0.9) : theme === "dark" ? 0.8 : 0.86;
+  const lineWidth = 1.15;
+  const lineOpacity = (faded ? 0.55 : 0.94);
+  const pulseFill = (theme === "dark" ? 0.88 : 0.92) * (faded ? 0.45 : 1);
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} theme={theme} />
-        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} theme={theme} />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels />
+        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={lineWidth} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
   }
@@ -1265,8 +1218,9 @@ function MeshContours({
           fill={meshFade.current === index ? fill : 0}
           lineWidth={lineWidth}
           lineOpacity={meshFade.current === index ? lineOpacity : 0}
-          blur={0.2}
+          blur={0}
           fade
+          labels={meshFade.current === index}
           theme={theme}
         />
       ))}
@@ -1295,6 +1249,7 @@ function SwathSource({
   lineOpacity,
   blur,
   fade = false,
+  labels = false,
   theme,
 }: {
   id: string;
@@ -1304,19 +1259,22 @@ function SwathSource({
   lineOpacity: number;
   blur: number;
   fade?: boolean;
+  labels?: boolean;
   theme: "light" | "dark";
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
   const halo = theme === "dark" ? "#f7fbff" : "#102033";
+  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
         id={`${id}-fill`}
         type="fill"
+        filter={["==", ["geometry-type"], "Polygon"]}
         paint={
           {
-            "fill-color": ["get", "color"],
+            "fill-color": swathColor as never,
             "fill-opacity": fill,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
@@ -1325,13 +1283,14 @@ function SwathSource({
       <Layer
         id={`${id}-halo`}
         type="line"
+        filter={["==", ["geometry-type"], "LineString"]}
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
             "line-color": halo,
-            "line-width": lineWidth + 3.1,
-            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity + 0.22) : 0,
-            "line-blur": 0.45,
+            "line-width": lineWidth + 2.4,
+            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
+            "line-blur": Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
@@ -1339,17 +1298,40 @@ function SwathSource({
       <Layer
         id={`${id}-line`}
         type="line"
+        filter={["==", ["geometry-type"], "Polygon"]}
+        layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": ["get", "color"],
+            "line-color": contour,
             "line-width": lineWidth,
             "line-opacity": lineOpacity,
-            "line-blur": blur,
+            "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
-        layout={{ "line-join": "round", "line-cap": "round" }}
       />
+      {labels ? (
+        <Layer
+          id={`${id}-label`}
+          type="symbol"
+          minzoom={9}
+          filter={["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "showLabel"], true]]}
+          layout={{
+            "text-field": ["get", "label"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 9, 11, 12, 14],
+            "text-allow-overlap": false,
+            "text-padding": 8,
+            "text-optional": true,
+          }}
+          paint={{
+            "text-color": ["coalesce", ["get", "ink"], "#ffffff"] as never,
+            "text-halo-color": theme === "dark" ? "#071018" : "#f8fafc",
+            "text-halo-width": 1.5,
+            "text-halo-blur": 0.2,
+          }}
+        />
+      ) : null}
     </Source>
   );
 }

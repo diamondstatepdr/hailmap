@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import { MESH_LEGEND, MESH_STEP } from "@/lib/mesh-legend";
+import { separateBandFills } from "@/lib/swath-bands";
 
 export interface MeshCell {
   ix: number;
@@ -221,6 +222,7 @@ export function cellsToSwaths(
           maxIn,
           label: band.label,
           color: band.color,
+          ink: band.ink,
           product: properties.product,
           validTime: properties.validTime,
           window: properties.label,
@@ -228,7 +230,7 @@ export function cellsToSwaths(
       });
     });
   }
-  return { type: "FeatureCollection", features };
+  return { type: "FeatureCollection", features: separateBandFills(features) };
 }
 
 export function sampleGrid(cells: MeshCell[], shape: MeshGridShape, lat: number, lon: number): number | null {

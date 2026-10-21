@@ -2127,9 +2127,14 @@ export default function HailApp() {
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
                 {showPoints ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="hail-scale" />
+                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-semibold">Hail</span>
+                    {MESH_LEGEND.map((band) => (
+                      <span key={band.label} className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
+                        {band.label}
+                      </span>
+                    ))}
                     <span className="inline-flex items-center gap-1">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#1d4ed8" }} />
                       Wind

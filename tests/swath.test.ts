@@ -62,8 +62,9 @@ describe("reportsToSwaths", () => {
   it("returns a closed polygon for a report cluster", () => {
     const collection = reportsToSwaths([at(35, 0, "a"), at(35.2, 0.2, "b"), at(35.05, 0.4, "c")]);
     expect(collection.type).toBe("FeatureCollection");
-    expect(collection.features).toHaveLength(1);
-    const geometry = collection.features[0].geometry;
+    const polygons = collection.features.filter((feature) => feature.geometry.type === "Polygon");
+    expect(polygons).toHaveLength(1);
+    const geometry = polygons[0].geometry;
     expect(geometry.type).toBe("Polygon");
     if (geometry.type !== "Polygon") return;
     const ring = geometry.coordinates[0];
@@ -73,5 +74,26 @@ describe("reportsToSwaths", () => {
 
   it("returns no features for an empty list", () => {
     expect(reportsToSwaths([]).features).toEqual([]);
+  });
+
+  it("draws separate size bands instead of one blended swath", () => {
+    const withSize = (lat: number, lon: number, sizeIn: number, id: string): SwathPoint => ({
+      ...at(lat, 0, id),
+      lon,
+      sizeIn,
+    });
+    const collection = reportsToSwaths([
+      withSize(35, -97.4, 0.8, "small"),
+      withSize(35.15, -97.25, 1.2, "inch"),
+      withSize(35.05, -97.32, 2.7, "giant"),
+    ]);
+    const polygons = collection.features.filter((feature) => feature.geometry.type === "Polygon");
+    const mins = polygons.map((feature) => feature.properties?.minIn);
+    expect(mins).toContain(0.75);
+    expect(mins).toContain(2.5);
+    expect(polygons.find((feature) => feature.properties?.minIn === 2.5)?.properties?.color).toBe("#d946ef");
+    const outer = polygons.find((feature) => feature.properties?.minIn === 0.75);
+    expect(outer?.geometry.type === "Polygon" ? outer.geometry.coordinates.length : 0).toBeGreaterThan(1);
+    expect(collection.features.some((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true)).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
+import ChaseMapButton from "@/components/chase/ChaseMapButton";
 import ChasePopup from "@/components/chase/ChasePopup";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import StormsPanel from "@/components/panels/StormsPanel";
@@ -1094,6 +1095,23 @@ export default function HailApp() {
     setChasePopup(false);
   }
 
+  function openChaseFromMap() {
+    setSection("map");
+    setOverlay(null);
+    setCustomOpen(false);
+    setHoneyOpen(false);
+    setFiltersOpen(false);
+    if (!chase) return;
+    setChasePopup(true);
+    try {
+      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chasePopupKey(chase.week), "1");
+    } catch {
+      // Private mode can block storage. The sheet still opens.
+    }
+    setChaseUnseen(false);
+  }
+
   function openChaseStop(stop: ChaseStop) {
     chaseFly.current = true;
     dismissChase();
@@ -1973,17 +1991,23 @@ export default function HailApp() {
             </>
             )}
           </div>
-          {stateCounts.length && !replay.active && !honeyOpen ? (
+          {section === "map" && !replay.active && !honeyOpen ? (
             <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen || honeyOpen ? "is-covered" : ""}`}>
               <div className="state-strip">
-                <button
-                  type="button"
-                  className="state-toggle press md:hidden"
-                  aria-expanded={statesOpen}
-                  onClick={() => setStatesOpen((open) => !open)}
-                >
-                  {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
-                </button>
+                <div className="map-quick-row">
+                  {stateCounts.length ? (
+                    <button
+                      type="button"
+                      className="state-toggle press md:hidden"
+                      aria-expanded={statesOpen}
+                      onClick={() => setStatesOpen((open) => !open)}
+                    >
+                      {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
+                    </button>
+                  ) : null}
+                  <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
+                </div>
+                {stateCounts.length ? (
                 <div className={`state-chip-row ${statesOpen ? "is-open" : ""}`} role="toolbar" aria-label="Jump to a state">
                   {stateCounts.slice(0, 12).map(([code, count]) => {
                     const on = filter.state === code;
@@ -2000,6 +2024,7 @@ export default function HailApp() {
                     );
                   })}
                 </div>
+                ) : null}
               </div>
             </div>
           ) : null}

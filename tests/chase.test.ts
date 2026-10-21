@@ -4,6 +4,7 @@ import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import ChaseMapButton from "@/components/chase/ChaseMapButton";
 import ChasePopup from "@/components/chase/ChasePopup";
 import { ChaseSection } from "@/components/chase/ChaseList";
 import { placeChaseHit, townFromLocation } from "@/lib/chase-place";
@@ -464,6 +465,20 @@ function samplePayload(quiet: boolean): ChasePayload {
   if (quiet) return { ...base, quiet: true, fresh: { pdr: [], roof: [] }, fallback: { pdr: [stop], roof: [stop] } };
   return { ...base, quiet: false, fresh: { pdr: [stop], roof: [{ ...stop, homes: 100 }] }, fallback: { pdr: [], roof: [] } };
 }
+
+describe("chase map button", () => {
+  it("labels the control and shows the new dot until the week is viewed", () => {
+    const fresh = renderToStaticMarkup(createElement(ChaseMapButton, { unseen: true, expanded: false, onClick: () => undefined }));
+    expect(fresh).toContain("Chase List");
+    expect(fresh).toContain('data-chase-open');
+    expect(fresh).toContain('data-chase-new');
+    expect(fresh).toContain("New chase list");
+    const seen = renderToStaticMarkup(createElement(ChaseMapButton, { unseen: false, expanded: true, onClick: () => undefined }));
+    expect(seen).toContain("Chase List");
+    expect(seen).not.toContain('data-chase-new');
+    expect(seen).toContain('aria-expanded="true"');
+  });
+});
 
 describe("chase list UI", () => {
   it("renders a phone sheet with a close control, five-row preview, and see all", () => {

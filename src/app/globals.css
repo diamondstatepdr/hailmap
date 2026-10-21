@@ -102,6 +102,48 @@ button {
   gap: 0.35rem;
 }
 
+.map-quick-row {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chase-open {
+  position: relative;
+  display: inline-flex;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  padding: 0 0.9rem 0 0.75rem;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+}
+
+.chase-open svg {
+  color: var(--accent);
+}
+
+html.dark .chase-open svg {
+  color: var(--mark);
+}
+
+.chase-open .chase-dot {
+  position: static;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
 .state-toggle {
   height: 2.75rem;
   border: 1px solid var(--glass-border);

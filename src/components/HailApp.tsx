@@ -23,6 +23,7 @@ import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import CanvassForm, { CanvassBoard } from "@/components/canvass/CanvassForm";
 import { useCanvass } from "@/components/canvass/useCanvass";
 import { CANVASS_COLORS, canvassFrame, canvassStatusLabel } from "@/lib/canvass";
+import { shareHailProof } from "@/components/hail-proof/ProofActions";
 import FieldSheet from "@/components/panels/FieldSheet";
 import SendLeadsSheet from "@/components/SendLeadsSheet";
 import DealerHitList from "@/components/panels/DealerHitList";
@@ -58,6 +59,7 @@ import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
 import { beginAddressSelection } from "@/lib/address-lookup";
 import { ADDRESS_SPANS, HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
+import { nearbyLines, ringsNearPoint, stormsFromDaily } from "@/lib/hail-proof";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
@@ -278,6 +280,7 @@ export default function HailApp() {
   const [importNote, setImportNote] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
+  const [proofBusy, setProofBusy] = useState(false);
   const [draftPin, setDraftPin] = useState<{ lat: number; lon: number } | null>(null);
   const [picking, setPicking] = useState(false);
   const [filter, setFilter] = useState(defaultFilter);
@@ -1672,6 +1675,37 @@ export default function HailApp() {
     });
   }
 
+  async function makeHailProof(input: {
+    address: string;
+    lat: number;
+    lon: number;
+    maxHailIn: number | null;
+    score: { score: number; level: string; summary: string } | null;
+    storms: Array<{ date: string; label: string; meshMaxIn?: number | null; spotterMaxIn?: number | null }>;
+    nearby: Array<{ when: string; where: string; detail: string }>;
+  }) {
+    setProofBusy(true);
+    try {
+      await shareHailProof({
+        address: input.address,
+        lat: input.lat,
+        lon: input.lon,
+        maxHailIn: input.maxHailIn,
+        score: input.score?.score ?? 0,
+        level: input.score?.level ?? "Low",
+        summary: input.score?.summary ?? "",
+        storms: stormsFromDaily(input.storms),
+        nearby: nearbyLines(input.nearby),
+        rings: ringsNearPoint(meshCollection?.features ?? [], input.lat, input.lon),
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setError(error instanceof Error ? error.message : "Could not make the hail proof");
+    } finally {
+      setProofBusy(false);
+    }
+  }
+
   async function generateReport(kind: "address" | "view") {
     setReportBusy(true);
     setReportError(null);
@@ -2599,6 +2633,25 @@ export default function HailApp() {
                       void generateReport("address");
                     }}
                     canvass={canvassAt(placeLabel, placePoint.lat, placePoint.lon, addressHistory.maxHailIn)}
+                    proofBusy={proofBusy}
+                    onProof={() =>
+                      void makeHailProof({
+                        address: placeLabel,
+                        lat: placePoint.lat,
+                        lon: placePoint.lon,
+                        maxHailIn: addressHistory.maxHailIn,
+                        score: addressHistory.score,
+                        storms: addressHistory.events,
+                        nearby: addressHistory.events.slice(0, 8).map((event) => ({
+                          when: event.label,
+                          where: placeLabel,
+                          detail:
+                            [event.meshMaxIn != null ? `Radar ${event.meshMaxIn.toFixed(2)} in` : "", event.spotterMaxIn != null ? `Spotter ${event.spotterMaxIn.toFixed(2)} in` : ""]
+                              .filter(Boolean)
+                              .join(" · ") || "Storm day",
+                        })),
+                      })
+                    }
                   />
                 ) : place ? (
                   <PropertyCard
@@ -2615,6 +2668,26 @@ export default function HailApp() {
                       void generateReport("address");
                     }}
                     canvass={canvassAt(placeLabel, placePoint.lat, placePoint.lon, place.maxHailIn)}
+                    proofBusy={proofBusy}
+                    onProof={() =>
+                      void makeHailProof({
+                        address: placeLabel,
+                        lat: placePoint.lat,
+                        lon: placePoint.lon,
+                        maxHailIn: place.maxHailIn,
+                        score: place.score,
+                        storms: place.reports.map((report) => ({
+                          date: report.occurredAt.slice(0, 10),
+                          label: report.occurredAt.slice(0, 10),
+                          spotterMaxIn: report.sizeIn,
+                        })),
+                        nearby: place.reports.slice(0, 8).map((report) => ({
+                          when: report.occurredAt.slice(0, 16).replace("T", " "),
+                          where: report.location || report.county || placeLabel,
+                          detail: report.sizeIn != null ? `${report.sizeIn.toFixed(2)} in hail` : "Report",
+                        })),
+                      })
+                    }
                   />
                 ) : (
                   <article className="px-4 pb-4">
@@ -2892,6 +2965,29 @@ export default function HailApp() {
                         fieldPlace?.maxHailIn ?? null,
                       )
                     : null
+                }
+                proofBusy={proofBusy}
+                onProof={
+                  fieldLat != null && fieldLon != null
+                    ? () =>
+                        void makeHailProof({
+                          address: streetStatus === "ok" && street ? street : `${fieldLat.toFixed(5)}, ${fieldLon.toFixed(5)}`,
+                          lat: fieldLat,
+                          lon: fieldLon,
+                          maxHailIn: fieldPlace?.maxHailIn ?? null,
+                          score: fieldPlace?.score ?? null,
+                          storms: (fieldPlace?.reports ?? []).map((report) => ({
+                            date: report.occurredAt.slice(0, 10),
+                            label: report.occurredAt.slice(0, 10),
+                            spotterMaxIn: report.sizeIn,
+                          })),
+                          nearby: (fieldPlace?.reports ?? []).slice(0, 8).map((report) => ({
+                            when: report.occurredAt.slice(0, 16).replace("T", " "),
+                            where: report.location || report.county || "Nearby",
+                            detail: report.sizeIn != null ? `${report.sizeIn.toFixed(2)} in hail` : "Report",
+                          })),
+                        })
+                    : undefined
                 }
               />
             </div>

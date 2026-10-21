@@ -1,0 +1,127 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { POST } from "@/app/api/hail-proof/route";
+import { GET } from "@/app/api/hail-proof/[id]/route";
+import {
+  nearbyLines,
+  normalizeProof,
+  proofFilename,
+  proofMapSvg,
+  renderHailProofPdf,
+  ringsNearPoint,
+  stormsFromDaily,
+} from "@/lib/hail-proof";
+
+const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-proof-"));
+process.env.HAILMAP_DATA_DIR = dataDir;
+
+afterAll(() => {
+  rmSync(dataDir, { recursive: true, force: true });
+});
+
+const draft = {
+  address: "3500 W 7th St, Fort Worth",
+  lat: 32.75,
+  lon: -97.33,
+  maxHailIn: 1.75,
+  score: 64,
+  level: "High",
+  summary: "Radar hail of 1.75 in is the strongest evidence at this address.",
+  storms: [
+    { date: "2026-04-25", label: "Apr 25, 2026", hailIn: 1.75 },
+    { date: "2026-03-02", label: "Mar 2, 2026", hailIn: 1 },
+  ],
+  nearby: [{ when: "2026-04-25", where: "Fort Worth", detail: "1.75 in hail" }],
+  rings: [
+    [
+      [-97.36, 32.73],
+      [-97.3, 32.73],
+      [-97.3, 32.77],
+      [-97.36, 32.77],
+    ],
+  ],
+};
+
+describe("hail proof document", () => {
+  it("keeps storm dates, hail size, and a swath ring near the address", () => {
+    const proof = normalizeProof(draft, "2026-04-26T12:00:00.000Z");
+    expect("error" in proof).toBe(false);
+    if ("error" in proof) return;
+    expect(proof.maxHailIn).toBe(1.75);
+    expect(proof.level).toBe("High");
+    expect(proof.storms.map((storm) => storm.date)).toEqual(["2026-04-25", "2026-03-02"]);
+    expect(proof.rings).toHaveLength(1);
+    expect(proofFilename(proof.address)).toBe("Swathline-hail-proof-3500-w-7th-st-fort-worth.pdf");
+    expect(stormsFromDaily([{ date: "2026-04-25", label: "Apr 25", meshMaxIn: 1.25, spotterMaxIn: 1.75 }])[0].hailIn).toBe(1.75);
+    expect(nearbyLines([{ when: "Apr 25", where: "Fort Worth", detail: "1.75 in" }])).toHaveLength(1);
+    const kept = ringsNearPoint(
+      [
+        { geometry: { type: "Polygon", coordinates: [draft.rings[0]] } },
+        {
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-80, 25],
+                [-79, 25],
+                [-79, 26],
+                [-80, 26],
+              ],
+            ],
+          },
+        },
+      ],
+      32.75,
+      -97.33,
+    );
+    expect(kept).toHaveLength(1);
+  });
+
+  it("renders a branded PDF with the address, hail size, score, and swath map", () => {
+    const proof = normalizeProof(draft, "2026-04-26T12:00:00.000Z");
+    if ("error" in proof) throw new Error(proof.error);
+    const pdf = renderHailProofPdf(proof);
+    const text = pdf.toString("latin1");
+    expect(text.startsWith("%PDF-1.4")).toBe(true);
+    expect(text).toContain("SWATHLINE");
+    expect(text).toContain("Hail proof");
+    expect(text).toContain("3500 W 7th St, Fort Worth");
+    expect(text).toContain("1.75 in");
+    expect(text).toContain("High");
+    expect(text).toContain("Apr 25, 2026");
+    expect(text).toContain("not a roof inspection");
+    expect(proofMapSvg(proof)).toContain("Swath map");
+    expect(proofMapSvg(proof)).toContain("<path");
+  });
+
+  it("rejects a proof with no address and serves a saved PDF", async () => {
+    const missing = await POST(
+      new Request("http://localhost/api/hail-proof", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lat: 32.75, lon: -97.33 }),
+      }),
+    );
+    expect(missing.status).toBe(400);
+
+    const created = await POST(
+      new Request("http://localhost/api/hail-proof", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(draft),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as { id: string; pdfUrl: string; url: string; filename: string };
+    expect(body.url).toBe(`/proof/${body.id}`);
+    expect(body.filename.endsWith(".pdf")).toBe(true);
+    const pdf = await GET(new Request(`http://localhost${body.pdfUrl}`), { params: Promise.resolve({ id: body.id }) });
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    const bytes = Buffer.from(await pdf.arrayBuffer());
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(bytes.toString("latin1")).toContain("3500 W 7th St");
+  });
+});

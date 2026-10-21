@@ -205,6 +205,13 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_canvass_events_day ON canvass_events(team_key, created_at);
+    CREATE TABLE IF NOT EXISTS hail_proofs (
+      id TEXT PRIMARY KEY,
+      address TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_hail_proofs_created ON hail_proofs(created_at);
   `);
   const crmColumns = db.prepare("PRAGMA table_info(crm_settings)").all() as { name: string }[];
   if (crmColumns.length && !crmColumns.some((column) => column.name === "last_sent_at")) {

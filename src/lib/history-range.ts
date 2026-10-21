@@ -13,10 +13,9 @@ export const HISTORY_CHIPS: ReadonlyArray<{ id: "30" | "90" | "365"; days: numbe
 ];
 
 export const ADDRESS_SPANS: ReadonlyArray<{ id: string; years: number | null; label: string }> = [
-  { id: "1y", years: 1, label: "1 year" },
-  { id: "2y", years: 2, label: "2 years" },
-  { id: "5y", years: 5, label: "5 years" },
-  { id: "10y", years: 10, label: "10 years" },
+  { id: "1y", years: 1, label: "1 yr" },
+  { id: "5y", years: 5, label: "5 yr" },
+  { id: "10y", years: 10, label: "10 yr" },
   { id: "max", years: null, label: "All" },
 ];
 

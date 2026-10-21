@@ -131,6 +131,8 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
                 ? report.coverage
                 : sourceCoverage({ start: report.rangeLabel ?? "the selected window", end: "today" })
             }
+            start={report.rangeLabel ?? "the selected window"}
+            end="today"
           />
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>
           <p className="mt-1 text-sm text-muted">

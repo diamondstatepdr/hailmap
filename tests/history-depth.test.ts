@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MESH_ARCHIVE_START, MESH_INSTANT_START } from "@/lib/history-coverage";
+import { MESH_INSTANT_START } from "@/lib/history-coverage";
 import { groupEvents } from "@/lib/history-place";
 import { pickHourlyMeshNames } from "@/lib/mesh-plan";
 import { countIsoDays, estimateMeshIndex, MESH_CELL_BYTES, MESH_INDEX_BUDGET_BYTES, MESH_PLANNING_CELLS_PER_DAY, meshStoreDecision } from "@/lib/mesh-budget";
-import { sourceCoverage } from "@/lib/source-coverage";
+import { sourceCoverage, sourceDetail } from "@/lib/source-coverage";
+import { timelineRows, yearlyHail } from "@/lib/yearly-hail";
 
 describe("radar archive extent", () => {
   it("spaces hourly MESH names across the storm day and ignores other files", () => {
@@ -47,16 +48,39 @@ describe("mesh index budget", () => {
 describe("address source years", () => {
   it("says which years spotter reports, radar hail, and warnings cover", () => {
     const lines = sourceCoverage({ start: "2014-05-01", end: "2024-05-09" });
-    const text = lines.map((line) => `${line.source} ${line.years} ${line.detail}`).join("\n");
-    expect(text).toContain("1955");
-    expect(text).toContain("1950");
-    expect(text).toContain(MESH_INSTANT_START);
-    expect(text).toContain(MESH_ARCHIVE_START);
-    expect(text).toContain("2020-10-14");
-    expect(text).toContain("2014-05-01");
-    expect(text).toContain("2024-05-09");
-    expect(text).toContain("1986");
-    expect(text).not.toContain("2011-01-01");
+    const text = lines.map((line) => `${line.source}: ${line.years}`).join("\n");
+    expect(text).toContain("Storm spotter reports: since 1955");
+    expect(text).toContain("Radar hail maps: since Aug 2019");
+    expect(text).toContain("Warnings: since 1986");
+    expect(text).not.toContain("AWS");
+    expect(text).not.toContain("Iowa");
+    const detail = sourceDetail({ start: "2014-05-01", end: "2024-05-09" });
+    expect(detail).toContain("1950");
+    expect(detail).toContain("August 2019");
+    expect(detail).toContain("2014-05-01");
+    expect(detail).toContain("2024-05-09");
+    expect(detail).not.toContain("2011-01-01");
+  });
+
+  it("builds a yearly hail timeline and hides quiet years on a long range", () => {
+    const years = yearlyHail(
+      [
+        { date: "2014-05-08", spotterMaxIn: 1.75, meshMaxIn: null },
+        { date: "2019-09-01", spotterMaxIn: 1, meshMaxIn: 1.25 },
+      ],
+      "2014-01-01",
+      "2019-12-31",
+    );
+    expect(years[0]).toMatchObject({ year: 2019, maxIn: 1.25, days: 1 });
+    expect(years.find((year) => year.year === 2014)).toMatchObject({ maxIn: 1.75, days: 1 });
+    expect(years.find((year) => year.year === 2016)?.maxIn).toBeNull();
+    expect(timelineRows(years).every((year) => year.maxIn != null)).toBe(false);
+    const long = yearlyHail(
+      [{ date: "2003-04-01", spotterMaxIn: 1, meshMaxIn: null }],
+      "1950-01-01",
+      "2026-10-21",
+    );
+    expect(timelineRows(long).map((year) => year.year)).toEqual([2003]);
   });
 
   it("marks hail before the radar archive and leaves the 2019 hourly window pending", () => {

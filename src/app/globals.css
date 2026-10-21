@@ -3009,37 +3009,87 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   font-weight: 750;
 }
 
-.source-years {
+.source-years,
+.year-hail,
+.year-chip {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.source-years,
+.year-hail {
   margin-top: 0.75rem;
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--panel-2);
-  color: var(--text);
-  font-size: 15px;
-  line-height: 1.4;
 }
 
-.source-years h3 {
+.source-years-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.source-years h3,
+.year-hail h3 {
   font-size: 1.125rem;
   font-weight: 700;
 }
 
-.source-years,
-.source-years p,
-.source-years li {
-  overflow-wrap: anywhere;
-}
-
-.source-years ul {
+.source-years ul,
+.year-hail ol {
   display: grid;
-  gap: 0.45rem;
-  margin: 0.4rem 0 0;
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
   padding: 0;
   list-style: none;
 }
 
-.source-years p {
+.source-years li,
+.source-years-detail,
+.year-hail p,
+.year-hail li {
   font-size: 15px;
   line-height: 1.4;
+}
+
+.source-years-detail {
+  margin-top: 0.65rem;
+}
+
+.year-hail li {
+  display: grid;
+  grid-template-columns: 3.4rem 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 32px;
+}
+
+.year-hail-track {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.year-hail-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.year-hail-size {
+  min-width: 3.2rem;
+  text-align: right;
+  font-weight: 700;
+}
+
+.year-chip {
+  font-size: 15px;
+  font-weight: 700;
 }

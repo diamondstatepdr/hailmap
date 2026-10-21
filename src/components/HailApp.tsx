@@ -50,7 +50,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
 import { beginAddressSelection } from "@/lib/address-lookup";
-import { HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
+import { ADDRESS_SPANS, HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
@@ -233,7 +233,7 @@ export default function HailApp() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-  const [addressSpanId, setAddressSpanId] = useState("2y");
+  const [addressSpanId, setAddressSpanId] = useState("5y");
   const [addressHistory, setAddressHistory] = useState<AddressHistoryView | null>(null);
   const [scoreDate, setScoreDate] = useState<string | null>(null);
   const [addressTick, setAddressTick] = useState(0);
@@ -677,12 +677,12 @@ export default function HailApp() {
       lon: String(placePoint.lon),
       radiusKm: String(radiusKm),
     });
-    if (addressSpanId === "max") {
+    const chosen = ADDRESS_SPANS.find((item) => item.id === addressSpanId) ?? ADDRESS_SPANS[0];
+    if (chosen.years == null) {
       params.set("start", "1950-01-01");
       params.set("end", new Date().toISOString().slice(0, 10));
     } else {
-      const years = addressSpanId === "1y" ? 1 : addressSpanId === "5y" ? 5 : addressSpanId === "10y" ? 10 : 2;
-      params.set("years", String(years));
+      params.set("years", String(chosen.years));
     }
     if (scoreDate) params.set("scoreDate", scoreDate);
     fetch(`/api/history/place?${params}`)
@@ -2006,8 +2006,15 @@ export default function HailApp() {
                         {chipWhen(stormControlLabel)}
                     </button>
                   )}
-                  {section === "map" && !replay.active ? (
-                    <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
+                  {!replay.active ? (
+                    <ChaseMapButton
+                      unseen={chaseUnseen}
+                      expanded={chasePopup}
+                      onClick={() => {
+                        if (section !== "map") setSection("map");
+                        openChaseFromMap();
+                      }}
+                    />
                   ) : null}
                   <button
                     type="button"
@@ -2653,11 +2660,17 @@ export default function HailApp() {
         <MobileOrPage label="Addresses" tone="addresses" mobile={mobile} onClose={() => setSection("map")} expandedMax="min(74dvh, 44rem)">
         <PropertiesPanel
           radiusMi={radiusMi}
-          hours={filter.hours}
+          spanId={addressSpanId}
           onRadius={setRadiusMi}
-          onHours={setHours}
+          onSpan={(id) => {
+            addressRetries.current = 0;
+            setScoreDate(null);
+            setAddressSpanId(id);
+          }}
           onSearch={chooseAddress}
           history={place}
+          addressHistory={addressHistory}
+          addressLoading={placeLoading}
           label={placeLabel}
           loading={livePlaceLoading}
           error={placeError}

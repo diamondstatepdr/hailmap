@@ -174,13 +174,13 @@ export default function AddressHistoryCard({
             type="button"
             aria-pressed={spanId === item.id}
             onClick={() => onSpan(item.id)}
-            className={`tap press shrink-0 rounded-full px-3 text-xs font-semibold ${spanId === item.id ? "chip-on" : "chip"}`}
+            className={`tap press year-chip shrink-0 rounded-full px-3 font-semibold ${spanId === item.id ? "chip-on" : "chip"}`}
           >
             {item.label}
           </button>
         ))}
       </div>
-      <SourceYears spans={sourceCoverage({ start: history.start, end: history.end })} />
+      <SourceYears spans={sourceCoverage({ start: history.start, end: history.end })} start={history.start} end={history.end} />
       <h3 className="mt-4 text-sm font-semibold">Calendar</h3>
       <div className="mt-2 rounded-2xl border border-line bg-[var(--panel-2)] p-2">
         <HailCalendar

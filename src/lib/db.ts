@@ -173,9 +173,18 @@ function migrate(db: Database.Database) {
       secret TEXT NOT NULL,
       record_type TEXT NOT NULL,
       status_name TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      last_sent_at TEXT,
+      last_result TEXT
     );
   `);
+  const crmColumns = db.prepare("PRAGMA table_info(crm_settings)").all() as { name: string }[];
+  if (crmColumns.length && !crmColumns.some((column) => column.name === "last_sent_at")) {
+    db.exec("ALTER TABLE crm_settings ADD COLUMN last_sent_at TEXT");
+  }
+  if (crmColumns.length && !crmColumns.some((column) => column.name === "last_result")) {
+    db.exec("ALTER TABLE crm_settings ADD COLUMN last_result TEXT");
+  }
 }
 
 function hoursAgo(hours: number): string {

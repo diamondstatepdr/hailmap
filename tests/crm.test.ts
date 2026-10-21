@@ -185,7 +185,16 @@ describe("crm destinations", () => {
     expect(body.leads[0]?.street).toBe("West Gray Street");
     expect(posted?.body).not.toContain("555");
     expect(JSON.stringify(payload)).not.toContain(webhook);
-    expect(publicCrm().provider).toBe("webhook");
+    const shown = publicCrm();
+    expect(shown.provider).toBe("webhook");
+    expect(shown.lastResult).toBe("Sent 1 lead.");
+    expect(shown.lastSentAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const read = await readSettings(new Request("http://localhost/api/crm/settings", { headers: { cookie } }));
+    const settings = await read.json();
+    expect(settings.leadCount).toBe(1);
+    expect(settings.lastResult).toBe("Sent 1 lead.");
+    expect(JSON.stringify(settings)).not.toContain(apiKey);
+    expect(JSON.stringify(settings)).not.toContain(webhook);
   });
 
   it("tells AccuLynx apart when a lead has no street", async () => {

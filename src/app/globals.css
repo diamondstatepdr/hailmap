@@ -3162,37 +3162,105 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   line-height: 1.3;
 }
 
-.send-leads button,
+.send-steps {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: send;
+}
+
+.send-steps > li {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.send-steps > li > p:first-child {
+  font-weight: 700;
+}
+
+.send-steps > li > p:first-child::before {
+  content: counter(send) ". ";
+  counter-increment: send;
+}
+
+.send-dest {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 72%, var(--border));
+}
+
+.send-dest button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  padding: 0 0.35rem;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.send-dest button[aria-checked="true"] {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.send-leads label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 650;
+}
+
 .send-leads input,
-.send-lead {
+.send-lead,
+.send-actions .btn,
+.send-go {
   min-height: 44px;
 }
 
-.send-leads button {
-  width: 100%;
-  border-radius: 0.9rem;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  font-weight: 700;
-  padding: 0 0.8rem;
+.send-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
 }
 
-.send-leads button[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: transparent;
+.send-actions .btn,
+.send-go {
+  font-size: 15px;
+}
+
+.send-go {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 0.15rem;
+  font-size: 1.0625rem;
+  font-weight: 750;
+}
+
+.send-extra {
+  display: grid;
+  gap: 0.55rem;
 }
 
 .send-leads input {
   display: block;
   width: 100%;
-  margin-top: 0.35rem;
   border-radius: 0.9rem;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
   padding: 0 0.8rem;
+}
+
+.send-last {
+  margin-top: 0.85rem;
+  font-weight: 650;
 }
 
 .send-leads-ok,

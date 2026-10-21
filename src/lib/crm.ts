@@ -32,6 +32,8 @@ export interface CrmPublic {
   configured: boolean;
   recordType: string;
   statusName: string;
+  lastSentAt: string | null;
+  lastResult: string | null;
 }
 
 interface StoredCrm {
@@ -39,6 +41,8 @@ interface StoredCrm {
   secret: string;
   recordType: string;
   statusName: string;
+  lastSentAt: string | null;
+  lastResult: string | null;
 }
 
 const DEFAULT_RECORD = "Customer";
@@ -113,18 +117,25 @@ export function publicCrm(): CrmPublic {
     configured: Boolean(stored),
     recordType: stored?.recordType || DEFAULT_RECORD,
     statusName: stored?.statusName || DEFAULT_STATUS,
+    lastSentAt: stored?.lastSentAt ?? null,
+    lastResult: stored?.lastResult ?? null,
   };
+}
+
+export function countLeadPins(userId: string): number {
+  return listPins(userId).filter((pin) => pin.status === "lead").length;
 }
 
 function readCrm(): StoredCrm | null {
   const row = getDb()
     .prepare(
-      `SELECT provider, secret, record_type AS recordType, status_name AS statusName
+      `SELECT provider, secret, record_type AS recordType, status_name AS statusName,
+              last_sent_at AS lastSentAt, last_result AS lastResult
        FROM crm_settings WHERE id = 1`,
     )
     .get() as StoredCrm | undefined;
   if (!row || !asCrmProvider(row.provider) || !row.secret) return null;
-  return { ...row, provider: row.provider };
+  return { ...row, provider: row.provider, lastSentAt: row.lastSentAt || null, lastResult: row.lastResult || null };
 }
 
 export async function saveCrm(input: {
@@ -157,7 +168,7 @@ function clipLabel(value: string | null | undefined, fallback: string): string {
   return text.slice(0, 80);
 }
 
-function writeCrm(row: StoredCrm) {
+function writeCrm(row: Pick<StoredCrm, "provider" | "secret" | "recordType" | "statusName">) {
   getDb()
     .prepare(
       `INSERT INTO crm_settings (id, provider, secret, record_type, status_name, updated_at)
@@ -170,6 +181,12 @@ function writeCrm(row: StoredCrm) {
          updated_at = excluded.updated_at`,
     )
     .run(row.provider, row.secret, row.recordType, row.statusName, new Date().toISOString());
+}
+
+function rememberSend(result: string) {
+  const text = result.replace(/\s+/g, " ").trim().slice(0, 180);
+  if (!text) return;
+  getDb().prepare("UPDATE crm_settings SET last_sent_at = ?, last_result = ? WHERE id = 1").run(new Date().toISOString(), text);
 }
 
 function text(value: unknown, max = 80): string | null {
@@ -363,7 +380,9 @@ export async function sendLeads(userId: string): Promise<
   if (!stored) return { ok: false, error: "Save a webhook link or API key first." };
   const pins = listPins(userId).filter((pin) => pin.status === "lead");
   if (!pins.length) {
-    return { ok: true, sent: 0, skipped: 0, message: "No leads yet. Mark a house as Lead, then try again." };
+    const message = "No leads yet. Mark a house as Lead, then try again.";
+    rememberSend(message);
+    return { ok: true, sent: 0, skipped: 0, message };
   }
   const leads: OutboundLead[] = [];
   for (const pin of pins) {
@@ -372,19 +391,28 @@ export async function sendLeads(userId: string): Promise<
   }
   if (stored.provider === "webhook") {
     const sent = await postWebhook(stored.secret, zapierBody(leads, new Date().toISOString(), "leads.sent"));
-    if (!sent.ok) return sent;
-    return { ok: true, sent: leads.length, skipped: 0, message: sentCount(leads.length) };
+    if (!sent.ok) {
+      rememberSend(sent.error);
+      return sent;
+    }
+    const message = sentCount(leads.length);
+    rememberSend(message);
+    return { ok: true, sent: leads.length, skipped: 0, message };
   }
   if (stored.provider === "jobnimbus") {
     let sent = 0;
     for (const lead of leads) {
       const result = await postJson(JOBNIMBUS_CONTACTS, stored.secret, jobNimbusContact(lead, stored.recordType, stored.statusName));
       if (!result.ok) {
-        return { ok: false, error: sent ? `Sent ${sent}. JobNimbus then refused a lead. ${result.error}` : result.error, sent };
+        const error = sent ? `Sent ${sent}. JobNimbus then refused a lead. ${result.error}` : result.error;
+        rememberSend(error);
+        return { ok: false, error, sent };
       }
       sent += 1;
     }
-    return { ok: true, sent, skipped: 0, message: sentCount(sent) };
+    const message = sentCount(sent);
+    rememberSend(message);
+    return { ok: true, sent, skipped: 0, message };
   }
   let sent = 0;
   let skipped = 0;
@@ -406,21 +434,34 @@ export async function sendLeads(userId: string): Promise<
     });
     if (!contact.ok) {
       const detail = scrub(await contact.text().catch(() => ""), stored.secret);
-      return { ok: false, error: sent ? `Sent ${sent}. AccuLynx then refused a lead. ${detail}` : detail, sent };
+      const error = sent ? `Sent ${sent}. AccuLynx then refused a lead. ${detail}` : detail;
+      rememberSend(error);
+      return { ok: false, error, sent };
     }
     const created = (await contact.json().catch(() => null)) as { id?: unknown; contactId?: unknown } | null;
     const contactId = typeof created?.id === "string" ? created.id : typeof created?.contactId === "string" ? created.contactId : null;
-    if (!contactId) return { ok: false, error: "AccuLynx did not return a contact id.", sent };
+    if (!contactId) {
+      const error = "AccuLynx did not return a contact id.";
+      rememberSend(error);
+      return { ok: false, error, sent };
+    }
     const job = await postJson(ACCULYNX_JOBS, stored.secret, acculynxJob(lead, contactId));
-    if (!job.ok) return { ok: false, error: sent ? `Sent ${sent}. ${job.error}` : job.error, sent };
+    if (!job.ok) {
+      const error = sent ? `Sent ${sent}. ${job.error}` : job.error;
+      rememberSend(error);
+      return { ok: false, error, sent };
+    }
     sent += 1;
   }
   if (!sent) {
-    return { ok: false, error: "AccuLynx needs a street, city, state, and ZIP. None of these leads have a full address." };
+    const error = "AccuLynx needs a street, city, state, and ZIP. None of these leads have a full address.";
+    rememberSend(error);
+    return { ok: false, error };
   }
   const message = skipped
     ? `${sentCount(sent)} ${skipped} ${skipped === 1 ? "lead has" : "leads have"} no street address, so AccuLynx did not take ${skipped === 1 ? "it" : "them"}.`
     : sentCount(sent);
+  rememberSend(message);
   return { ok: true, sent, skipped, message };
 }
 

@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { asCrmProvider, publicCrm, saveCrm } from "@/lib/crm";
+import { asCrmProvider, countLeadPins, publicCrm, saveCrm } from "@/lib/crm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
-  return Response.json(publicCrm());
+  return Response.json({ ...publicCrm(), leadCount: countLeadPins(auth.user.id) });
 }
 
 export async function PUT(request: Request) {

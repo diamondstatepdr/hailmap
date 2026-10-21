@@ -193,6 +193,8 @@ interface Props {
   onSelectHoney?: (id: string) => void;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  /** A finger, mouse, or wheel moved the camera. Programmatic fitBounds does not count. */
+  onUserMove?: () => void;
   onBackgroundClick?: () => void;
   /** When false, points are already aggregated and MapLibre should not cluster them again. */
   clusterPoints?: boolean;
@@ -247,6 +249,7 @@ export default function HailMap({
   onSelectHoney,
   onViewChange,
   onPreviewBounds,
+  onUserMove,
   onBackgroundClick,
   clusterPoints = true,
 }: Props) {
@@ -519,12 +522,14 @@ export default function HailMap({
       onMove={(event) => {
         const bounds = readMapBounds(event.target);
         if (bounds) onPreviewBounds?.(bounds);
+        if (event.originalEvent) onUserMove?.();
       }}
       onMoveEnd={(event) => {
         const bounds = readMapBounds(event.target);
         if (!bounds) return;
         onPreviewBounds?.(bounds);
         onViewChange?.(bounds);
+        if (event.originalEvent) onUserMove?.();
       }}
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();

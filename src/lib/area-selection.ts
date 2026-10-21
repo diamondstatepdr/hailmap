@@ -15,6 +15,8 @@ export interface DealerPin {
   lon: number;
   distanceKm: number;
   kind: "dealership" | "lot";
+  /** OpenStreetMap phone tag, when the lot has one. */
+  phone: string | null;
 }
 
 export interface RadarDay {

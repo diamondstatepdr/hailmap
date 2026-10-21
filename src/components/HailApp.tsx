@@ -22,6 +22,7 @@ import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import FieldSheet from "@/components/panels/FieldSheet";
 import SendLeadsSheet from "@/components/SendLeadsSheet";
+import DealerHitList from "@/components/panels/DealerHitList";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
@@ -68,6 +69,7 @@ import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type 
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
 import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
+import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -1091,6 +1093,10 @@ export default function HailApp() {
     () => knock?.stops.map((stop, index) => ({ id: stop.id, lat: stop.lat, lon: stop.lon, n: index + 1 })) ?? null,
     [knock],
   );
+  const dealerHits = useMemo(() => {
+    if (!area || area.source === "view") return [];
+    return rankDealersByHail(dealers, lotBands(meshCollection?.features ?? []), area.maxIn ?? area.minIn ?? 0);
+  }, [area, dealers, meshCollection]);
 
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -2582,6 +2588,7 @@ export default function HailApp() {
                   {knockBusy ? "Building the route…" : "Door-knock route"}
                 </button>
                 {knockError ? <p className="mt-2 text-sm text-muted">{knockError}</p> : null}
+                <DealerHitList dealers={dealerHits} />
               </MapDetailSheet>
             </div>
           ) : null}

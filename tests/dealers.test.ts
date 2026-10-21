@@ -24,7 +24,7 @@ describe("dealership finder", () => {
           id: 1,
           lat: 35.5,
           lon: -97.5,
-          tags: { shop: "car", name: "North Honda", "addr:housenumber": "10", "addr:street": "Main St", "addr:city": "Oklahoma City", "addr:state": "OK" },
+          tags: { shop: "car", name: "North Honda", phone: "(405) 555-0100", "addr:housenumber": "10", "addr:street": "Main St", "addr:city": "Oklahoma City", "addr:state": "OK" },
         },
         {
           type: "node",
@@ -64,7 +64,8 @@ describe("dealership finder", () => {
       { lat: 35.5, lon: -97.5 },
     );
     expect(dealers.map((dealer) => dealer.name)).toEqual(["North Honda", "Auto Mall Lot"]);
-    expect(dealers[0]).toMatchObject({ kind: "dealership", address: "10 Main St, Oklahoma City, OK" });
+    expect(dealers[0]).toMatchObject({ kind: "dealership", address: "10 Main St, Oklahoma City, OK", phone: "(405) 555-0100" });
+    expect(dealers[1].phone).toBeNull();
     expect(dealers[1].kind).toBe("lot");
     expect(dealers[0].distanceKm).toBeLessThan(dealers[1].distanceKm);
   });

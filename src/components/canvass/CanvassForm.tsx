@@ -150,14 +150,8 @@ export function CanvassCounts({ counts }: { counts: CanvassRepCount[] }) {
 export function CanvassLegend({ count, onOpen }: { count: number; onOpen: () => void }) {
   return (
     <button type="button" className="canvass-legend press" onClick={onOpen} data-canvass-legend>
-      <span className="font-semibold">Canvass</span>
-      <span className="text-muted">{count}</span>
-      {CANVASS_STATUSES.map((status) => (
-        <span key={status} className="inline-flex items-center" title={canvassStatusLabel(status)}>
-          <span className="canvass-dot" style={{ background: CANVASS_COLORS[status] }} />
-          <span className="sr-only">{canvassStatusLabel(status)}</span>
-        </span>
-      ))}
+      <span>Canvass</span>
+      <span className="canvass-legend-count">{count}</span>
     </button>
   );
 }

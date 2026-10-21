@@ -21,6 +21,7 @@ import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import CanvassForm, { CanvassBoard, CanvassLegend } from "@/components/canvass/CanvassForm";
 import { useCanvass } from "@/components/canvass/useCanvass";
+import { CANVASS_COLORS, canvassStatusLabel } from "@/lib/canvass";
 import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
@@ -1089,7 +1090,7 @@ export default function HailApp() {
       features: canvass.stops.map((stop) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [stop.lon, stop.lat] },
-        properties: { id: stop.id, status: stop.status },
+        properties: { id: stop.id, status: stop.status, label: canvassStatusLabel(stop.status) },
       })),
     }),
     [canvass.stops],
@@ -1902,6 +1903,17 @@ export default function HailApp() {
             userLocation={section === "field" ? userLocation : null}
             fieldPins={user ? fieldCollection : null}
             canvassPins={user ? canvassCollection : null}
+            canvassCallout={
+              canvassSelection
+                ? {
+                    lat: canvassSelection.lat,
+                    lon: canvassSelection.lon,
+                    status: canvassStatusLabel(canvassSelection.status),
+                    rep: canvassSelection.repName,
+                    note: canvassSelection.note,
+                  }
+                : null
+            }
             selectedId={selectedId}
             focus={focus}
             frame={frame}
@@ -1936,7 +1948,6 @@ export default function HailApp() {
             }}
             onSelectCanvass={(id) => {
               setCanvassId(id);
-              setCanvassBoard(true);
               const stop = canvass.stops.find((item) => item.id === id);
               if (stop) setFocus({ lat: stop.lat, lon: stop.lon, zoom: 16, nonce: Date.now() });
             }}
@@ -2052,6 +2063,9 @@ export default function HailApp() {
                   )}
                   {section === "map" && !replay.active ? (
                     <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
+                  ) : null}
+                  {(section === "map" || section === "field") && user && canvass.stops.length > 0 && !replay.active ? (
+                    <CanvassLegend count={canvass.stops.length} onOpen={() => setCanvassBoard(true)} />
                   ) : null}
                   <button
                     type="button"
@@ -2255,9 +2269,6 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {user && canvass.stops.length > 0 && (section === "map" || section === "field") && !honeyOpen && !replay.active ? (
-            <CanvassLegend count={canvass.stops.length} onOpen={() => setCanvassBoard(true)} />
-          ) : null}
           {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
@@ -2308,6 +2319,17 @@ export default function HailApp() {
                       ) : null}
                     </>
                   ) : null}
+                  {user && canvass.stops.length > 0 ? (
+                    <>
+                      <span className="map-key-label">Canvass</span>
+                      {(["knocked", "not_home", "interested", "signed"] as const).map((status) => (
+                        <span key={status} className="map-key-item">
+                          <i className="is-round" style={{ background: CANVASS_COLORS[status] }} />
+                          {canvassStatusLabel(status)}
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
                   {meshDate ? (
                     <button type="button" className="map-key-back" onClick={() => showLiveWindow(filter.hours)}>
                       Back to time range
@@ -2317,7 +2339,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && !canvassBoard && !chasePopup && filtered.length === 0 && !reportOpen ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading

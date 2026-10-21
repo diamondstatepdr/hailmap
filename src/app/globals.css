@@ -72,6 +72,7 @@ button {
 .map-quick-row {
   display: flex;
   max-width: 100%;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
 }
@@ -165,14 +166,52 @@ button {
 }
 
 .map-empty {
-  top: calc(var(--chrome-offset) + 0.7rem);
+  /* Clear the Chase List row. The toast used to sit on that button and get clipped. */
+  top: calc(var(--chrome-offset) + 4.8rem);
+  z-index: 12;
 }
 
 .map-legend {
-  bottom: 0.7rem;
-  left: 0.75rem;
+  bottom: 0.55rem;
+  left: 0.55rem;
   /* Leave the info button a clear corner so the hail legend cannot cover it. */
-  right: 4.4rem;
+  right: auto;
+  max-width: min(15.5rem, calc(100% - 5.2rem));
+}
+
+.map-legend-card {
+  display: grid;
+  gap: 0.18rem;
+  max-width: 100%;
+  border-radius: 0.85rem;
+  padding: 0.32rem 0.45rem;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.map-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.18rem 0.38rem;
+}
+
+.map-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  white-space: nowrap;
+}
+
+.map-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border-radius: 2px;
+}
+
+.map-legend-swatch.is-round {
+  border-radius: 999px;
 }
 
 .maplibregl-ctrl-top-right {
@@ -2394,22 +2433,52 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .canvass-legend {
-  position: absolute;
-  z-index: 21;
-  top: calc(var(--chrome-offset) + 0.4rem);
-  left: 0.75rem;
   display: inline-flex;
+  height: 2.75rem;
+  flex: none;
   align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--border);
+  gap: 0.35rem;
+  border: 1px solid var(--chrome-line);
   border-radius: 999px;
-  background: var(--panel);
-  color: var(--text);
-  padding: 0.4rem 0.75rem;
-  font-size: 12px;
+  background: linear-gradient(115deg, var(--chrome), var(--chrome-2));
+  color: var(--chrome-ink);
+  padding: 0 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 750;
   line-height: 1;
   pointer-events: auto;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--chrome) 40%, transparent);
+}
+
+.canvass-legend-count {
+  display: inline-grid;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.68rem;
+}
+
+.canvass-popup .maplibregl-popup-content {
+  display: grid;
+  gap: 0.05rem;
+  border-radius: 0.75rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font-size: 12px;
+  line-height: 1.25;
   box-shadow: var(--shadow);
+}
+
+.canvass-popup .maplibregl-popup-content strong {
+  font-weight: 750;
+}
+
+.canvass-popup .maplibregl-popup-tip {
+  border-top-color: var(--panel);
 }
 
 .canvass-form textarea,

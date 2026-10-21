@@ -1,105 +1,94 @@
-import fs from "node:fs";
+import { mkdirSync } from "node:fs";
 import { chromium } from "playwright";
 
 const base = process.env.BASE_URL ?? "http://127.0.0.1:3210";
-const out = process.env.SHOT_DIR ?? "/opt/cursor/artifacts/canvass";
-fs.mkdirSync(out, { recursive: true });
-
+const outDir = process.env.CANVASS_SHOTS ?? "/opt/cursor/artifacts/canvass";
+const phone = { viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const desktop = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 };
 const themes = [
-  { id: "a", name: "storm-core" },
-  { id: "b", name: "supercell" },
-  { id: "c", name: "ice-swath" },
+  ["a", "storm-core"],
+  ["b", "supercell"],
+  ["c", "ice-swath"],
 ];
-
 const houses = [
-  ["4100 W 7th St, Fort Worth", 32.7518, -97.3345, "knocked", "Left a card"],
-  ["4200 W 7th St, Fort Worth", 32.7526, -97.3322, "not_home", ""],
-  ["3900 W 7th St, Fort Worth", 32.7504, -97.3368, "interested", "Wants a roof quote"],
-  ["4000 W 7th St, Fort Worth", 32.7534, -97.3298, "signed", "Signed today"],
+  ["South Gold Avenue, Deming, NM", "knocked", "Left a card"],
+  ["North Gold Avenue, Deming, NM", "interested", "Wants a look at the hood"],
+  ["South Silver Avenue, Deming, NM", "signed", "Roof and hood"],
 ];
 
-async function hideBadge(page) {
-  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" }).catch(() => {});
+async function hideDev(page) {
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.textContent = "nextjs-portal{display:none!important}";
+    document.documentElement.appendChild(style);
+  });
 }
 
-async function shot(page, name) {
-  await hideBadge(page);
-  await page.screenshot({ path: `${out}/${name}.png` });
+async function searchAddress(page, query) {
+  const input = page.getByLabel("Search an address");
+  await input.click();
+  await input.fill("");
+  await input.fill(query);
+  const choice = page.locator("ul button").filter({ hasText: /Deming/i }).first();
+  await choice.waitFor({ timeout: 20000 });
+  await choice.click();
+  await page.locator("[data-canvass-form]").waitFor({ timeout: 20000 });
 }
 
-async function signIn(page) {
-  const canvassSignIn = page.getByRole("button", { name: "Sign in to canvass" });
-  if (await canvassSignIn.count()) {
-    await canvassSignIn.first().click();
-  } else {
-    await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
+async function markHouse(page, query, status, note, signIn) {
+  await searchAddress(page, query);
+  if (signIn) {
+    await page.getByRole("button", { name: "Sign in to canvass" }).click();
+    await page.getByLabel("Name").fill("Alex");
+    await page.getByLabel("Team passcode").fill("team-pass");
+    await page.locator("form").getByRole("button", { name: "Sign in" }).click();
+    await page.locator(`[data-canvass-status="${status}"]`).waitFor({ timeout: 15000 });
   }
-  const dialog = page.getByRole("heading", { name: "Sign in" });
-  await dialog.waitFor({ timeout: 8000 });
-  await page.getByLabel("Name").fill("Alex");
-  await page.getByLabel("Team passcode").fill(process.env.HAILMAP_TEAM_PASSCODE ?? "team-pass");
-  await page.locator("form").getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.locator("[data-canvass-form] [data-canvass-status='knocked']").waitFor({ timeout: 8000 });
+  const statusButton = page.locator(`[data-canvass-status="${status}"]`);
+  await statusButton.waitFor({ timeout: 15000 });
+  await statusButton.click();
+  await page.locator("[data-canvass-form] textarea").fill(note);
+  await page.getByRole("button", { name: /Save for the team|Update this house/ }).click();
+  await page.getByText(note).waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.locator("[data-canvass-form]").waitFor({ state: "hidden", timeout: 10000 }).catch(() => undefined);
 }
 
-async function seed(page) {
-  await page.evaluate(async (rows) => {
-    for (const [address, lat, lon, status, note] of rows) {
-      const response = await fetch("/api/canvass", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address, lat, lon, status, note, hailIn: 1.75 }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-    }
-  }, houses);
-}
-
-async function runViewport(browser, { width, height, hasTouch, prefix }) {
-  for (const theme of themes) {
-    const context = await browser.newContext({
-      viewport: { width, height },
-      hasTouch,
-      isMobile: hasTouch,
-      deviceScaleFactor: hasTouch ? 2 : 1,
-    });
-    const page = await context.newPage();
-    await page.goto(`${base}/?theme=${theme.id}&lat=32.7518&lon=-97.333&z=15`, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await page.waitForSelector(".maplibregl-canvas", { timeout: 30000 });
-    await page.waitForTimeout(800);
-    const nav = page.locator("nav[aria-label='Sections']:visible");
-    await nav.getByRole("button", { name: /^Field\b/ }).click();
-    await page.waitForTimeout(500);
-    await signIn(page);
-    await seed(page);
-    const form = page.locator("[data-canvass-form]").first();
-    await form.locator("[data-canvass-status='knocked']").click();
-    await form.getByPlaceholder("Optional").fill("Owner asked us to come back");
-    await form.getByRole("button", { name: /Save for the team|Update this house/ }).click();
-    await form.locator("[data-canvass-counts]").getByText("Alex").waitFor({ timeout: 10000 });
-    await page.waitForTimeout(300);
-    await shot(page, `${prefix}-${theme.name}-field`);
-
-    await nav.getByRole("button", { name: /^Map\b/ }).click();
-    await page.locator("[data-canvass-legend]").waitFor({ timeout: 12000 });
-    await page.waitForTimeout(600);
-    await shot(page, `${prefix}-${theme.name}-map`);
-    await page.locator("[data-canvass-legend]").click();
-    await page.getByText("Team canvass").waitFor({ timeout: 5000 });
-    await page.waitForTimeout(300);
-    await shot(page, `${prefix}-${theme.name}-board`);
-    await context.close();
+async function shoot(browser, label, options, theme, name) {
+  const context = await browser.newContext({ ...options, serviceWorkers: "block" });
+  const page = await context.newPage();
+  await hideDev(page);
+  const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
+  await page.goto(`${base}/?lat=32.2687&lon=-107.7586&z=13&day=2026-10-20&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.locator(".maplibregl-canvas").waitFor({ timeout: 30000 });
+  await meshReady;
+  await page.waitForTimeout(1200);
+  for (let index = 0; index < houses.length; index += 1) {
+    const [query, status, note] = houses[index];
+    await markHouse(page, query, status, note, index === 0);
   }
+  await page.locator("[data-canvass-legend]").click();
+  await page.getByRole("button", { name: /South Gold/i }).click();
+  await page.locator(".canvass-popup").waitFor({ timeout: 10000 });
+  await page.getByRole("dialog", { name: "Canvass" }).getByRole("button", { name: "Close" }).click();
+  await page.waitForTimeout(600);
+  const file = `${outDir}/${label}-${name}-map.png`;
+  await page.screenshot({ path: file });
+  console.log("wrote", file);
+  await context.close();
 }
 
-const browser = await chromium.launch({ headless: true });
-try {
-  await runViewport(browser, { width: 412, height: 915, hasTouch: true, prefix: "phone" });
-  await runViewport(browser, { width: 1280, height: 800, hasTouch: false, prefix: "desktop" });
-  console.log("canvass screenshots", out);
-} catch (error) {
-  console.error(error);
-  process.exitCode = 1;
-} finally {
+async function main() {
+  mkdirSync(outDir, { recursive: true });
+  const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
+  for (const [theme, name] of themes) {
+    await shoot(browser, "phone", phone, theme, name);
+    await shoot(browser, "desktop", desktop, theme, name);
+  }
   await browser.close();
 }
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

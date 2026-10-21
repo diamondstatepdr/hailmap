@@ -5,6 +5,12 @@ export interface AreaSelection {
   minIn: number | null;
   maxIn: number | null;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  startLat?: number | null;
+  startLon?: number | null;
+  endLat?: number | null;
+  endLon?: number | null;
 }
 
 export interface DealerPin {

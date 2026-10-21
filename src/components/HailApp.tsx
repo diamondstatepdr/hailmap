@@ -32,6 +32,7 @@ import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
 import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { formatClockRange, readoutForSelection, statLine, swathTitle } from "@/lib/swath-measure";
 import {
   applyReportFilter,
   formatWhen,
@@ -224,6 +225,7 @@ export default function HailApp() {
   const [overlay, setOverlay] = useState<null | "range" | "calendar" | "days">(null);
   const calendarOpen = overlay === "calendar";
   const hailDaysOpen = overlay === "days";
+  const [dealersOpen, setDealersOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
   const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
@@ -1081,8 +1083,23 @@ export default function HailApp() {
   );
   const dealerHits = useMemo(() => {
     if (!area || area.source === "view") return [];
-    return rankDealersByHail(dealers, lotBands(meshCollection?.features ?? []), area.maxIn ?? area.minIn ?? 0);
-  }, [area, dealers, meshCollection]);
+    return rankDealersByHail(dealers, lotBands([...(meshCollection?.features ?? []), ...(swaths?.features ?? [])]), area.maxIn ?? area.minIn ?? 0);
+  }, [area, dealers, meshCollection, swaths]);
+  const swathReadout = useMemo(() => {
+    if (!area || area.source === "view") return null;
+    return readoutForSelection(area, [...(meshCollection?.features ?? []), ...(swaths?.features ?? [])]);
+  }, [area, meshCollection, swaths]);
+  const sheetTitle = useMemo(() => {
+    if (!area) return "";
+    const peak = Math.max(
+      area.maxIn ?? 0,
+      ...(swathReadout?.bands.map((band) => band.minIn) ?? []),
+      ...dealerHits.map((dealer) => dealer.hailIn),
+    );
+    const shown = area.maxIn ?? area.minIn ?? 0;
+    if (peak > shown + 0.001) return swathTitle({ source: area.source, minIn: area.minIn, maxIn: peak });
+    return area.label;
+  }, [area, swathReadout, dealerHits]);
 
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -1446,6 +1463,7 @@ export default function HailApp() {
 
   async function loadDealers(selection: AreaSelection) {
     setArea(selection);
+    setDealersOpen(false);
     setDealerLoading(true);
     setDealerError(null);
     setDealerNote(null);
@@ -1671,7 +1689,13 @@ export default function HailApp() {
   const stormControlLabel = useMemo(() => {
     const names = hazards.map((id) => HAZARD_OPTIONS.find((option) => option.id === id)?.label ?? id);
     const hazard = names.length >= 3 ? "All storms" : names.join(" · ") || "Hail";
-    if (historyMode.kind === "day") return `${hazard} · ${formatDay(historyMode.date)}`;
+    if (historyMode.kind === "day") {
+      const [year, month, day] = historyMode.date.split("-").map(Number);
+      const short = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(
+        new Date(Date.UTC(year, month - 1, day)),
+      );
+      return `${hazard} · ${short}`;
+    }
     if (historyMode.kind === "custom") return `${hazard} · Custom`;
     if (historyMode.kind === "days") {
       const chip = HISTORY_CHIPS.find((item) => item.days === historyMode.days);
@@ -1846,6 +1870,7 @@ export default function HailApp() {
             meshPulse={replay.active ? replay.radar.pulse : null}
             emphasizeMesh={replay.active}
             dealers={dealerCollection}
+            selectedDealerId={selectedDealerId}
             income={income}
             threats={replay.active ? (replayWarnings ?? { type: "FeatureCollection", features: [] }) : threats}
             showPoints={showPoints}
@@ -1920,13 +1945,9 @@ export default function HailApp() {
             }}
             onSelectDealer={(id) => {
               setSelectedDealerId(id);
+              setDealersOpen(true);
               const dealer = dealers.find((item) => item.id === id);
-              if (dealer) {
-                enterField({ lat: dealer.lat, lon: dealer.lon, source: "selection" });
-                setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
-              } else {
-                enterField();
-              }
+              if (dealer) setFocus({ lon: dealer.lon, lat: dealer.lat, nonce: Date.now(), zoom: 15 });
             }}
             onPreviewBounds={(bounds) => {
               viewBoundsRef.current = bounds;
@@ -2165,17 +2186,6 @@ export default function HailApp() {
                   <p className="mt-2 text-[11px] leading-snug text-muted">Tap a day, then Replay, to watch that storm move.</p>
                 )}
               </div>
-            ) : historyMode.kind === "day" && !replay.active ? (
-              <div className="pointer-events-auto glass flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-xs">
-                <span className="font-semibold">{formatDay(historyMode.date)}</span>
-                <button type="button" className="btn btn-primary press px-2.5 py-1 text-xs" onClick={() => beginReplay(historyMode.date)}>
-                  <Play size={13} />
-                  Replay
-                </button>
-                <button type="button" className="tap font-semibold text-accent" onClick={() => setOverlay("calendar")}>
-                  Calendar
-                </button>
-              </div>
             ) : null}
             {hailDaysOpen ? (
               <div className="pointer-events-auto glass max-h-60 w-[min(24rem,100%)] overflow-auto rounded-2xl p-3 text-sm">
@@ -2275,7 +2285,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && !area && !placeCardOpen && !selected && !threat && !chasePopup && !dealersOpen && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading
@@ -2416,21 +2426,58 @@ export default function HailApp() {
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && area && !(placeCardOpen && place) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-              <MapDetailSheet label={area.source === "mesh" ? "Hail size" : "Map area"} onClose={closeMapDetail}>
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-                    {area.source === "mesh" ? "Hail path from radar" : area.source === "view" ? "Map area" : "Hail path from reports"}
-                  </p>
-                  <p className="mt-1 text-lg font-semibold tracking-tight">{area.label}</p>
-                  {area.maxIn != null ? <p className="text-sm text-muted">Peak about {area.maxIn.toFixed(2)} in</p> : null}
-                </div>
-                <p className="mt-2 text-sm text-muted">
-                  {dealerLoading
-                    ? "Looking up dealerships in this area…"
-                    : dealerError
-                      ? dealerError
-                      : `${dealers.length} dealership${dealers.length === 1 ? "" : "s"} and auto lot${dealers.length === 1 ? "" : "s"}`}
-                </p>
+              <MapDetailSheet label={sheetTitle || area.label} onClose={closeMapDetail} expandedMax="min(58dvh, 26rem)">
+                <h2 className="text-lg font-semibold tracking-tight" data-swath-title>
+                  {sheetTitle || area.label}
+                </h2>
+                {swathReadout ? (
+                  <div className="swath-stats" data-swath-stats>
+                    {swathReadout.bands.map((band) => (
+                      <p key={band.label}>
+                        <span>{band.label}</span>
+                        {statLine(band)}
+                      </p>
+                    ))}
+                    {swathReadout.bands.length > 1 ? (
+                      <p className="swath-total">
+                        <span>Total</span>
+                        {statLine(swathReadout.total)}
+                      </p>
+                    ) : null}
+                    {swathReadout.motion.direction || swathReadout.motion.startedAt ? (
+                      <p className="swath-motion">
+                        {[swathReadout.motion.direction, formatClockRange(swathReadout.motion.startedAt, swathReadout.motion.endedAt)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className="swath-dealers press"
+                  data-dealer-open
+                  aria-expanded={dealersOpen}
+                  onClick={() => setDealersOpen((open) => !open)}
+                >
+                  <span>
+                    {dealerLoading
+                      ? "Looking up dealerships…"
+                      : dealerError
+                        ? dealerError
+                        : `${dealers.length} dealership${dealers.length === 1 ? "" : "s"} and auto lot${dealers.length === 1 ? "" : "s"}`}
+                  </span>
+                  <span>{dealersOpen ? "Hide" : "Open"}</span>
+                </button>
+                {dealersOpen ? (
+                  dealerHits.length ? (
+                    <DealerHitList dealers={dealerHits} selectedId={selectedDealerId} />
+                  ) : !dealerLoading ? (
+                    <p className="mt-2 text-sm text-muted" data-dealer-empty>
+                      No dealerships in this swath.
+                    </p>
+                  ) : null
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -2455,7 +2502,6 @@ export default function HailApp() {
                     Open in field mode
                   </button>
                 </div>
-                <DealerHitList dealers={dealerHits} />
               </MapDetailSheet>
             </div>
           ) : null}

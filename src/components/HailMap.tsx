@@ -8,7 +8,6 @@ import Map, {
   Layer,
   Marker,
   NavigationControl,
-  Popup,
   Source,
   type MapLayerMouseEvent,
   type MapRef,
@@ -180,7 +179,7 @@ interface Props {
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
   canvassPins?: GeoJSON.FeatureCollection | null;
-  canvassCallout?: { lat: number; lon: number; status: string; rep: string; note: string | null } | null;
+  selectedCanvassId?: string | null;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -263,7 +262,7 @@ export default function HailMap({
   userLocation = null,
   fieldPins = null,
   canvassPins = null,
-  canvassCallout = null,
+  selectedCanvassId = null,
   selectedId,
   focus,
   frame,
@@ -1083,45 +1082,17 @@ export default function HailMap({
                 CANVASS_COLORS.signed,
                 "#64748b",
               ],
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 13, 9, 16, 12],
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 2,
-            }}
-          />
-          <Layer
-            id="canvass-labels"
-            type="symbol"
-            minzoom={13}
-            layout={{
-              "text-field": ["coalesce", ["get", "label"], ""],
-              "text-font": ["Noto Sans Regular"],
-              "text-size": 12,
-              "text-offset": [0, 1.15],
-              "text-anchor": "top",
-              "text-optional": true,
-            }}
-            paint={{
-              "text-color": "#102033",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.4,
+              "circle-radius": [
+                "case",
+                ["==", ["get", "id"], selectedCanvassId ?? ""],
+                11,
+                ["interpolate", ["linear"], ["zoom"], 8, 6, 13, 8, 16, 10],
+              ],
+              "circle-stroke-color": ["case", ["==", ["get", "id"], selectedCanvassId ?? ""], "#102033", "#ffffff"],
+              "circle-stroke-width": ["case", ["==", ["get", "id"], selectedCanvassId ?? ""], 3, 2],
             }}
           />
         </Source>
-      ) : null}
-      {canvassCallout ? (
-        <Popup
-          longitude={canvassCallout.lon}
-          latitude={canvassCallout.lat}
-          anchor="bottom"
-          offset={16}
-          closeButton={false}
-          closeOnClick={false}
-          className="canvass-popup"
-        >
-          <strong>{canvassCallout.status}</strong>
-          <span>{canvassCallout.rep}</span>
-          {canvassCallout.note ? <span>{canvassCallout.note}</span> : null}
-        </Popup>
       ) : null}
       {fieldPins?.features.length ? (
         <Source id="field-pins" type="geojson" data={fieldPins}>

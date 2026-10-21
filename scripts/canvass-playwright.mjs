@@ -72,11 +72,13 @@ async function shoot(browser, label, options, theme, name) {
     const [query, status, note] = houses[index];
     await markHouse(page, query, status, note, index === 0);
   }
+  await page.locator(".map-key summary").click();
   await page.locator("[data-canvass-legend]").click();
   await page.getByRole("button", { name: /Main Street/i }).first().click();
-  await page.locator(".canvass-popup").waitFor({ timeout: 10000 });
+  await page.locator("[data-canvass-card]").waitFor({ timeout: 10000 });
   await page.getByRole("dialog", { name: "Canvass" }).getByRole("button", { name: "Close" }).click();
-  await page.waitForTimeout(600);
+  await page.locator(".map-key").evaluate((el) => el.removeAttribute("open"));
+  await page.waitForTimeout(400);
   const file = `${outDir}/${label}-${name}-map.png`;
   await page.screenshot({ path: file });
   console.log("wrote", file);

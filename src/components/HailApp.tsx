@@ -19,7 +19,7 @@ import PhotoReportSheet from "@/components/PhotoReportSheet";
 import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
 import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
-import CanvassForm, { CanvassBoard, CanvassLegend } from "@/components/canvass/CanvassForm";
+import CanvassForm, { CanvassBoard } from "@/components/canvass/CanvassForm";
 import { useCanvass } from "@/components/canvass/useCanvass";
 import { CANVASS_COLORS, canvassStatusLabel } from "@/lib/canvass";
 import FieldSheet from "@/components/panels/FieldSheet";
@@ -1090,7 +1090,7 @@ export default function HailApp() {
       features: canvass.stops.map((stop) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [stop.lon, stop.lat] },
-        properties: { id: stop.id, status: stop.status, label: canvassStatusLabel(stop.status) },
+        properties: { id: stop.id, status: stop.status },
       })),
     }),
     [canvass.stops],
@@ -1903,17 +1903,7 @@ export default function HailApp() {
             userLocation={section === "field" ? userLocation : null}
             fieldPins={user ? fieldCollection : null}
             canvassPins={user ? canvassCollection : null}
-            canvassCallout={
-              canvassSelection
-                ? {
-                    lat: canvassSelection.lat,
-                    lon: canvassSelection.lon,
-                    status: canvassStatusLabel(canvassSelection.status),
-                    rep: canvassSelection.repName,
-                    note: canvassSelection.note,
-                  }
-                : null
-            }
+            selectedCanvassId={canvassSelection?.id ?? null}
             selectedId={selectedId}
             focus={focus}
             frame={frame}
@@ -1949,7 +1939,7 @@ export default function HailApp() {
             onSelectCanvass={(id) => {
               setCanvassId(id);
               const stop = canvass.stops.find((item) => item.id === id);
-              if (stop) setFocus({ lat: stop.lat, lon: stop.lon, zoom: 16, nonce: Date.now() });
+              if (stop) setFocus({ lat: stop.lat, lon: stop.lon, zoom: 14, nonce: Date.now() });
             }}
             onSelectCounty={(info) => {
               setCounty(info);
@@ -2063,9 +2053,6 @@ export default function HailApp() {
                   )}
                   {section === "map" && !replay.active ? (
                     <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
-                  ) : null}
-                  {(section === "map" || section === "field") && user && canvass.stops.length > 0 && !replay.active ? (
-                    <CanvassLegend count={canvass.stops.length} onOpen={() => setCanvassBoard(true)} />
                   ) : null}
                   <button
                     type="button"
@@ -2269,6 +2256,18 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
+          {canvassSelection && !canvassBoard && (section === "map" || section === "field") && !honeyOpen && !replay.active ? (
+            <div className="canvass-pin-card" data-canvass-card>
+              <div className="canvass-pin-card-top">
+                <p>{canvassStatusLabel(canvassSelection.status)}</p>
+                <button type="button" className="tap" onClick={() => setCanvassId(null)}>
+                  Close
+                </button>
+              </div>
+              <p className="canvass-pin-card-rep">{canvassSelection.repName}</p>
+              {canvassSelection.note ? <p>{canvassSelection.note}</p> : null}
+            </div>
+          ) : null}
           {(showMesh || showPoints || showOutlook || (user && canvass.stops.length > 0)) && !honeyOpen && !replay.active && !reportOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && section === "map" && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
@@ -2328,6 +2327,9 @@ export default function HailApp() {
                           {canvassStatusLabel(status)}
                         </span>
                       ))}
+                      <button type="button" className="map-key-back" data-canvass-legend onClick={() => setCanvassBoard(true)}>
+                        Open list · {canvass.stops.length}
+                      </button>
                     </>
                   ) : null}
                   {meshDate ? (

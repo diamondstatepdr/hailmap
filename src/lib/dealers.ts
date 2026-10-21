@@ -65,6 +65,12 @@ export function overpassQuery(bounds: { west: number; south: number; east: numbe
 out center tags 80;`;
 }
 
+function phoneOf(tags: Record<string, string>): string | null {
+  const raw = (tags.phone || tags["contact:phone"] || tags["phone:mobile"] || "").trim().replace(/\s+/g, " ");
+  if (raw.length < 7 || raw.length > 40) return null;
+  return raw;
+}
+
 function addressOf(tags: Record<string, string>): string {
   const street = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
   const region = [tags["addr:state"], tags["addr:postcode"]].filter(Boolean).join(" ");
@@ -105,6 +111,7 @@ export function dealersFromElements(
       lon: point.lon,
       distanceKm: haversineKm(near.lat, near.lon, point.lat, point.lon),
       kind: dealership ? "dealership" : "lot",
+      phone: phoneOf(tags),
     });
   }
   dealers.sort((a, b) => a.distanceKm - b.distanceKm || a.name.localeCompare(b.name));

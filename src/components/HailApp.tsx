@@ -20,6 +20,7 @@ import AddressHistoryCard, { type AddressHistoryView } from "@/components/Addres
 import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import FieldSheet from "@/components/panels/FieldSheet";
+import DealerHitList from "@/components/panels/DealerHitList";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
@@ -64,6 +65,7 @@ import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
+import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -1077,6 +1079,10 @@ export default function HailApp() {
     }),
     [dealers],
   );
+  const dealerHits = useMemo(() => {
+    if (!area || area.source === "view") return [];
+    return rankDealersByHail(dealers, lotBands(meshCollection?.features ?? []), area.maxIn ?? area.minIn ?? 0);
+  }, [area, dealers, meshCollection]);
 
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -2449,6 +2455,7 @@ export default function HailApp() {
                     Open in field mode
                   </button>
                 </div>
+                <DealerHitList dealers={dealerHits} />
               </MapDetailSheet>
             </div>
           ) : null}

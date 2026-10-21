@@ -2335,6 +2335,88 @@ html.dark .replay-range::-moz-range-thumb {
   line-height: 1.35;
 }
 
+.canvass-card {
+  margin-top: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel-2);
+  padding: 0.65rem 0.7rem 0.7rem;
+}
+
+.canvass-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.canvass-status {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 680;
+  text-align: left;
+}
+
+.canvass-status[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--canvass);
+  color: #fff;
+}
+
+.canvass-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.canvass-counts {
+  margin-top: 0.35rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.canvass-rep {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.canvass-legend {
+  position: absolute;
+  z-index: 21;
+  top: calc(var(--chrome-offset) + 0.4rem);
+  left: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.4rem 0.75rem;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
+
+.canvass-form textarea,
+.canvass-card textarea {
+  color: var(--text);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

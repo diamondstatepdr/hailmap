@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bell } from "lucide-react";
 import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
 import { ADDRESS_SPANS, formatDay, type DateSpan } from "@/lib/history-range";
@@ -54,6 +54,7 @@ interface Props {
   scopeLabel?: string;
   /** Drop the floating card chrome when a bottom sheet already provides it. */
   bare?: boolean;
+  canvass?: ReactNode;
 }
 
 export default function AddressHistoryCard({
@@ -72,6 +73,7 @@ export default function AddressHistoryCard({
   onToggle,
   scopeLabel,
   bare,
+  canvass,
 }: Props) {
   const score = history.score;
   const spanName = ADDRESS_SPANS.find((item) => item.id === spanId)?.label ?? "this range";
@@ -301,6 +303,7 @@ export default function AddressHistoryCard({
           </button>
         ) : null}
       </div>
+      {canvass}
     </article>
   );
 }

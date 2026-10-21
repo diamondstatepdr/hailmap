@@ -1,5 +1,6 @@
 "use client";
 
+import { type ReactNode } from "react";
 import { Bell, CloudHail, Tornado, Wind } from "lucide-react";
 import type { RadarSample } from "@/lib/area-selection";
 import { formatWhen, placeLabel } from "@/lib/filters";
@@ -23,9 +24,10 @@ interface Props {
   saveLabel?: string;
   /** Drop the floating card chrome when a bottom sheet already provides it. */
   bare?: boolean;
+  canvass?: ReactNode;
 }
 
-export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare, canvass }: Props) {
   const score = history.score;
   const factors = topScoreFactors(score.factors);
   const hailLine = formatHailSources({
@@ -158,6 +160,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
           </button>
         ) : null}
       </div>
+      {canvass}
     </article>
   );
 }

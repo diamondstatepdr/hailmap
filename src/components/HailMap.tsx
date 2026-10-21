@@ -15,6 +15,7 @@ import Map, {
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
+import { CANVASS_COLORS } from "@/lib/canvass";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
@@ -177,6 +178,7 @@ interface Props {
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
+  canvassPins?: GeoJSON.FeatureCollection | null;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -186,6 +188,7 @@ interface Props {
   onPickLocation: (lon: number, lat: number) => void;
   onSelectReport: (id: string) => void;
   onSelectFieldPin?: (id: string) => void;
+  onSelectCanvass?: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
   onSelectThreat: (info: ThreatInfo) => void;
   onSelectArea?: (area: AreaSelection) => void;
@@ -257,6 +260,7 @@ export default function HailMap({
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
+  canvassPins = null,
   selectedId,
   focus,
   frame,
@@ -266,6 +270,7 @@ export default function HailMap({
   onPickLocation,
   onSelectReport,
   onSelectFieldPin,
+  onSelectCanvass,
   onSelectCounty,
   onSelectThreat,
   onSelectArea,
@@ -307,6 +312,8 @@ export default function HailMap({
     showIncome ? "income-fill" : "",
     fieldPins?.features.length ? "field-pins" : "",
     fieldPins?.features.length ? "field-pin-hit" : "",
+    canvassPins?.features.length ? "canvass-pins" : "",
+    canvassPins?.features.length ? "canvass-hit" : "",
   ].filter(Boolean);
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
@@ -497,6 +504,13 @@ export default function HailMap({
       return;
     }
     if (blockSelection) return;
+    const canvassHit = (event.features ?? []).find(
+      (feature) => feature.layer?.id === "canvass-pins" || feature.layer?.id === "canvass-hit",
+    );
+    if (canvassHit?.properties?.id) {
+      onSelectCanvass?.(String(canvassHit.properties.id));
+      return;
+    }
     const honeyHit = (event.features ?? []).find(
       (feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat",
     );
@@ -1036,6 +1050,37 @@ export default function HailMap({
             paint={{
               "circle-color": "#0c6278",
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 8, 14, 11],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            }}
+          />
+        </Source>
+      ) : null}
+      {canvassPins?.features.length ? (
+        <Source id="canvass-pins" type="geojson" data={canvassPins}>
+          <Layer
+            id="canvass-hit"
+            type="circle"
+            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
+          />
+          <Layer
+            id="canvass-pins"
+            type="circle"
+            paint={{
+              "circle-color": [
+                "match",
+                ["get", "status"],
+                "knocked",
+                CANVASS_COLORS.knocked,
+                "not_home",
+                CANVASS_COLORS.not_home,
+                "interested",
+                CANVASS_COLORS.interested,
+                "signed",
+                CANVASS_COLORS.signed,
+                "#64748b",
+              ],
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 13, 9, 16, 12],
               "circle-stroke-color": "#ffffff",
               "circle-stroke-width": 2,
             }}

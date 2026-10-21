@@ -19,6 +19,8 @@ import PhotoReportSheet from "@/components/PhotoReportSheet";
 import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
 import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
+import CanvassForm, { CanvassBoard, CanvassLegend } from "@/components/canvass/CanvassForm";
+import { useCanvass } from "@/components/canvass/useCanvass";
 import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
@@ -293,6 +295,9 @@ export default function HailApp() {
   const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const canvass = useCanvass(Boolean(user), viewBounds);
+  const [canvassBoard, setCanvassBoard] = useState(false);
+  const [canvassId, setCanvassId] = useState<string | null>(null);
   const viewBoundsRef = useRef<ViewBounds | null>(null);
   const [rankBounds, setRankBounds] = useState<ViewBounds | null>(null);
   const holdRankUntil = useRef(0);
@@ -1078,6 +1083,17 @@ export default function HailApp() {
     [dealers],
   );
 
+  const canvassCollection = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: canvass.stops.map((stop) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [stop.lon, stop.lat] },
+        properties: { id: stop.id, status: stop.status },
+      })),
+    }),
+    [canvass.stops],
+  );
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
@@ -1804,6 +1820,27 @@ export default function HailApp() {
     return () => observer.disconnect();
   }, [section, honeyOpen]);
 
+  function canvassAt(address: string, lat: number, lon: number, hailIn: number | null, showCounts = true) {
+    return (
+      <CanvassForm
+        address={address}
+        lat={lat}
+        lon={lon}
+        hailIn={hailIn}
+        signedIn={Boolean(user)}
+        stops={canvass.stops}
+        counts={canvass.counts}
+        saving={canvass.saving}
+        error={canvass.error}
+        showCounts={showCounts}
+        onSignIn={() => setAuthOpen(true)}
+        onSave={(status, note) => canvass.save({ address, lat, lon, status, note, hailIn })}
+      />
+    );
+  }
+
+  const canvassSelection = canvass.stops.find((stop) => stop.id === canvassId) ?? null;
+
   return (
     <AppShell
       section={section}
@@ -1864,6 +1901,7 @@ export default function HailApp() {
             }}
             userLocation={section === "field" ? userLocation : null}
             fieldPins={user ? fieldCollection : null}
+            canvassPins={user ? canvassCollection : null}
             selectedId={selectedId}
             focus={focus}
             frame={frame}
@@ -1895,6 +1933,12 @@ export default function HailApp() {
               const pin = pins.find((item) => item.id === id);
               if (pin) enterField({ lat: pin.lat, lon: pin.lon, source: "selection" });
               else enterField();
+            }}
+            onSelectCanvass={(id) => {
+              setCanvassId(id);
+              setCanvassBoard(true);
+              const stop = canvass.stops.find((item) => item.id === id);
+              if (stop) setFocus({ lat: stop.lat, lon: stop.lon, zoom: 16, nonce: Date.now() });
             }}
             onSelectCounty={(info) => {
               setCounty(info);
@@ -1953,6 +1997,7 @@ export default function HailApp() {
               setOverlay(null);
               setCustomOpen(false);
               setPlaceExpanded(false);
+              setCanvassBoard(false);
             }}
           />
           <div ref={chromeRef} data-tone="map" className="map-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
@@ -2210,6 +2255,9 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
+          {user && canvass.stops.length > 0 && (section === "map" || section === "field") && !honeyOpen && !replay.active ? (
+            <CanvassLegend count={canvass.stops.length} onOpen={() => setCanvassBoard(true)} />
+          ) : null}
           {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
@@ -2346,6 +2394,7 @@ export default function HailApp() {
                       setSection("reports");
                       void generateReport("address");
                     }}
+                    canvass={canvassAt(placeLabel, placePoint.lat, placePoint.lon, addressHistory.maxHailIn)}
                   />
                 ) : place ? (
                   <PropertyCard
@@ -2361,6 +2410,7 @@ export default function HailApp() {
                       setSection("reports");
                       void generateReport("address");
                     }}
+                    canvass={canvassAt(placeLabel, placePoint.lat, placePoint.lon, place.maxHailIn)}
                   />
                 ) : (
                   <article className="px-4 pb-4">
@@ -2374,6 +2424,7 @@ export default function HailApp() {
                     >
                       Alert me here
                     </button>
+                    {canvassAt(placeLabel, placePoint.lat, placePoint.lon, null)}
                   </article>
                 )}
               </BottomSheet>
@@ -2494,6 +2545,23 @@ export default function HailApp() {
               </MapDetailSheet>
             </div>
           ) : null}
+          {canvassBoard && user ? (
+            <CanvassBoard
+              stops={canvass.stops}
+              counts={canvass.counts}
+              selectedId={canvassId}
+              onClose={() => setCanvassBoard(false)}
+              onSelect={(stop) => {
+                setCanvassId(stop.id);
+                setFocus({ lat: stop.lat, lon: stop.lon, zoom: 16, nonce: Date.now() });
+              }}
+              form={
+                canvassSelection
+                  ? canvassAt(canvassSelection.address, canvassSelection.lat, canvassSelection.lon, canvassSelection.hailIn, false)
+                  : null
+              }
+            />
+          ) : null}
           {section === "field" ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
               <FieldSheet
@@ -2538,6 +2606,16 @@ export default function HailApp() {
                 }}
                 onUpload={uploadFieldPhoto}
                 onClose={() => setSection("map")}
+                canvass={
+                  fieldLat != null && fieldLon != null
+                    ? canvassAt(
+                        streetStatus === "ok" && street ? street : `${fieldLat.toFixed(5)}, ${fieldLon.toFixed(5)}`,
+                        fieldLat,
+                        fieldLon,
+                        fieldPlace?.maxHailIn ?? null,
+                      )
+                    : null
+                }
               />
             </div>
           ) : null}

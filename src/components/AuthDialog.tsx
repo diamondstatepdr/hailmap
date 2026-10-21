@@ -49,7 +49,7 @@ export default function AuthDialog({ configured, onClose, onSignedIn }: Props) {
           </div>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          Field notes, photos, and the watch list stay on your name. The public map does not require a sign-in. The name is the account, so use a distinct name for each person.
+          Field notes and photos stay on your name. Canvass marks are shared with everyone who signs in with this team passcode. Use a distinct name for each person.
         </p>
         {configured ? null : (
           <p className="mt-3 rounded-2xl bg-app px-3 py-2 text-sm text-muted">

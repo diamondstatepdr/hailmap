@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { EllipsisVertical, Share } from "lucide-react";
 import { INSTALL_DISMISS_KEY, shouldOfferInstall } from "@/lib/pwa-policy";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -57,32 +58,61 @@ export default function InstallPrompt({ hidden = false }: { hidden?: boolean }) 
   return (
     <aside className="install-offer" data-install-prompt role="dialog" aria-labelledby="install-title">
       <div className="install-offer-body">
-        <p className="install-kicker">Home screen</p>
+        <img className="install-app-icon" src="/icons/icon-192.png" alt="" width={72} height={72} />
         <h2 id="install-title">Add Swathline to your home screen</h2>
-        <p>Hail alerts on an iPhone start after you open Swathline from its icon. Android can install it the same way.</p>
-        <h3>iPhone, in Safari</h3>
-        <ol>
-          <li>Tap Share at the bottom of Safari.</li>
-          <li>Tap Add to Home Screen.</li>
-          <li>Tap Add, then open the Swathline icon.</li>
-        </ol>
-        <h3>Android, in Chrome</h3>
-        <ol>
-          <li>Tap the three dots in Chrome.</li>
-          <li>Tap Install app, or Add to Home screen.</li>
-          <li>Tap Install, then open the Swathline icon.</li>
-        </ol>
+        {installEvent ? (
+          <p>Install it and hail alerts open from the icon.</p>
+        ) : (
+          <>
+            <p>Hail alerts on an iPhone start after you open Swathline from its icon.</p>
+            <h3>iPhone, in Safari</h3>
+            <ol className="install-steps">
+              <Step n={1}>
+                Tap the <Glyph><Share /></Glyph> Share button at the bottom of Safari.
+              </Step>
+              <Step n={2}>Tap Add to Home Screen.</Step>
+              <Step n={3}>Tap Add, then open the Swathline icon.</Step>
+            </ol>
+            <h3>Android, in Chrome</h3>
+            <ol className="install-steps">
+              <Step n={1}>
+                Tap the menu <Glyph><EllipsisVertical /></Glyph> in Chrome.
+              </Step>
+              <Step n={2}>Tap Install app, or Add to Home screen.</Step>
+              <Step n={3}>Tap Install, then open the Swathline icon.</Step>
+            </ol>
+          </>
+        )}
       </div>
       <div className="install-offer-actions">
         {installEvent ? (
-          <button type="button" className="btn btn-primary press" onClick={() => void install()}>
-            Install
+          <button type="button" className="btn btn-primary press install-go" onClick={() => void install()}>
+            Install Swathline
           </button>
-        ) : null}
+        ) : (
+          <button type="button" className="btn btn-primary press install-go" onClick={dismiss}>
+            Got it
+          </button>
+        )}
         <button type="button" className="btn btn-secondary press" onClick={dismiss}>
           Not now
         </button>
       </div>
     </aside>
   );
+}
+
+function Step({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li>
+      <span className="install-num" aria-hidden>
+        {n}
+      </span>
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function Glyph({ children }: { children: ReactNode }) {
+  return <span className="install-glyph">{children}</span>;
 }

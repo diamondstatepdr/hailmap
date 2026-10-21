@@ -67,6 +67,21 @@ describe("offline shell", () => {
   });
 });
 
+describe("install card", () => {
+  it("uses the app icon, numbered steps, and a native install button when Chrome offers one", () => {
+    const source = readFileSync("src/components/InstallPrompt.tsx", "utf8");
+    expect(source).toContain('src="/icons/icon-192.png"');
+    expect(source).toContain("Install Swathline");
+    expect(source).toContain("Got it");
+    expect(source).toContain("installEvent ?");
+    expect(source).toContain("<Share");
+    expect(source).toContain("<EllipsisVertical");
+    const css = readFileSync("src/app/globals.css", "utf8");
+    expect(css).toContain("body:has([data-install-prompt]) .map-legend");
+    expect(css).toContain("body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right");
+  });
+});
+
 describe("manifest", () => {
   it("is installable with the Swathline icon, a theme color, and standalone display", () => {
     const manifest = JSON.parse(readFileSync("public/manifest.webmanifest", "utf8")) as {

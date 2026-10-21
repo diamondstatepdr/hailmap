@@ -222,7 +222,6 @@ export default function HailApp() {
   const [overlay, setOverlay] = useState<null | "range" | "calendar" | "days">(null);
   const calendarOpen = overlay === "calendar";
   const hailDaysOpen = overlay === "days";
-  const [statesOpen, setStatesOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
   const [calendarMarks, setCalendarMarks] = useState<CalendarMark[]>([]);
@@ -1794,8 +1793,10 @@ export default function HailApp() {
     const dock = stage.querySelector<HTMLElement>(".honey-dock");
     if (!dock) return;
     const apply = () => {
-      const height = Math.ceil(dock.getBoundingClientRect().height);
-      if (height > 0) setHoneyStackPx((current) => (current === height ? current : height));
+      const stageBox = stage.getBoundingClientRect();
+      const dockBox = dock.getBoundingClientRect();
+      const stack = Math.ceil(stageBox.bottom - dockBox.top);
+      if (stack > 0) setHoneyStackPx((current) => (current === stack ? current : stack));
     };
     apply();
     const observer = new ResizeObserver(apply);
@@ -1869,7 +1870,7 @@ export default function HailApp() {
             draftPin={draftPin}
             pickMode={picking}
             blockSelection={reportOpen}
-            clusterPoints={!replay.active && !serverClusters}
+            clusterPoints={!replay.active}
             onPickLocation={(lon, lat) => setDraftPin({ lat, lon })}
             onSelectReport={(id) => {
               if (id.startsWith("c:")) {
@@ -1979,67 +1980,55 @@ export default function HailApp() {
                   onFilters={() => setFiltersOpen(true)}
                   onHelp={() => setHelpOpen(true)}
                   onClose={() => setMenuOpen(false)}
+                  states={stateCounts.slice(0, 12).map(([code, count]) => ({ code, count, on: filter.state === code }))}
+                  onState={(code) => setStateFilter(filter.state === code ? "" : code)}
                 />
               ) : null}
               <div className="map-controls">
                 <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               </div>
               {honeyOpen ? null : (
-                <>
-                  <div className="plain-actions">
-                    {replay.active ? null : (
-                      <button
-                        type="button"
-                        className="range-control press"
-                        aria-expanded={overlay === "range"}
-                        aria-controls="storm-range"
-                        onClick={() => {
-                          setCustomOpen(false);
-                          setOverlay((current) => (current === "range" ? null : "range"));
-                        }}
-                      >
-                        {friendlyWhen(stormControlLabel)}
-                      </button>
-                    )}
-                    <button type="button" className="plain-action press" onClick={() => setSection("storms")}>
-                      Chase list
-                    </button>
+                <div className="plain-actions">
+                  {replay.active ? null : (
                     <button
                       type="button"
-                      data-honey-open
-                      data-tone="money"
-                      aria-pressed={honeyOpen}
-                      className="plain-action press"
+                      className="range-control press"
+                      aria-expanded={overlay === "range"}
+                      aria-controls="storm-range"
                       onClick={() => {
-                        setOverlay(null);
                         setCustomOpen(false);
-                        setMenuOpen(false);
-                        if (!honeyOpen && replay.active) replay.stop();
-                        setHoneyOpen(true);
+                        setOverlay((current) => (current === "range" ? null : "range"));
                       }}
                     >
-                      Money spots
+                      {friendlyWhen(stormControlLabel)}
                     </button>
-                  </div>
-                  <button type="button" className="help-open press" data-help-open onClick={() => setHelpOpen(true)}>
-                    What do I do here?
+                  )}
+                  {section === "map" && !replay.active ? (
+                    <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
+                  ) : null}
+                  <button
+                    type="button"
+                    data-honey-open
+                    data-tone="money"
+                    aria-pressed={honeyOpen}
+                    className="plain-action press"
+                    onClick={() => {
+                      setOverlay(null);
+                      setCustomOpen(false);
+                      setMenuOpen(false);
+                      if (!honeyOpen && replay.active) replay.stop();
+                      setHoneyOpen(true);
+                    }}
+                  >
+                    Money spots
                   </button>
-                </>
+                  <button type="button" className="help-chip press" data-help-open aria-label="What do I do here?" onClick={() => setHelpOpen(true)}>
+                    ?
+                  </button>
+                </div>
               )}
-              {honeyOpen ? (
-                <button
-                  type="button"
-                  data-honey-open
-                  data-tone="money"
-                  aria-pressed="true"
-                  className="plain-action press"
-                  onClick={() => setHoneyOpen(false)}
-                >
-                  Close money spots
-                </button>
-              ) : null}
             </div>
-            <div className="map-chrome-rest">
+            <div className={`map-chrome-rest ${!honeyOpen && (overlay || (historyMode.kind === "day" && !replay.active)) ? "" : "is-empty"}`}>
             {honeyOpen ? null : (
             <>
             {overlay === "range" && !replay.active ? (
@@ -2208,113 +2197,72 @@ export default function HailApp() {
                 )}
               </div>
             ) : null}
-            {showMesh ? (
-              <div className="map-chip pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
-                <span className="shrink-0 font-semibold">Hail size</span>
-                {replay.active ? null : (
-                  <span className="shrink-0 font-semibold" data-radar-label>
-                    {radarCaption}
-                  </span>
-                )}
-                {MESH_LEGEND.map((band) => (
-                  <span key={band.label} className="inline-flex shrink-0 items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
-                    {band.label}
-                  </span>
-                ))}
-                {meshDate && !replay.active ? (
-                  <button type="button" className="tap shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
-                    Back to time range
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             </>
             )}
             </div>
           </div>
-          {section === "map" ? (
-            <div data-tone="map" className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
-              <div className="state-strip">
-                <div className="map-quick-row">
-                  {!honeyOpen && !replay.active && stateCounts.length ? (
-                    <button
-                      type="button"
-                      className="state-toggle press md:hidden"
-                      aria-expanded={statesOpen}
-                      onClick={() => setStatesOpen((open) => !open)}
-                    >
-                      {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
-                    </button>
-                  ) : null}
-                  <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
-                </div>
-                {!honeyOpen && !replay.active && stateCounts.length ? (
-                <div className={`state-chip-row ${statesOpen ? "is-open" : ""}`} role="toolbar" aria-label="Jump to a state">
-                  {stateCounts.slice(0, 12).map(([code, count]) => {
-                    const on = filter.state === code;
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => setStateFilter(on ? "" : code)}
-                        className={`tap press shrink-0 rounded-full px-3 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
-                      >
-                        {code} {count}
-                      </button>
-                    );
-                  })}
-                </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
           {error ? (
             <p className="map-banner glass absolute inset-x-3 z-20 rounded-xl px-3 py-2 text-sm text-muted">
               {error}
             </p>
           ) : null}
-          {(showOutlook || showPoints) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
-              <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
-                {showPoints ? (
-                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold">Hail</span>
+              <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
+                <summary>
+                  <span className="map-key-dots" aria-hidden="true">
                     {MESH_LEGEND.map((band) => (
-                      <span key={band.label} className="inline-flex items-center gap-1">
-                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: band.color }} />
-                        {band.label}
-                      </span>
+                      <i key={band.label} style={{ background: band.color }} />
                     ))}
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#1d4ed8" }} />
+                  </span>
+                  Hail size
+                  <span className="sr-only" data-radar-label>
+                    {radarCaption}
+                  </span>
+                </summary>
+                <div className="map-key-body">
+                  {MESH_LEGEND.map((band) => (
+                    <span key={band.label} className="map-key-item">
+                      <i style={{ background: band.color }} />
+                      {band.label}
+                    </span>
+                  ))}
+                  {showPoints && hazards.includes("wind") ? (
+                    <span className="map-key-item">
+                      <i className="is-round" style={{ background: "#1d4ed8" }} />
                       Wind
                     </span>
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#e11d48" }} />
+                  ) : null}
+                  {showPoints && hazards.includes("tornado") ? (
+                    <span className="map-key-item">
+                      <i className="is-round" style={{ background: "#e11d48" }} />
                       Tornado
                     </span>
-                  </span>
-                ) : null}
-                {showOutlook && historyMode.kind === "window" ? (
-                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold">Today's risk</span>
-                    {OUTLOOK_LEVELS.map((level) => (
-                      <span key={level.category} className="inline-flex items-center gap-1">
-                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: level.fill }} />
-                        {level.label}
-                      </span>
-                    ))}
-                    {hasSignificant ? (
-                      <span className="inline-flex items-center gap-1">
-                        <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed" style={{ borderColor: SIGNIFICANT_COLOR }} />
-                        Significant
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </div>
+                  ) : null}
+                  {showOutlook && historyMode.kind === "window" ? (
+                    <>
+                      <span className="map-key-label">Today&apos;s risk</span>
+                      {OUTLOOK_LEVELS.map((level) => (
+                        <span key={level.category} className="map-key-item">
+                          <i style={{ background: level.fill }} />
+                          {level.label}
+                        </span>
+                      ))}
+                      {hasSignificant ? (
+                        <span className="map-key-item">
+                          <i className="is-dash" style={{ borderColor: SIGNIFICANT_COLOR }} />
+                          Significant
+                        </span>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {meshDate ? (
+                    <button type="button" className="map-key-back" onClick={() => showLiveWindow(filter.hours)}>
+                      Back to time range
+                    </button>
+                  ) : null}
+                </div>
+              </details>
             </div>
           ) : null}
           {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (

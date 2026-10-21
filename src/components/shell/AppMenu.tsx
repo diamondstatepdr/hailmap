@@ -2,6 +2,12 @@
 
 import { Moon, Palette, SlidersHorizontal, SunMedium } from "lucide-react";
 
+interface StateChip {
+  code: string;
+  count: number;
+  on: boolean;
+}
+
 interface Props {
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -9,9 +15,11 @@ interface Props {
   onFilters: () => void;
   onHelp: () => void;
   onClose: () => void;
+  states?: StateChip[];
+  onState?: (code: string) => void;
 }
 
-export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters, onHelp, onClose }: Props) {
+export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters, onHelp, onClose, states = [], onState }: Props) {
   return (
     <div id="app-menu" className="app-menu" data-app-menu role="menu">
       <button type="button" role="menuitem" onClick={() => { onAppearance(); onClose(); }}>
@@ -30,6 +38,27 @@ export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters,
         ?
         What do I do here?
       </button>
+      {states.length && onState ? (
+        <div className="menu-states">
+          <p>States</p>
+          <div role="group" aria-label="Jump to a state">
+            {states.map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={item.on}
+                onClick={() => {
+                  onState(item.code);
+                  onClose();
+                }}
+              >
+                {item.code} {item.count}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

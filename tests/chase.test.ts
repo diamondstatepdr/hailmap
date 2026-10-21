@@ -469,12 +469,12 @@ function samplePayload(quiet: boolean): ChasePayload {
 describe("chase map button", () => {
   it("labels the control and shows the new dot until the week is viewed", () => {
     const fresh = renderToStaticMarkup(createElement(ChaseMapButton, { unseen: true, expanded: false, onClick: () => undefined }));
-    expect(fresh).toContain("Chase List");
+    expect(fresh).toContain("Chase list");
     expect(fresh).toContain('data-chase-open');
     expect(fresh).toContain('data-chase-new');
     expect(fresh).toContain("New chase list");
     const seen = renderToStaticMarkup(createElement(ChaseMapButton, { unseen: false, expanded: true, onClick: () => undefined }));
-    expect(seen).toContain("Chase List");
+    expect(seen).toContain("Chase list");
     expect(seen).not.toContain('data-chase-new');
     expect(seen).toContain('aria-expanded="true"');
   });

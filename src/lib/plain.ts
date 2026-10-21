@@ -44,8 +44,33 @@ export function welcomeBlocksChase(welcomeOpen: boolean, sessionDone: string | n
   return welcomeOpen || sessionDone === "1";
 }
 
-/** The default week reads as a sentence, not a filter code. */
+/** The default week reads as the hail chip, not a filter code. */
 export function friendlyWhen(label: string): string {
-  if (label === "All storms · 7 days") return "This week";
-  return label.replace(/^All storms · /, "");
+  if (label === "All storms · 7 days") return "Hail · 7 days";
+  return label.replace(/^All storms · /, "Hail · ");
+}
+
+/** One readable money-spot line. 2.23" becomes 2.2"; quarter inches stay. */
+export function formatHoneyDetail(input: {
+  radarIn?: number | null;
+  spotterIn?: number | null;
+  hailIn?: number | null;
+  count?: number | null;
+  noun: "cars" | "homes";
+}): string {
+  const inches = (value: number) => {
+    const tenths = Math.round(value * 10) / 10;
+    if (Math.abs(value - tenths) < 0.05) {
+      return Number.isInteger(tenths) ? `${tenths.toFixed(0)}"` : `${tenths.toFixed(1)}"`;
+    }
+    return `${(Math.round(value * 100) / 100).toFixed(2)}"`;
+  };
+  const bits: string[] = [];
+  if (input.radarIn != null && input.radarIn > 0) bits.push(`${inches(input.radarIn)} radar`);
+  if (input.spotterIn != null && input.spotterIn > 0) bits.push(`${inches(input.spotterIn)} spotter`);
+  if (!bits.length && input.hailIn != null && input.hailIn > 0) bits.push(`${inches(input.hailIn)} hail`);
+  const hail = bits.length ? `Hail: ${bits.join(", ")}` : "Hail size not in yet";
+  if (input.count == null) return hail;
+  const word = input.count === 1 ? (input.noun === "cars" ? "car" : "home") : input.noun;
+  return `${hail} · ${input.count.toLocaleString("en-US")} ${word}`;
 }

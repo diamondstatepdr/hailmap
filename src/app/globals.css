@@ -207,7 +207,7 @@ button {
 @media (max-width: 767px) {
   div:has(> .honey-dock) .maplibregl-ctrl-bottom-right {
     z-index: 34;
-    bottom: calc(var(--honey-stack, min(48dvh, 28rem)) + 1.15rem);
+    bottom: calc(var(--honey-stack, calc(min(48dvh, 28rem) + 0.5rem)) + 1.35rem);
   }
 }
 
@@ -242,8 +242,8 @@ button {
   display: block !important;
   position: absolute;
   right: 0;
-  /* Percentage offsets collapse on this control, so clear the button and the legend row directly. */
-  bottom: 7rem;
+  /* Sit the credit line just above the info button, clear of the money-spot sheet. */
+  bottom: 3.35rem;
   width: max-content;
   max-width: min(18.5rem, calc(100vw - 1.5rem));
   min-height: 0 !important;
@@ -1928,6 +1928,10 @@ html.dark .replay-range::-moz-range-thumb {
   padding-left: 0.75rem;
 }
 
+.map-chrome-rest.is-empty {
+  display: none;
+}
+
 .map-chip {
   border: 1px solid var(--chrome-line);
   background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
@@ -2588,4 +2592,267 @@ html.dark .replay-range::-moz-range-thumb {
     transform: none;
     opacity: 1;
   }
+}
+
+/* One chip row, one legend, inline help, and a dimmer welcome. */
+.plain-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-topbar .plain-actions .range-control,
+.map-topbar .plain-actions .plain-action,
+.map-topbar .plain-actions .chase-open {
+  height: 44px;
+  min-height: 44px;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.map-topbar .plain-actions .chase-open {
+  gap: 0.28rem;
+  padding-inline: 0.45rem;
+}
+
+.help-chip {
+  display: inline-flex;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chrome-line);
+  border-radius: 999px;
+  background: var(--chrome-fill);
+  color: var(--chrome-ink);
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.map-key {
+  border-radius: 999px;
+  color: var(--chrome-ink);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
+}
+
+.map-key[open] {
+  border-radius: 1rem;
+}
+
+.map-key summary {
+  display: flex;
+  min-height: 2.15rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.7rem 0.2rem 0.55rem;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.map-key summary::-webkit-details-marker {
+  display: none;
+}
+
+.map-key summary::after {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  margin-left: 0.15rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.map-key[open] summary::after {
+  transform: rotate(225deg) translateY(-1px);
+}
+
+.map-key-dots,
+.map-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.map-key-dots {
+  gap: 0.18rem;
+}
+
+.map-key-dots i,
+.map-key-item i {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border-radius: 0.16rem;
+}
+
+.map-key-item i.is-round {
+  border-radius: 999px;
+}
+
+.map-key-item i.is-dash {
+  background: transparent;
+  border: 1.5px dashed;
+}
+
+.map-key-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  max-width: min(18rem, calc(100vw - 5.5rem));
+  padding: 0 0.7rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.map-key-label,
+.map-key-back {
+  font-weight: 720;
+}
+
+.map-key-back {
+  color: var(--accent);
+}
+
+.app-menu .menu-states {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.app-menu .menu-states p {
+  margin: 0.15rem 0 0;
+  color: color-mix(in srgb, var(--chrome-ink) 72%, transparent);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-menu .menu-states div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.app-menu .menu-states button {
+  width: auto;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 0 0.65rem;
+}
+
+.app-menu .menu-states button[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.honey-kicker .explain {
+  display: inline-flex;
+  align-items: center;
+}
+
+.honey-kicker .explain-btn,
+.explain-btn {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.1rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.honey-dock .honey-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: unset;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.welcome {
+  background: rgba(2, 6, 14, 0.84);
+}
+
+.welcome-frame {
+  fill: color-mix(in srgb, var(--panel-2) 82%, var(--accent));
+  stroke: color-mix(in srgb, var(--accent) 62%, white);
+  stroke-width: 1.5;
+}
+
+.welcome-ground {
+  fill: color-mix(in srgb, var(--bg) 78%, #07111c);
+}
+
+.welcome-grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 16%, transparent);
+  stroke-width: 1;
+}
+
+.welcome-band {
+  opacity: 0.94;
+}
+
+.welcome-pin-shape {
+  fill: var(--accent);
+}
+
+.welcome-pin-core {
+  fill: var(--accent-ink, #fff);
+}
+
+.welcome-rank rect,
+.welcome-work-card rect {
+  fill: color-mix(in srgb, var(--panel) 88%, var(--accent));
+  stroke: color-mix(in srgb, var(--accent) 50%, transparent);
+  stroke-width: 1;
+}
+
+.welcome-rank-dot {
+  fill: var(--accent);
+}
+
+.welcome-rank-num {
+  fill: var(--accent-ink, #fff);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.welcome-rank-label,
+.welcome-rank-sub {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.welcome-rank-sub {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 640;
+}
+
+.welcome-route {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--accent));
 }

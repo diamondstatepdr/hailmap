@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 
-/** A 44px (?) that opens one sentence. Tap again to close. */
+/** A small inline (?) that opens one sentence. Tap again to close. */
 export default function Explain({ label, children }: { label: string; children: string }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -16,7 +16,7 @@ export default function Explain({ label, children }: { label: string; children: 
         aria-label={label}
         onClick={() => setOpen((value) => !value)}
       >
-        ?
+        (?)
       </button>
       {open ? (
         <span id={id} className="explain-pop" role="note">

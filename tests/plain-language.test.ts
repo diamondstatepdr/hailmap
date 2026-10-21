@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import HelpGuide from "@/components/help/HelpGuide";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
-import { shouldShowWelcome, WELCOME_SCREENS, welcomeBlocksChase, friendlyWhen } from "@/lib/plain";
+import { shouldShowWelcome, WELCOME_SCREENS, welcomeBlocksChase, friendlyWhen, formatHoneyDetail } from "@/lib/plain";
 
 describe("first-run welcome", () => {
   it("shows three plain screens once, and skips share links", () => {
@@ -26,6 +26,8 @@ describe("first-run welcome", () => {
     expect(html).toContain("See where hail hit");
     expect(html).toContain("Skip");
     expect(html).toContain('data-welcome-next');
+    expect(html).toContain("welcome-band");
+    expect(html).toContain("welcome-pin-shape");
   });
 
   it("opens a short guide from the help link copy", () => {
@@ -34,6 +36,9 @@ describe("first-run welcome", () => {
     expect(html).toContain("Hail path");
     expect(html).toContain("Money Hole score");
     expect(html).toContain("Radar size");
-    expect(friendlyWhen("All storms · 7 days")).toBe("This week");
+    expect(friendlyWhen("All storms · 7 days")).toBe("Hail · 7 days");
+    expect(formatHoneyDetail({ radarIn: 2.23, spotterIn: 1.25, count: 1608, noun: "cars" })).toBe(
+      'Hail: 2.2" radar, 1.25" spotter · 1,608 cars',
+    );
   });
 });

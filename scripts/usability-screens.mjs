@@ -64,6 +64,15 @@ async function main() {
     }
     await page.waitForTimeout(700);
     await hidePortal(page);
+    const chrome = await page.evaluate(() => ({
+      chase: document.querySelectorAll("[data-chase-open]").length,
+      helpBars: document.querySelectorAll(".help-open").length,
+      closeBar: document.body.innerText.includes("Close money spots"),
+      states: document.body.innerText.includes("States ·"),
+    }));
+    if (chrome.chase !== 1 || chrome.helpBars || chrome.closeBar || chrome.states) {
+      throw new Error(`Map chrome is still crowded (${name}): ${JSON.stringify(chrome)}`);
+    }
     await page.screenshot({ path: `${out}/map-${name}.png` });
     await page.locator(".tab-bar").getByRole("button", { name: "Storms" }).tap();
     await page.locator("[data-chase-section]").waitFor({ timeout: 15000 });
@@ -82,6 +91,18 @@ async function main() {
       await page.locator("[data-honey-panel]").waitFor({ timeout: 10000 });
       await page.waitForFunction(() => document.body.innerText.includes("Deming") || document.body.innerText.includes("Post Apartments"));
       await page.waitForTimeout(800);
+      const overlap = await page.evaluate(() => {
+        const panel = document.querySelector("[data-honey-panel]");
+        const credit = document.querySelector(".maplibregl-ctrl-bottom-right");
+        if (!panel || !credit) return { missing: true };
+        const a = panel.getBoundingClientRect();
+        const b = credit.getBoundingClientRect();
+        const hit = b.bottom > a.top + 1 && b.top < a.bottom && b.right > a.left && b.left < a.right;
+        return { hit, panelTop: Math.round(a.top), creditBottom: Math.round(b.bottom), creditTop: Math.round(b.top) };
+      });
+      if (overlap.hit || overlap.missing) {
+        throw new Error(`Map credit overlaps the money spots panel (${name}): ${JSON.stringify(overlap)}`);
+      }
     }
     await hidePortal(page);
     await page.screenshot({ path: `${out}/money-${name}.png` });

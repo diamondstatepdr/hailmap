@@ -3,8 +3,8 @@
 import { Gem, X } from "lucide-react";
 import Explain from "@/components/ui/Explain";
 import UpdatedLine from "@/components/ui/UpdatedLine";
-import { RADAR_TIP, SCORE_TIP } from "@/lib/plain";
-import { formatHailSources, formatMiles } from "@/lib/units";
+import { formatHoneyDetail, RADAR_TIP, SCORE_TIP } from "@/lib/plain";
+import { formatMiles } from "@/lib/units";
 
 export type HoneyMode = "pdr" | "roof";
 
@@ -46,17 +46,7 @@ interface Props {
   distanceFrom: "you" | "search" | null;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  dealership: "Dealership",
-  parking: "Parking",
-  mall: "Mall",
-  fleet: "Fleet yard",
-  apartments: "Apartments",
-  homes: "Neighborhood",
-};
-
 export default function HoneyPanel(props: Props) {
-  const countLabel = props.mode === "pdr" ? "vehicles" : "homes";
   return (
     <aside
       className="honey-dock glass"
@@ -141,11 +131,15 @@ export default function HoneyPanel(props: Props) {
                   <span className="min-w-0">
                     <span className="honey-name">{spot.name}</span>
                     <span className="honey-meta">
-                      {KIND_LABEL[spot.kind] ?? "Stop"} · {hailLine(spot)}
-                      {count != null ? ` · ${count.toLocaleString("en-US")} ${countLabel}` : ""}
+                      {formatHoneyDetail({
+                        radarIn: spot.radarIn,
+                        spotterIn: spot.spotterIn,
+                        hailIn: spot.hailIn,
+                        count,
+                        noun: props.mode === "pdr" ? "cars" : "homes",
+                      })}
                       {spot.distanceKm != null && props.distanceFrom ? ` · ${formatMiles(spot.distanceKm)} from ${props.distanceFrom}` : ""}
                     </span>
-                    <span className="honey-source">{spot.sourceLabel}</span>
                   </span>
                   <span className="honey-score" data-level={spot.level} title={`${spot.score} of 100 · ${spot.level}`}>
                     {spot.score}
@@ -161,9 +155,3 @@ export default function HoneyPanel(props: Props) {
   );
 }
 
-function hailLine(spot: HoneySpotView): string {
-  if (spot.radarIn != null || spot.spotterIn != null) {
-    return formatHailSources({ radarIn: spot.radarIn, spotterIn: spot.spotterIn });
-  }
-  return `${spot.hailIn.toFixed(2)} in · ${spot.sourceLabel}`;
-}

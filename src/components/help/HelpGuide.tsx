@@ -4,7 +4,7 @@ import { PATH_TIP, RADAR_TIP, SCORE_TIP } from "@/lib/plain";
 
 const STEPS = [
   "Search an address, or just move the map.",
-  "Use This week to look at today, this week, or one storm day.",
+  "Use Hail · 7 days to look at today, this week, or one storm day.",
   "Open Chase list for the biggest storms this week.",
   "Open Money spots for the lots and neighborhoods under the hail.",
   "Tap a colored hail path to see how big the stones were.",

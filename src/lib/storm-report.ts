@@ -7,6 +7,7 @@ import type { PlaceHistory, PlaceWarning } from "@/lib/place";
 import type { FieldPin } from "@/lib/accounts";
 import { pinStatusLabel } from "@/lib/field";
 import type { HailReport } from "@/lib/types";
+import { sourceCoverage, type SourceSpan } from "@/lib/source-coverage";
 
 export interface StormReportDocument {
   id: string;
@@ -71,6 +72,7 @@ export interface StormReportDocument {
     pinStatus: string;
   }>;
   sources: string[];
+  coverage: SourceSpan[];
   svg: string;
   disclaimer: string;
 }
@@ -175,6 +177,8 @@ export function buildStormReport(input: {
   snapshotSvg?: string | null;
   now?: string;
   rangeLabel?: string | null;
+  rangeStart?: string | null;
+  rangeEnd?: string | null;
   scoreDate?: string | null;
   lossCandidates?: StormReportDocument["lossCandidates"];
 }): StormReportDocument {
@@ -264,6 +268,10 @@ export function buildStormReport(input: {
     })),
     photos,
     sources: [...sources],
+    coverage: sourceCoverage({
+      start: input.rangeStart ?? "the selected window",
+      end: input.rangeEnd ?? "today",
+    }),
     svg: sketchMap(
       listed.map((report) => ({ lon: report.lon, lat: report.lat, hazard: hazardOf(report.hazard) })),
       { lon: input.lon, lat: input.lat },

@@ -1,5 +1,5 @@
 /**
- * Date coverage checked against the public archives on 2026-10-19.
+ * Date coverage checked against the public archives on 2026-10-21.
  * The probes and disk notes live in docs/history-coverage.md.
  * Do not widen these without fetching the archive again.
  */
@@ -20,10 +20,24 @@ export const SPC_DAILY_START = "2004-03-01";
 export const IEM_LSR_START = "2004-01-01";
 
 /**
+ * First Iowa State directory that lists instantaneous MRMS MESH.
+ * 2019-08-19 had MRMS products and no MESH folder. 2019-08-20 listed MESH_00.50 files
+ * (the first day starts mid-afternoon UTC, so that day is partial).
+ * Nationwide MESH was not in the 2011, 2014, or 2015–2018 trees that were probed.
+ */
+export const MESH_INSTANT_START = "2019-08-20";
+
+/**
  * First Iowa Environmental Mesonet directory for MRMS MESH_Max_1440min.
- * 2019-09-26 was 404. 2019-09-28 was 200.
+ * 2019-09-27 had instantaneous MESH and no 24-hour folder. 2019-09-28 had MESH_Max_1440min.
  */
 export const MESH_ARCHIVE_START = "2019-09-28";
+
+/**
+ * Earliest key in the public AWS bucket noaa-mrms-pds for CONUS MESH_Max_1440min_00.50.
+ * This copy starts later than the Iowa State daily product.
+ */
+export const MESH_AWS_START = "2020-10-14";
 
 /**
  * IEM `vtec_events_bypoint.py` returned a severe thunderstorm warning for Dallas on 1986-02-05.
@@ -40,4 +54,4 @@ export const SBW_POLYGON_START = "2002-01-01";
 /** SPC published the 1950/1955–2025 severe database on 24 April 2026. 2026 is not in that release. */
 export const SPC_SVRGIS_PROBED_YEAR = 2025;
 
-export const HISTORY_COVERAGE_CHECKED = "2026-10-19";
+export const HISTORY_COVERAGE_CHECKED = "2026-10-21";

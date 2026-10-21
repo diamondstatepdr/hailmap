@@ -1,4 +1,6 @@
-import { isoDateUTC } from "@/lib/mesh-plan";
+import { MESH_INSTANT_START } from "@/lib/history-coverage";
+import { estimateMeshIndex, meshBudgetBytes, yesterdayIso } from "@/lib/mesh-budget";
+import { addIsoDays, isoDateUTC } from "@/lib/mesh-plan";
 import { ensureHistoryIndex, startDailyTail } from "@/lib/spc-archive";
 
 let started = false;
@@ -12,39 +14,48 @@ export function startHistoryBackfill() {
     .catch((error) => {
       console.error("[hailmap] history index", error instanceof Error ? error.message : error);
     });
-  if (process.env.HAILMAP_MESH_BACKFILL === "1") {
-    meshTimer = setInterval(() => {
-      void backfillOneMeshDay().catch((error) => {
-        console.error("[hailmap] mesh backfill", error instanceof Error ? error.message : error);
-      });
-    }, 20_000);
-    meshTimer.unref?.();
-  }
+  if (process.env.HAILMAP_MESH_BACKFILL === "0") return;
+  const estimate = estimateMeshIndex({
+    from: MESH_INSTANT_START,
+    to: yesterdayIso(),
+    budgetBytes: meshBudgetBytes(),
+  });
+  console.log(
+    `[hailmap] mesh index estimate ${estimate.days} days, about ${estimate.bytes} bytes at ${estimate.cellsPerDay} cells/day. Budget ${estimate.budgetBytes} bytes. Raw GRIB is not kept.`,
+  );
+  meshTimer = setInterval(() => {
+    void backfillOneMeshDay().catch((error) => {
+      console.error("[hailmap] mesh backfill", error instanceof Error ? error.message : error);
+    });
+  }, 20_000);
+  meshTimer.unref?.();
 }
 
 async function backfillOneMeshDay() {
-  const { meshDayReady, historyMeta, setHistoryMeta } = await import("@/lib/history-db");
-  const { MESH_ARCHIVE_START } = await import("@/lib/history-coverage");
-  const { addIsoDays } = await import("@/lib/mesh-plan");
-  const cursor = historyMeta("meshBackfillCursor") ?? isoDateUTC(new Date());
-  let date = cursor;
-  if (date < MESH_ARCHIVE_START) {
-    setHistoryMeta("meshBackfillCursor", MESH_ARCHIVE_START);
+  const { meshCellTotal, meshDayReady, historyMeta, setHistoryMeta } = await import("@/lib/history-db");
+  const today = isoDateUTC(new Date());
+  let date = historyMeta("meshBackfillCursor") ?? addIsoDays(today, -1);
+  if (date >= today) date = addIsoDays(today, -1);
+  if (date < MESH_INSTANT_START) {
+    setHistoryMeta("meshBackfillCursor", MESH_INSTANT_START);
+    setHistoryMeta("meshBackfillState", "done");
+    if (meshTimer) clearInterval(meshTimer);
+    meshTimer = null;
     return;
   }
-  const today = isoDateUTC(new Date());
-  if (date >= today) date = addIsoDays(today, -2);
+  if (historyMeta("meshBackfillState") === "budget") return;
   if (meshDayReady(date)) {
     setHistoryMeta("meshBackfillCursor", addIsoDays(date, -1));
     return;
   }
-  const { planMesh } = await import("@/lib/mesh-plan");
-  const { loadPlanGrids } = await import("@/lib/mesh-cache");
-  const plan = planMesh({ date });
-  if ("error" in plan) {
-    setHistoryMeta("meshBackfillCursor", addIsoDays(date, -1));
+  const { indexMeshDay } = await import("@/lib/mesh-cache");
+  const indexed = await indexMeshDay(date, { existingCells: meshCellTotal() });
+  if (indexed.status === "budget") {
+    setHistoryMeta("meshBackfillState", "budget");
+    console.log(`[hailmap] mesh backfill stopped at the ${meshBudgetBytes()} byte budget on ${date}`);
+    if (meshTimer) clearInterval(meshTimer);
+    meshTimer = null;
     return;
   }
-  await loadPlanGrids(plan);
   setHistoryMeta("meshBackfillCursor", addIsoDays(date, -1));
 }

@@ -1,6 +1,6 @@
 # Storm history coverage
 
-Checked against the public archives on **2026-10-19**. Swathline does not use a paid hail provider. Every source below is a free NOAA or Iowa Environmental Mesonet file. No API key is required.
+Checked against the public archives on **2026-10-21**. Swathline does not use a paid hail provider. Every source below is a free NOAA or Iowa Environmental Mesonet file. No API key is required.
 
 The constants in `src/lib/history-coverage.ts` match this page. Widen a start date only after fetching the archive again.
 
@@ -12,10 +12,13 @@ The constants in `src/lib/history-coverage.ts` match this page. Widen a start da
 | Tornado reports | SPC `1950-YYYY_actual_tornadoes.csv` (one row per tornado, not state segments) | **1950-01-03** | Same index. Magnitude 0–5 is an F rating before 2007 and an EF rating from 2007. Unknown (`-9`) is stored with no rating. |
 | Recent daily reports | SPC `climo/reports/YYMMDD_rpts_{hail,wind,torn}.csv` | **2004-03-01**. 2004-02-01 was 404. Quiet days are a 49-byte header. | Fills the year the annual database does not include yet (2026-01-01 through yesterday, and any day after the published year). Past convective days are cached and not refetched after 18:00 UTC the next day. |
 | Live local storm reports | IEM `geojson/lsr.py` plus the same SPC daily files and active NWS alerts | IEM returned events on **2004-01-01**. Sampled weeks in 2003 returned none. One response is capped at **10,000** features (a May 2026 month hit that cap exactly). | The existing 7-day map only. Not the multi-year index. |
-| Radar hail (MESH) | Iowa State `mtarchive` `MESH_Max_1440min`, falling back to NCEP for the last ~40 hours | **2019-09-28**. 2019-09-26 was 404. Early files are named `MRMS_Max_1440min_00.50_*.grib2.gz` with irregular timestamps (about two files a day near 12:00 UTC through early 2021). By 2022-10-02 the prefix is `MESH_Max_1440min` and files are half-hourly. | On demand, one convective day at a time. The file valid at 12:00 UTC the next calendar day covers that US storm day. If the four clock times 404, Swathline lists the directory and picks the file closest to 12:00 UTC. |
+| Radar hail (MESH), 24-hour maximum | Iowa State `mtarchive` `MESH_Max_1440min`, falling back to NCEP for the last ~40 hours | **2019-09-28**. 2019-09-27 had instantaneous `MESH` and no `MESH_Max_1440min` folder. Early files are named `MRMS_Max_1440min_00.50_*.grib2.gz`. By 2022-10-02 the prefix is `MESH_Max_1440min`. | On demand, and one day at a time in the background index. The file valid at 12:00 UTC the next calendar day covers that US storm day. |
 | Warnings at a point | IEM `vtec_events_bypoint.py` | A severe thunderstorm warning for Dallas was returned for **1986-02-05**. Earlier than 1986 was not probed. | Address history, one request per point and span. Cached on disk when the end date is before today. |
 | Warning polygons | IEM `geojson/sbw.py` | Features on **2002-01-01** (tornado and severe thunderstorm). NWS storm-based warnings became operational on **2007-10-01**. Quiet days are an empty collection. | Address history uses the point archive. Storm Replay draws severe thunderstorm and tornado warning polygons (`SV.W`, `TO.W`) for the convective day and shows each polygon between `polygon_begin` and `polygon_end`. |
-| Replay radar | Iowa State `MESH_Max_1440min` every 30 minutes, plus instantaneous `MESH` about every 2 minutes | Same **2019-09-28** start as the daily MESH composite. Early days use irregular `MRMS_Max_1440min` names. | Storm Replay subtracts the 12:00 UTC 24-hour maximum from the scan at the playhead so the day’s swath builds. The brighter pulse is the instantaneous scan. Today falls back to the NCEP latest file when the archive is a few minutes behind. |
+| Radar hail, hourly sample | Iowa State `mtarchive` instantaneous `MESH` | **2019-08-20**. 2019-08-19 had MRMS products and no `MESH` folder. The first day starts around 16:46 UTC, so it is a partial day. Swathline keeps the largest of up to eight scans from 12:00 UTC through 12:00 UTC the next day. | Fills 2019-08-20 through 2019-09-27, where the 24-hour product does not exist yet. This is not a full 2-minute maximum. |
+| Earlier MRMS, not hail | Iowa State `mrms/ncep` and `mrms/reanalysis` | NCEP tree from **2014-11-01** (2014-10-31 was 404). 2011-05-24 and 2001-06-01 reanalysis folders contain `PrecipRate` only. 2015 through 2019-08-19 samples had QPE products and no MESH. | Not used for hail size. There is no free nationwide MESH grid for 2011. |
+| NOAA AWS MRMS | `s3://noaa-mrms-pds` `CONUS/MESH_Max_1440min_00.50` | Earliest listed key **2020-10-14**. | Same 24-hour product Iowa State already has from 2019-09-28. Not an earlier source. |
+| Replay radar | Iowa State `MESH_Max_1440min` every 30 minutes, plus instantaneous `MESH` about every 2 minutes | Same **2019-09-28** start as the daily MESH composite. | Storm Replay subtracts the 12:00 UTC 24-hour maximum from the scan at the playhead so the day’s swath builds. |
 
 SPC severe-database times are Central Standard Time all year (UTC−6), including summer. Hail magnitude is inches (values above 20 are hundredths of an inch). Wind magnitude is knots, stored as miles per hour.
 
@@ -31,9 +34,23 @@ Measured on 2026-10-19 after ingesting the 1955/1950–2025 SPC database and the
 | Viewed MESH days | **6.8 MB** for the days opened while checking May 9, 2024 and spring 2026 | JSON under `mesh/`, plus a coarse `mesh_cells` index. Cells below 0.5 in are dropped. Bins are 0.1°. |
 | Warning JSON | kilobytes per address span | Written only when the span already ended. A span that includes today is not cached. |
 
-The history directory measured **281 MB**. A Railway Hobby volume (commonly 5 GB, and usable well below 1 GB) has room for this plus photos and a working set of MESH days.
+The history directory measured **281 MB** before any multi-year radar index. A Railway Hobby volume (commonly 5 GB, and usable well below 1 GB) has room for the spotter index plus a bounded hail index.
 
-MESH is not backfilled across every day unless `HAILMAP_MESH_BACKFILL=1`. That walk downloads one convective day every 20 seconds, newest first. A full 2019–present raw-grid cache can grow toward a gigabyte, so leave it off on a small volume. The hail-days list shows a radar maximum only for days already indexed.
+## Radar index size, measured before a bulk write
+
+Two real Iowa State files were decoded in memory on 2026-10-21. Nothing from them was inserted into the database, and the gzip files were not kept.
+
+| Convective day | File | Gzip bytes | 0.1° bins at or above 0.5 in |
+| --- | --- | --- | --- |
+| 2024-05-09 | `MESH_Max_1440min_00.50_20240510-120000.grib2.gz`, valid 2024-05-10T12:00:00Z | 709,432 | **2,701** (largest hail in the file 3.93 in) |
+| 2024-02-01 | `MESH_Max_1440min_00.50_20240202-120000.grib2.gz`, valid 2024-02-02T12:00:00Z | 79,458 | **30** (largest hail 1.43 in) |
+
+Each stored bin is planned at 96 bytes. From 2019-08-20 through 2026-10-20 is **2,619 days**.
+
+- At the 9 May 2024 rate, every day would be about **648 MB**. That is over the **320 MB** cap, so the walk would stop after about 1,294 days at that rate.
+- At the 1 February 2024 rate, the same span would be about **7.2 MB**.
+
+`GET /api/history/coverage` returns `meshEstimate` from the high rate (2,701 cells a day) before any of those days are written. The background job uses the real cell count for each day, logs that estimate at startup, and stops when the coarse index would pass the cap. Set `HAILMAP_MESH_BACKFILL=0` to leave it off. Set `HAILMAP_MESH_BUDGET_BYTES` to change the cap. Raw GRIB is discarded after the bins are counted.
 
 Immutable past days stay cached. The annual SPC zip is re-checked by `Last-Modified` only when the index is rebuilt (the published year is revised; the 2024 annual file was touched again on 1 October 2026). The running app treats a completed index year as current until the process builds again and the meta year is missing.
 
@@ -60,4 +77,4 @@ Daily files for the gap after the annual database:
 HAILMAP_DATA_DIR=/data ./node_modules/.bin/vite-node -c scripts/vite-node.config.mjs scripts/backfill-daily.ts
 ```
 
-`HAILMAP_HISTORY_BACKFILL=0` skips the background daily tail. `HAILMAP_MESH_BACKFILL=1` enables the optional one-day MESH walk.
+`HAILMAP_HISTORY_BACKFILL=0` skips the background daily tail. The radar index runs unless `HAILMAP_MESH_BACKFILL=0`. It handles one convective day every 20 seconds, newest first, and stops at the byte budget above.

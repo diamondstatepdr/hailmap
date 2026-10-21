@@ -3008,3 +3008,38 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   flex: 1.35;
   font-weight: 750;
 }
+
+.source-years {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.source-years h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.source-years,
+.source-years p,
+.source-years li {
+  overflow-wrap: anywhere;
+}
+
+.source-years ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-years p {
+  font-size: 15px;
+  line-height: 1.4;
+}

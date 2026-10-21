@@ -14,14 +14,19 @@ import {
   type MeshGridShape,
 } from "@/lib/mesh-contour";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { MESH_ARCHIVE_START, MESH_INSTANT_START } from "@/lib/history-coverage";
+import { meshBudgetBytes, meshStoreDecision } from "@/lib/mesh-budget";
 import { meshDayReady, recordMeshGrid } from "@/lib/history-db";
 import { gapFor, hostOf, pace } from "@/lib/paced";
 import {
   LATEST_MESH_URL,
+  addIsoDays,
   dayFetchUrls,
   formatStormDate,
   isoDateUTC,
   meshArchivePage,
+  meshDirectory,
+  pickHourlyMeshNames,
   pickMeshArchiveName,
   type MeshRequestPlan,
 } from "@/lib/mesh-plan";
@@ -421,4 +426,98 @@ export async function radarSwathsNear(plan: MeshRequestPlan, lat: number, lon: n
     return bounds.east >= lon - pad && bounds.west <= lon + pad && bounds.north >= lat - pad && bounds.south <= lat + pad;
   });
   return collection;
+}
+
+export interface MeshIndexResult {
+  status: "ok" | "empty" | "miss" | "error" | "budget" | "outside";
+  cells: number;
+  product: string;
+}
+
+function pointsFromDecoded(decoded: ReturnType<typeof readGribMesh>): Array<{ lat: number; lon: number; inches: number }> {
+  const { step, south, west } = decoded.shape;
+  return decoded.cells.map((cell) => ({
+    lat: south + (cell.iy + 0.5) * step,
+    lon: west + (cell.ix + 0.5) * step,
+    inches: cell.inches,
+  }));
+}
+
+async function listGribNames(page: string): Promise<string[]> {
+  try {
+    const html = await pace(hostOf(page), gapFor(page), async () => {
+      const response = await fetch(page, {
+        headers: { "User-Agent": userAgent(), Accept: "text/html" },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) return "";
+      return response.text();
+    });
+    return [...html.matchAll(/href="([^"]+\.grib2\.gz)"/gi)].map((match) => decodeURIComponent(match[1].split("/").pop() ?? ""));
+  } catch (error) {
+    console.error("[hailmap] mesh list", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+async function storeDecodedDay(
+  date: string,
+  product: string,
+  points: Array<{ lat: number; lon: number; inches: number }>,
+  existingCells: number,
+): Promise<MeshIndexResult> {
+  const incoming = new Set(
+    points.filter((point) => point.inches >= 0.5).map((point) => `${Math.round(point.lat * 10)}:${Math.round(point.lon * 10)}`),
+  ).size;
+  if (meshStoreDecision(existingCells, incoming, meshBudgetBytes()) === "stop") {
+    return { status: "budget", cells: incoming, product };
+  }
+  const cells = recordMeshGrid(date, points);
+  return { status: cells > 0 ? "ok" : "empty", cells, product };
+}
+
+/**
+ * Index one convective day into the coarse hail table and drop the GRIB.
+ * Daily maximum when that product exists. Otherwise up to eight hourly MESH scans.
+ */
+export async function indexMeshDay(date: string, options?: { existingCells?: number }): Promise<MeshIndexResult> {
+  const existingCells = options?.existingCells ?? 0;
+  if (date < MESH_INSTANT_START) return { status: "outside", cells: 0, product: "none" };
+  try {
+    if (date >= MESH_ARCHIVE_START) {
+      const urls = [...dayFetchUrls(date), ...(await listedDayUrls(date))];
+      for (const url of urls) {
+        const bytes = await fetchGrib(url);
+        if (!bytes) continue;
+        const decoded = readGribMesh(gunzipIfNeeded(bytes));
+        return storeDecodedDay(date, "MESH_Max_1440min", pointsFromDecoded(decoded), existingCells);
+      }
+      return { status: "miss", cells: 0, product: "MESH_Max_1440min" };
+    }
+    const names = [
+      ...(await listGribNames(meshDirectory(date, "MESH"))),
+      ...(await listGribNames(meshDirectory(addIsoDays(date, 1), "MESH"))),
+    ];
+    const picked = pickHourlyMeshNames(date, names, 8);
+    if (!picked.length) return { status: "miss", cells: 0, product: "MESH" };
+    const merged = new Map<string, { lat: number; lon: number; inches: number }>();
+    let read = 0;
+    for (const name of picked) {
+      const stamp = name.match(/(\d{4})(\d{2})(\d{2})-/);
+      const folder = stamp ? `${stamp[1]}-${stamp[2]}-${stamp[3]}` : date;
+      const bytes = await fetchGrib(new URL(name, meshDirectory(folder, "MESH")).href);
+      if (!bytes) continue;
+      read += 1;
+      for (const point of pointsFromDecoded(readGribMesh(gunzipIfNeeded(bytes)))) {
+        const key = `${point.lat.toFixed(3)}:${point.lon.toFixed(3)}`;
+        const prev = merged.get(key);
+        if (!prev || point.inches > prev.inches) merged.set(key, point);
+      }
+    }
+    if (!read) return { status: "miss", cells: 0, product: "MESH" };
+    return storeDecodedDay(date, "MESH_hourly_sample", [...merged.values()], existingCells);
+  } catch (error) {
+    console.error("[hailmap] mesh index day", date, error instanceof Error ? error.message : error);
+    return { status: "error", cells: 0, product: "MESH" };
+  }
 }

@@ -8,6 +8,8 @@ import { getStormReport } from "@/lib/accounts";
 import { formatWhen } from "@/lib/filters";
 import { formatMiles } from "@/lib/units";
 import type { StormReportDocument } from "@/lib/storm-report";
+import SourceYears from "@/components/SourceYears";
+import { sourceCoverage } from "@/lib/source-coverage";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +125,13 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
             </>
           ) : null}
 
+          <SourceYears
+            spans={
+              report.coverage?.length
+                ? report.coverage
+                : sourceCoverage({ start: report.rangeLabel ?? "the selected window", end: "today" })
+            }
+          />
           <h2 className="mt-8 text-lg font-semibold tracking-tight">Radar hail by date</h2>
           <p className="mt-1 text-sm text-muted">
             Radar hail at this address. Sizes are estimates for the radar grid cell, not a ground survey.

@@ -90,6 +90,39 @@ export function pickMeshArchiveName(names: string[]): string | null {
   return files.slice().sort((a, b) => score(a) - score(b) || a.localeCompare(b))[0] ?? null;
 }
 
+/** UTC directory for one MRMS product. `utcDate` is the folder day, not always the convective day. */
+export function meshDirectory(utcDate: string, product: string): string {
+  const [year, month, day] = utcDate.split("-");
+  return `https://mtarchive.geol.iastate.edu/${year}/${month}/${day}/mrms/ncep/${product}/`;
+}
+
+/**
+ * Up to `limit` MESH scans spread from 12:00 UTC on the convective day through 12:00 UTC the next day.
+ * Files outside that window, and non-MESH names, are ignored.
+ */
+export function pickHourlyMeshNames(convectiveDate: string, names: string[], limit = 8): string[] {
+  const start = `${convectiveDate.replaceAll("-", "")}120000`;
+  const end = `${addIsoDays(convectiveDate, 1).replaceAll("-", "")}120000`;
+  const files: Array<{ name: string; stamp: string }> = [];
+  for (const name of names) {
+    const base = name.split("/").pop() ?? name;
+    if (!/MESH/i.test(base)) continue;
+    const match = base.match(/(\d{8})-(\d{6})\.grib2\.gz$/i);
+    if (!match) continue;
+    const stamp = `${match[1]}${match[2]}`;
+    if (stamp < start || stamp > end) continue;
+    files.push({ name: base, stamp });
+  }
+  files.sort((a, b) => a.stamp.localeCompare(b.stamp) || a.name.localeCompare(b.name));
+  if (files.length <= limit) return files.map((file) => file.name);
+  const chosen: Array<{ name: string; stamp: string }> = [];
+  for (let index = 0; index < limit; index += 1) {
+    const file = files[Math.round((index * (files.length - 1)) / (limit - 1))];
+    if (file && !chosen.some((item) => item.name === file.name)) chosen.push(file);
+  }
+  return chosen.map((file) => file.name);
+}
+
 export function meshArchivePage(convectiveDate: string): string {
   const end = addIsoDays(convectiveDate, 1);
   const [year, month, day] = end.split("-");

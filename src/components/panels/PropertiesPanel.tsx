@@ -8,6 +8,9 @@ import { TIME_WINDOWS } from "@/lib/filters";
 import { laterPhase } from "@/lib/seams";
 import type { PlaceHistory } from "@/lib/place";
 import { formatMiles, SEARCH_RADIUS_MILES, type SearchRadiusMi } from "@/lib/units";
+import SourceYears from "@/components/SourceYears";
+import { SPC_TORNADO_START } from "@/lib/history-coverage";
+import { sourceCoverage } from "@/lib/source-coverage";
 
 export interface WatchItem {
   id: string;
@@ -91,8 +94,11 @@ export default function PropertiesPanel(props: Props) {
         </div>
       ) : null}
       {props.error ? <p className="mt-4 max-w-3xl rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{props.error}</p> : null}
+      {!props.history ? (
+        <SourceYears spans={sourceCoverage({ start: SPC_TORNADO_START, end: new Date().toISOString().slice(0, 10) })} />
+      ) : null}
       {!props.history && !props.loading && !props.label ? (
-        <div className="empty-state mt-6 max-w-xl">
+        <div className="empty-state mt-4 max-w-xl">
           <House className="mx-auto mb-2" size={26} />
           <p className="text-sm font-semibold text-ink">Search an address</p>
           <p className="mt-1 text-sm">

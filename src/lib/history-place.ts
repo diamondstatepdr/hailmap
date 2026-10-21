@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { HistoryRow } from "@/lib/history-db";
-import { MESH_ARCHIVE_START, VTEC_POINT_START } from "@/lib/history-coverage";
+import { MESH_ARCHIVE_START, MESH_INSTANT_START, VTEC_POINT_START } from "@/lib/history-coverage";
+import { sourceCoverage, type SourceSpan } from "@/lib/source-coverage";
 import { historyDir, meshAtPoint, meshDayReady } from "@/lib/history-db";
 import { formatDay, type DateSpan } from "@/lib/history-range";
 import { historyRowToReport, queryHistoryNear } from "@/lib/history-query";
@@ -41,6 +42,7 @@ export interface AddressHistory {
   score: PlaceHistory["score"];
   history: PlaceHistory;
   warningNote: string | null;
+  coverage: SourceSpan[];
 }
 
 function warningFile(lat: number, lon: number, span: DateSpan): string {
@@ -147,7 +149,7 @@ export function groupEvents(
     }
     const radar = mesh.get(date);
     const meshStatus: AddressEvent["meshStatus"] =
-      hailCount === 0 ? "no-hail" : date < MESH_ARCHIVE_START ? "outside-archive" : (radar?.status ?? "pending");
+      hailCount === 0 ? "no-hail" : date < MESH_INSTANT_START ? "outside-archive" : (radar?.status ?? "pending");
     const meshMaxIn = radar?.maxIn ?? null;
     const dayWarnings = warnings.filter((warning) => convectiveDateOf(warning.issued) === date);
     const event: AddressEvent = {
@@ -230,10 +232,36 @@ export async function buildAddressHistory(input: {
     hailDates.set(row.stormDate, Math.max(hailDates.get(row.stormDate) ?? 0, row.sizeIn));
   }
   const ranked = [...hailDates.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1));
-  const wanted = new Set((input.meshDates?.length ? input.meshDates : ranked.slice(0, 14).map(([date]) => date)).filter((date) => date >= MESH_ARCHIVE_START));
+  const wanted = new Set((input.meshDates?.length ? input.meshDates : ranked.slice(0, 14).map(([date]) => date)).filter((date) => date >= MESH_INSTANT_START));
   const mesh = new Map<string, { maxIn: number | null; status: AddressEvent["meshStatus"] }>();
   let network = 0;
+  let hourly = 0;
   for (const date of wanted) {
+    if (date < MESH_ARCHIVE_START) {
+      if (!meshDayReady(date)) {
+        if (hourly >= 1) {
+          mesh.set(date, { maxIn: null, status: "pending" });
+          continue;
+        }
+        hourly += 1;
+        try {
+          const { indexMeshDay } = await import("@/lib/mesh-cache");
+          const { meshCellTotal } = await import("@/lib/history-db");
+          const indexed = await indexMeshDay(date, { existingCells: meshCellTotal() });
+          if (indexed.status === "budget" || indexed.status === "miss" || indexed.status === "error") {
+            mesh.set(date, { maxIn: null, status: indexed.status === "budget" ? "pending" : "error" });
+            continue;
+          }
+        } catch (error) {
+          console.error("[hailmap] hourly mesh", date, error instanceof Error ? error.message : error);
+          mesh.set(date, { maxIn: null, status: "error" });
+          continue;
+        }
+      }
+      const maxIn = meshAtPoint(date, input.lat, input.lon);
+      mesh.set(date, { maxIn, status: maxIn == null ? "empty" : "ok" });
+      continue;
+    }
     const cached = meshDayReady(date);
     if (!cached && network >= 8) {
       mesh.set(date, { maxIn: null, status: "pending" });
@@ -294,6 +322,7 @@ export async function buildAddressHistory(input: {
     score: history.score,
     history,
     warningNote: warningResult.note,
+    coverage: sourceCoverage({ start: input.span.start, end: input.span.end }),
   };
 }
 

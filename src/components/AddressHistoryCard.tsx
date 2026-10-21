@@ -7,6 +7,8 @@ import { ADDRESS_SPANS, formatDay, type DateSpan } from "@/lib/history-range";
 import { topScoreFactors, type DamageScore } from "@/lib/probability";
 import { formatHailSources, formatMiles } from "@/lib/units";
 import ScoreRing from "@/components/ui/ScoreRing";
+import SourceYears from "@/components/SourceYears";
+import { sourceCoverage } from "@/lib/source-coverage";
 
 export interface AddressEventView {
   date: string;
@@ -178,6 +180,7 @@ export default function AddressHistoryCard({
           </button>
         ))}
       </div>
+      <SourceYears spans={sourceCoverage({ start: history.start, end: history.end })} />
       <h3 className="mt-4 text-sm font-semibold">Calendar</h3>
       <div className="mt-2 rounded-2xl border border-line bg-[var(--panel-2)] p-2">
         <HailCalendar

@@ -2650,7 +2650,7 @@ export default function HailApp() {
         </MobileOrPage>
       ) : null}
       {section === "properties" ? (
-        <MobileOrPage label="Addresses" tone="addresses" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Addresses" tone="addresses" mobile={mobile} onClose={() => setSection("map")} expandedMax="min(74dvh, 44rem)">
         <PropertiesPanel
           radiusMi={radiusMi}
           hours={filter.hours}
@@ -2768,18 +2768,20 @@ function MobileOrPage({
   tone,
   mobile,
   onClose,
+  expandedMax = "min(78dvh, 44rem)",
   children,
 }: {
   label: string;
   tone: string;
   mobile: boolean;
   onClose: () => void;
+  expandedMax?: string;
   children: ReactNode;
 }) {
   if (!mobile) return children;
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
-      <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
+      <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax={expandedMax} peekHeight={108}>
         {children}
       </BottomSheet>
     </div>

@@ -41,14 +41,19 @@ import StormReplayBar from "@/components/StormReplayBar";
 import BottomSheet from "@/components/ui/BottomSheet";
 import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
+import { beginAddressSelection } from "@/lib/address-lookup";
 import { HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
+import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
+import { stormsForList } from "@/lib/storm-scope";
+import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
+import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
@@ -205,7 +210,9 @@ export default function HailApp() {
   const [serverClusters, setServerClusters] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNote, setHistoryNote] = useState<string | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [overlay, setOverlay] = useState<null | "range" | "calendar" | "days">(null);
+  const calendarOpen = overlay === "calendar";
+  const hailDaysOpen = overlay === "days";
   const [statesOpen, setStatesOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
@@ -213,7 +220,6 @@ export default function HailApp() {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [chromePx, setChromePx] = useState(0);
   const [addressClose, setAddressClose] = useState(0);
-  const [hailDaysOpen, setHailDaysOpen] = useState(false);
   const [hailDays, setHailDays] = useState<HailDayView[]>([]);
   const [customOpen, setCustomOpen] = useState(false);
   const [customStart, setCustomStart] = useState("");
@@ -253,7 +259,12 @@ export default function HailApp() {
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
   const [authConfigured, setAuthConfigured] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [radiusKm, setRadiusKm] = useState(15);
+  const [radiusMi, setRadiusMi] = useState<SearchRadiusMi>(DEFAULT_RADIUS_MI);
+  const radiusKm = milesToKm(radiusMi);
+  const [livePlaceLoading, setLivePlaceLoading] = useState(false);
+  const [placeExpanded, setPlaceExpanded] = useState(false);
+  const [fieldSpanHours, setFieldSpanHours] = useState<number | null>(null);
+  const [streetStalled, setStreetStalled] = useState(false);
   const [placeLabel, setPlaceLabel] = useState<string | null>(null);
   const [placePoint, setPlacePoint] = useState<{ lat: number; lon: number } | null>(null);
   const [place, setPlace] = useState<PlaceHistory | null>(null);
@@ -408,7 +419,30 @@ export default function HailApp() {
       if (params.get("heat") === "1") setShowHoney(true);
       setHoneyOpen(true);
       setSection("map");
-      setCalendarOpen(false);
+      setOverlay(null);
+    }
+    const mapLink = parseMapLink(params);
+    if (mapLink && params.get("honey") !== "1") {
+      lockFrame.current = true;
+      setFocus({ lat: mapLink.lat, lon: mapLink.lon, zoom: mapLink.zoom, nonce: Date.now() });
+    } else if (!params.get("focusLat") && params.get("honey") !== "1") {
+      const saved = readSavedView();
+      if (saved) {
+        lockFrame.current = true;
+        setFocus({ lat: saved.lat, lon: saved.lon, zoom: saved.zoom, nonce: Date.now() });
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (lockFrame.current) return;
+            lockFrame.current = true;
+            const next = { lat: position.coords.latitude, lon: position.coords.longitude, zoom: 10 };
+            writeSavedView(next);
+            setFocus({ ...next, nonce: Date.now() });
+          },
+          () => undefined,
+          { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 4000 },
+        );
+      }
     }
     function onMessage(event: MessageEvent) {
       const data = event.data as { type?: string; url?: string } | null;
@@ -534,20 +568,45 @@ export default function HailApp() {
   }, [showIncome, income, incomeError]);
 
   useEffect(() => {
-    if (section !== "field" || !navigator.geolocation) {
-      if (section === "field" && !navigator.geolocation) setGpsError("This browser cannot share location.");
+    if (section !== "field") return;
+    const applyFallback = (message: string) => {
+      setUserLocation((current) => {
+        if (current) return current;
+        const fallback = fieldFallbackPoint({ gps: null, searched: placePointRef.current, view: viewBoundsRef.current });
+        if (!fallback) {
+          setGpsError(message);
+          return current;
+        }
+        setGpsError(
+          fallback.source === "search"
+            ? "Location is blocked. Using the address you searched."
+            : "Location is blocked. Using the map center.",
+        );
+        return { lat: fallback.lat, lon: fallback.lon };
+      });
+    };
+    if (!navigator.geolocation) {
+      applyFallback("This browser cannot share location.");
       return;
     }
     setGpsError(null);
+    const timer = window.setTimeout(() => applyFallback("Location is taking too long."), FIELD_LOOKUP_MS);
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
+        window.clearTimeout(timer);
         setUserLocation({ lat: position.coords.latitude, lon: position.coords.longitude });
         setGpsError(null);
       },
-      () => setGpsError("Location is blocked. Allow location access to drive Field mode."),
-      { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 },
+      () => {
+        window.clearTimeout(timer);
+        applyFallback("Location is blocked. Allow location access to drive Field mode.");
+      },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 8000 },
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      window.clearTimeout(timer);
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, [section]);
 
   useEffect(() => {
@@ -593,6 +652,38 @@ export default function HailApp() {
       cancelled = true;
     };
   }, [placePoint, radiusKm, addressSpanId, scoreDate, addressTick]);
+
+  useEffect(() => {
+    if (!placePoint) {
+      setPlace(null);
+      setLivePlaceLoading(false);
+      return;
+    }
+    const started = beginAddressSelection(
+      { label: placeLabel ?? "Address", lat: placePoint.lat, lon: placePoint.lon },
+      radiusMi,
+      filter.hours,
+    );
+    let cancelled = false;
+    setLivePlaceLoading(started.loading);
+    setPlace(started.history);
+    setPlaceError(null);
+    fetch(started.url)
+      .then(async (response) => {
+        const payload = (await response.json()) as PlaceHistory & { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Could not load this address");
+        if (!cancelled) setPlace(payload);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setPlaceError(reason instanceof Error ? reason.message : "Could not load this address");
+      })
+      .finally(() => {
+        if (!cancelled) setLivePlaceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [placePoint, placeLabel, radiusMi, filter.hours]);
 
   useEffect(() => {
     if (!placePoint) {
@@ -652,7 +743,10 @@ export default function HailApp() {
         setMeshLabel(payload.label ?? null);
         setMeshNote(payload.note ?? null);
         const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
-        if (payload.bounds && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
+        const meshSpan = payload.bounds
+          ? haversineKm(payload.bounds.south, payload.bounds.west, payload.bounds.north, payload.bounds.east)
+          : Infinity;
+        if (payload.bounds && meshSpan < 1600 && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
           meshFrameKey.current = key;
           const clipped = frameInsideUnitedStates(payload.bounds);
           setFrame({ ...clipped, nonce: Date.now(), maxZoom: 9.5 });
@@ -801,25 +895,35 @@ export default function HailApp() {
   }, [calendarOpen, calendarYear, viewBounds, filter.state]);
 
   const fieldHours = useRef(filter.hours);
+  const activeFieldHours = fieldSpanHours ?? filter.hours;
+  const fieldFix = section === "field" ? fieldFallbackPoint({ gps: userLocation, searched: placePoint, view: viewBounds }) : null;
+  const fieldLat = fieldFix?.lat ?? null;
+  const fieldLon = fieldFix?.lon ?? null;
   useEffect(() => {
     if (section !== "field") {
       lastStreetFix.current = null;
+      setStreetStalled(false);
       return;
     }
-    if (!userLocation) return;
+    if (fieldLat == null || fieldLon == null) return;
+    const point = { lat: fieldLat, lon: fieldLon };
     const previous = lastStreetFix.current;
-    const sameSpot = previous != null && haversineKm(previous.lat, previous.lon, userLocation.lat, userLocation.lon) < 0.2;
-    if (sameSpot && fieldHours.current === filter.hours && fieldPlace) return;
-    fieldHours.current = filter.hours;
-    lastStreetFix.current = userLocation;
-    if (!previous) setFocus({ lon: userLocation.lon, lat: userLocation.lat, nonce: Date.now(), zoom: 13 });
+    const sameSpot = previous != null && haversineKm(previous.lat, previous.lon, point.lat, point.lon) < 0.2;
+    if (sameSpot && fieldHours.current === activeFieldHours && fieldPlace) return;
+    fieldHours.current = activeFieldHours;
+    lastStreetFix.current = point;
+    if (!previous) setFocus({ lon: point.lon, lat: point.lat, nonce: Date.now(), zoom: 13 });
     let cancelled = false;
     setStreetStatus("loading");
+    setStreetStalled(false);
+    const stall = window.setTimeout(() => {
+      if (!cancelled) setStreetStalled(true);
+    }, FIELD_LOOKUP_MS);
     const params = new URLSearchParams({
-      lat: String(userLocation.lat),
-      lon: String(userLocation.lon),
-      radiusKm: "8",
-      hours: String(filter.hours),
+      lat: String(point.lat),
+      lon: String(point.lon),
+      radiusKm: String(milesToKm(DEFAULT_RADIUS_MI)),
+      hours: String(activeFieldHours),
     });
     fetch(`/api/place?${params}`)
       .then(async (response) => {
@@ -833,7 +937,7 @@ export default function HailApp() {
       .catch((reason: unknown) => {
         if (!cancelled) setFieldError(reason instanceof Error ? reason.message : "Score unavailable");
       });
-    fetch(`/api/geocode?lat=${userLocation.lat}&lon=${userLocation.lon}`)
+    fetch(`/api/geocode?lat=${point.lat}&lon=${point.lon}`)
       .then((response) => response.json())
       .then((payload: { street?: string | null }) => {
         if (cancelled) return;
@@ -845,8 +949,9 @@ export default function HailApp() {
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(stall);
     };
-  }, [section, userLocation, filter.hours, fieldPlace]);
+  }, [section, fieldLat, fieldLon, activeFieldHours, fieldPlace]);
 
   const replayFiltered = useMemo(() => {
     if (!replay.active || !replay.manifest || !replay.at) return null;
@@ -865,6 +970,7 @@ export default function HailApp() {
     if (replay.active) return replayFiltered ?? [];
     return applyReportFilter(reports, filter, Date.now(), { ignoreTime: historyActive });
   }, [replay.active, replayFiltered, reports, filter, historyActive]);
+  const listedStorms = useMemo(() => stormsForList(filtered, viewBounds), [filtered, viewBounds]);
   const selected = filtered.find((report) => report.id === selectedId) ?? null;
   const points = useMemo(() => reportsToPointCollection(filtered), [filtered]);
   const stateCounts = useMemo(() => {
@@ -945,6 +1051,7 @@ export default function HailApp() {
     setHistoryNote(null);
     setMeshDate("");
     setCustomOpen(false);
+    setOverlay(null);
     const next = { ...filter, hours };
     setFilter(next);
     setReloadKey((value) => value + 1);
@@ -955,7 +1062,7 @@ export default function HailApp() {
     setHistoryMode({ kind: "days", days });
     setMeshDate("");
     setCustomOpen(false);
-    setHailDaysOpen(true);
+    setOverlay(null);
   }
 
   function closeMapDetail() {
@@ -972,7 +1079,8 @@ export default function HailApp() {
       setCalendarYear(year);
       setCalendarMonth(month);
     }
-    setCalendarOpen((open) => !open);
+    setCustomOpen(false);
+    setOverlay((current) => (current === "calendar" ? null : "calendar"));
   }
 
   function dismissChase() {
@@ -992,8 +1100,7 @@ export default function HailApp() {
     setSection("map");
     setHoneyOpen(false);
     setShowHoney(false);
-    setCalendarOpen(false);
-    setHailDaysOpen(false);
+    setOverlay(null);
     setCustomOpen(false);
     setFiltersOpen(false);
     setPlaceCardOpen(false);
@@ -1012,6 +1119,7 @@ export default function HailApp() {
     setHistoryMode({ kind: "day", date });
     setMeshDate(date);
     setCustomOpen(false);
+    setOverlay(null);
     const [year, month] = date.split("-").map(Number);
     if (year && month) {
       setCalendarYear(year);
@@ -1039,8 +1147,7 @@ export default function HailApp() {
     setShowHoney(false);
     setPlaceCardOpen(false);
     setArea(null);
-    setCalendarOpen(false);
-    setHailDaysOpen(false);
+    setOverlay(null);
     setCustomOpen(false);
     setFiltersOpen(false);
     setAddressClose((value) => value + 1);
@@ -1081,15 +1188,54 @@ export default function HailApp() {
   }
 
   function chooseAddress(hit: AddressHit) {
-    setPlaceLabel(hit.label);
-    setPlacePoint({ lat: hit.lat, lon: hit.lon });
-    setPlace(null);
+    const next = beginAddressSelection(hit, radiusMi, filter.hours);
+    setPlaceLabel(next.label);
+    setPlacePoint({ lat: next.lat, lon: next.lon });
+    setPlace(next.history);
+    setLivePlaceLoading(next.loading);
+    setPlaceError(null);
     setAddressHistory(null);
     setScoreDate(null);
     addressRetries.current = 0;
+    setPlaceExpanded(false);
     setPlaceCardOpen(true);
     setFocus({ lon: hit.lon, lat: hit.lat, nonce: Date.now(), zoom: 12 });
     setSelectedId(null);
+  }
+
+  function searchNearField() {
+    const point = userLocation ?? placePoint ?? (viewBounds ? { lat: (viewBounds.south + viewBounds.north) / 2, lon: (viewBounds.west + viewBounds.east) / 2 } : null);
+    if (!point) {
+      setDealerError("Search an address or allow location, then try again.");
+      setDealers([]);
+      return;
+    }
+    const miles = 12;
+    const dLat = miles / 69;
+    const dLon = miles / (69 * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180)));
+    const west = point.lon - dLon;
+    const east = point.lon + dLon;
+    const south = point.lat - dLat;
+    const north = point.lat + dLat;
+    void loadDealers({
+      id: "near",
+      label: "Near me",
+      source: "view",
+      minIn: null,
+      maxIn: null,
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [west, south],
+            [east, south],
+            [east, north],
+            [west, north],
+            [west, south],
+          ],
+        ],
+      },
+    });
   }
 
   async function saveWatch() {
@@ -1184,7 +1330,7 @@ export default function HailApp() {
     const { west, south, east, north } = bounds;
     const span = haversineKm(south, west, north, east);
     if (span > 500) {
-      setDealerError("Zoom in to a hail area first. Dealer search stays under about 500 km.");
+      setDealerError("Zoom in to a hail area first. Dealer search stays under about 300 miles.");
       setDealers([]);
       return;
     }
@@ -1364,6 +1510,19 @@ export default function HailApp() {
 
   const folded = Math.max(0, rawCount - reports.length);
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
+  const stormControlLabel = useMemo(() => {
+    const names = hazards.map((id) => HAZARD_OPTIONS.find((option) => option.id === id)?.label ?? id);
+    const hazard = names.length >= 3 ? "All storms" : names.join(" · ") || "Hail";
+    if (historyMode.kind === "day") return `${hazard} · ${formatDay(historyMode.date)}`;
+    if (historyMode.kind === "custom") return `${hazard} · Custom`;
+    if (historyMode.kind === "days") {
+      const chip = HISTORY_CHIPS.find((item) => item.days === historyMode.days);
+      return `${hazard} · ${chip?.label ?? `${historyMode.days} days`}`;
+    }
+    const time = TIME_WINDOWS.find((item) => item.hours === filter.hours);
+    return `${hazard} · ${time?.label ?? "7 days"}`;
+  }, [hazards, historyMode, filter.hours]);
+  const fieldWindowLabel = fieldSpanHours === 90 * 24 ? "last 90 days" : (TIME_WINDOWS.find((item) => item.hours === filter.hours)?.detail ?? "selected window");
   const mobile = useMediaQuery("(max-width: 767px)");
   const showMap = section === "map" || section === "field" || mobile;
 
@@ -1389,7 +1548,7 @@ export default function HailApp() {
     setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.4 : 4.8, padding });
   }, [chasePopup, chaseLoading, chase, mobile, chromePx]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
-  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel ?? "MESH");
+  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
 
   useEffect(() => {
     if (!replay.active || !replay.manifest || !replay.launch || replayFitReports.current) return;
@@ -1434,13 +1593,27 @@ export default function HailApp() {
 
   const mapDetailOpen = section === "map" && Boolean(selected || threat || county || area);
   useEffect(() => {
-    if (!mapDetailOpen || alertDraft || filtersOpen || authOpen || reportOpen) return;
+    if (alertDraft || authOpen || reportOpen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMapDetail();
+      if (event.key !== "Escape") return;
+      if (filtersOpen) {
+        setFiltersOpen(false);
+        return;
+      }
+      if (overlay || customOpen) {
+        setOverlay(null);
+        setCustomOpen(false);
+        return;
+      }
+      if (placeExpanded) {
+        setPlaceExpanded(false);
+        return;
+      }
+      if (mapDetailOpen) closeMapDetail();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen]);
+  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, overlay, customOpen, placeExpanded]);
 
   return (
     <AppShell
@@ -1454,9 +1627,8 @@ export default function HailApp() {
       onSignOut={() => void signOut()}
       stormsNew={chaseUnseen && section !== "storms"}
     >
-      {showMap ? (
-        <div
-          className="absolute inset-0"
+      <div
+          className={showMap ? "absolute inset-0" : "hidden"}
           style={
             {
               "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
@@ -1484,6 +1656,7 @@ export default function HailApp() {
             heat={heat}
             showHoney={showHoney}
             honeyPanel={honeyOpen && section === "map"}
+            visible={showMap}
             honey={honeyCollection}
             onSelectHoney={(id) => {
               setSelectedHoneyId(id);
@@ -1549,10 +1722,17 @@ export default function HailApp() {
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;
               setViewBounds(bounds);
+              const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
+              writeSavedView({ ...center, zoom: zoomFromBounds(bounds) });
               if (Date.now() < holdRankUntil.current) return;
               setRankBounds(bounds);
             }}
-            onBackgroundClick={closeMapDetail}
+            onBackgroundClick={() => {
+              closeMapDetail();
+              setOverlay(null);
+              setCustomOpen(false);
+              setPlaceExpanded(false);
+            }}
           />
           <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
@@ -1572,11 +1752,11 @@ export default function HailApp() {
                 type="button"
                 data-honey-open
                 aria-pressed={honeyOpen}
-                aria-label="Money holes"
+                aria-label="Money Hole"
+                title="Money Hole"
                 className="icon-btn press"
                 onClick={() => {
-                  setCalendarOpen(false);
-                  setHailDaysOpen(false);
+                  setOverlay(null);
                   setCustomOpen(false);
                   if (!honeyOpen && replay.active) replay.stop();
                   setHoneyOpen((open) => !open);
@@ -1587,79 +1767,121 @@ export default function HailApp() {
             </div>
             {honeyOpen ? null : (
             <>
-            <div className="pointer-events-auto seg" role="group" aria-label="Hazards and time window">
-              {HAZARD_OPTIONS.map((option) => {
-                const on = hazards.includes(option.id);
-                const Icon = option.id === "wind" ? Wind : option.id === "tornado" ? Tornado : CloudHail;
-                return (
-                  <button key={option.id} type="button" aria-pressed={on} onClick={() => toggleHazard(option.id)} className="inline-flex items-center gap-1">
-                    <Icon size={13} />
-                    {option.label}
-                  </button>
-                );
-              })}
-              {replay.active ? null : (
-                <>
-                  <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
+            {replay.active ? null : (
+              <div className="pointer-events-auto">
+                <button
+                  type="button"
+                  className="range-control press"
+                  aria-expanded={overlay === "range"}
+                  aria-controls="storm-range"
+                  onClick={() => {
+                    setCustomOpen(false);
+                    setOverlay((current) => (current === "range" ? null : "range"));
+                  }}
+                >
+                  {stormControlLabel}
+                </button>
+              </div>
+            )}
+            {overlay === "range" && !replay.active ? (
+              <div id="storm-range" className="pointer-events-auto glass w-[min(24rem,100%)] space-y-2 rounded-2xl p-3">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Hazards">
+                  {HAZARD_OPTIONS.map((option) => {
+                    const on = hazards.includes(option.id);
+                    const Icon = option.id === "wind" ? Wind : option.id === "tornado" ? Tornado : CloudHail;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleHazard(option.id)}
+                        className={`tap press inline-flex items-center gap-1 rounded-full px-3 text-sm ${on ? "chip-on" : "chip"}`}
+                      >
+                        <Icon size={14} />
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Time window">
                   {TIME_WINDOWS.map((item) => (
                     <button
                       key={item.hours}
                       type="button"
                       aria-pressed={!historyActive && filter.hours === item.hours}
                       onClick={() => showLiveWindow(item.hours)}
+                      className={`tap press rounded-full px-3 text-sm ${!historyActive && filter.hours === item.hours ? "chip-on" : "chip"}`}
                     >
                       {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
                     </button>
                   ))}
-                </>
-              )}
-            </div>
-            {replay.active ? null : (
-            <div className="pointer-events-auto seg" role="group" aria-label="Storm history">
-              {HISTORY_CHIPS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-pressed={historyMode.kind === "days" && historyMode.days === item.days}
-                  onClick={() => showHistoryDays(item.days)}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button type="button" aria-pressed={customOpen || historyMode.kind === "custom"} onClick={() => setCustomOpen((open) => !open)}>
-                Custom
-              </button>
-              <button type="button" aria-pressed={calendarOpen || historyMode.kind === "day"} onClick={showCalendar}>
-                Pick a day
-              </button>
-              <button type="button" aria-pressed={hailDaysOpen} onClick={() => setHailDaysOpen((open) => !open)}>
-                Hail days
-              </button>
-            </div>
-            )}
-            {customOpen ? (
-              <form
-                className="pointer-events-auto glass flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 text-xs"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!customStart || !customEnd || customStart > customEnd) return;
-                  setHistoryMode({ kind: "custom", start: customStart, end: customEnd });
-                  setMeshDate("");
-                  setHailDaysOpen(true);
-                }}
-              >
-                <label className="inline-flex items-center gap-1">
-                  Start
-                  <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="rounded-lg border border-line bg-panel px-1.5 py-1" />
-                </label>
-                <label className="inline-flex items-center gap-1">
-                  End
-                  <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="rounded-lg border border-line bg-panel px-1.5 py-1" />
-                </label>
-                <button type="submit" className="btn btn-primary press px-3 py-1 text-xs">
-                  Show range
-                </button>
-              </form>
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Storm history">
+                  {HISTORY_CHIPS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={historyMode.kind === "days" && historyMode.days === item.days}
+                      onClick={() => showHistoryDays(item.days)}
+                      className={`tap press rounded-full px-3 text-sm ${historyMode.kind === "days" && historyMode.days === item.days ? "chip-on" : "chip"}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    aria-pressed={customOpen || historyMode.kind === "custom"}
+                    onClick={() => setCustomOpen((open) => !open)}
+                    className={`tap press rounded-full px-3 text-sm ${customOpen || historyMode.kind === "custom" ? "chip-on" : "chip"}`}
+                  >
+                    Custom
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={calendarOpen || historyMode.kind === "day"}
+                    onClick={showCalendar}
+                    className={`tap press rounded-full px-3 text-sm ${calendarOpen || historyMode.kind === "day" ? "chip-on" : "chip"}`}
+                  >
+                    Pick a day
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={hailDaysOpen}
+                    onClick={() => {
+                      setCustomOpen(false);
+                      setOverlay("days");
+                    }}
+                    className={`tap press rounded-full px-3 text-sm ${hailDaysOpen ? "chip-on" : "chip"}`}
+                  >
+                    Hail days
+                  </button>
+                </div>
+                {customOpen ? (
+                  <form
+                    className="flex flex-wrap items-end gap-2 text-xs"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!customStart || !customEnd || customStart > customEnd) return;
+                      setHistoryMode({ kind: "custom", start: customStart, end: customEnd });
+                      setMeshDate("");
+                      setCustomOpen(false);
+                      setOverlay(null);
+                    }}
+                  >
+                    <label className="inline-flex flex-col gap-1">
+                      Start
+                      <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="tap rounded-lg border border-line bg-panel px-2" />
+                    </label>
+                    <label className="inline-flex flex-col gap-1">
+                      End
+                      <input type="date" required min="1950-01-01" max={new Date().toISOString().slice(0, 10)} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="tap rounded-lg border border-line bg-panel px-2" />
+                    </label>
+                    <button type="submit" className="btn btn-primary press px-3 text-xs">
+                      Show range
+                    </button>
+                  </form>
+                ) : null}
+              </div>
             ) : null}
             {calendarOpen ? (
               <div className="pointer-events-auto glass w-[min(22rem,100%)] rounded-2xl p-3">
@@ -1669,7 +1891,7 @@ export default function HailApp() {
                   selected={historyMode.kind === "day" ? historyMode.date : null}
                   marks={calendarMarks}
                   loading={calendarLoading}
-                  caption="Dots show the largest hail in the current map view. Tap a day to load that storm and its radar swath."
+                  caption={`${viewScopeLabel(viewBounds, filter.state)}. Dots show the largest hail in this map view. Tap a day to load that storm and its radar swath.`}
                   onViewChange={(year, month) => {
                     setCalendarYear(year);
                     setCalendarMonth(month);
@@ -1692,7 +1914,7 @@ export default function HailApp() {
                   <Play size={13} />
                   Replay
                 </button>
-                <button type="button" className="font-semibold text-accent" onClick={() => setCalendarOpen(true)}>
+                <button type="button" className="tap font-semibold text-accent" onClick={() => setOverlay("calendar")}>
                   Calendar
                 </button>
               </div>
@@ -1701,20 +1923,20 @@ export default function HailApp() {
               <div className="pointer-events-auto glass max-h-60 w-[min(24rem,100%)] overflow-auto rounded-2xl p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Hail days</p>
-                  <button type="button" className="text-xs font-semibold text-accent" onClick={() => setHailDaysOpen(false)}>
+                  <button type="button" className="tap text-xs font-semibold text-accent" onClick={() => setOverlay(null)}>
                     Hide
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-muted">Sorted by largest hail in the map view. Tap a date to load that day's reports and radar swath.</p>
+                <p className="mt-1 text-xs text-muted">Sorted by largest hail in this map view. Spotter size and radar size are labeled separately.</p>
                 {hailDays.length ? (
                   <ul className="mt-2 space-y-1">
                     {hailDays.slice(0, 40).map((day) => (
                       <li key={day.date}>
-                        <button type="button" onClick={() => pickStormDay(day.date)} className="press flex w-full items-baseline justify-between gap-2 rounded-xl px-2 py-1.5 text-left hover:bg-white/40">
+                        <button type="button" onClick={() => pickStormDay(day.date)} className="press flex min-h-11 w-full items-baseline justify-between gap-2 rounded-xl px-2 py-1.5 text-left hover:bg-white/40">
                           <span className="font-semibold">{formatDay(day.date)}</span>
-                          <span className="text-xs text-muted">
-                            {day.maxHailIn != null ? `${day.maxHailIn.toFixed(2)} in` : "—"} · {day.hailCount} hail
-                            {day.meshMaxIn != null ? ` · radar ${day.meshMaxIn.toFixed(2)}` : ""}
+                          <span className="text-right text-xs text-muted">
+                            {formatHailSources({ radarIn: day.meshMaxIn, spotterIn: day.maxHailIn })}
+                            {day.hailCount ? ` · ${day.hailCount} hail` : ""}
                             {day.windCount ? ` · ${day.windCount} wind` : ""}
                             {day.tornadoCount ? ` · ${day.tornadoCount} tornado` : ""}
                           </span>
@@ -1723,7 +1945,7 @@ export default function HailApp() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-xs text-muted">No hail reports in this view and range yet.</p>
+                  <p className="mt-2 text-xs text-muted">No hail reports in this map view and range yet.</p>
                 )}
               </div>
             ) : null}
@@ -1742,8 +1964,8 @@ export default function HailApp() {
                   </span>
                 ))}
                 {meshDate && !replay.active ? (
-                  <button type="button" className="shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
-                    Use time window
+                  <button type="button" className="tap shrink-0 font-semibold text-accent" onClick={() => showLiveWindow(filter.hours)}>
+                    Back to time range
                   </button>
                 ) : null}
               </div>
@@ -1771,7 +1993,7 @@ export default function HailApp() {
                         type="button"
                         aria-pressed={on}
                         onClick={() => setStateFilter(on ? "" : code)}
-                        className={`press shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
+                        className={`tap press shrink-0 rounded-full px-3 text-xs font-semibold ${on ? "chip-on" : "chip"}`}
                       >
                         {code} {count}
                       </button>
@@ -1803,9 +2025,9 @@ export default function HailApp() {
                     </span>
                   </span>
                 ) : null}
-                {showOutlook ? (
+                {showOutlook && historyMode.kind === "window" ? (
                   <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold">Day 1</span>
+                    <span className="font-semibold">Today's risk</span>
                     {OUTLOOK_LEVELS.map((level) => (
                       <span key={level.category} className="inline-flex items-center gap-1">
                         <span className="h-2.5 w-2.5 rounded-sm" style={{ background: level.fill }} />
@@ -1849,13 +2071,14 @@ export default function HailApp() {
               showHeat={showHoney}
               onToggleHeat={() => setShowHoney((value) => !value)}
               loading={honeyFinding}
-              note={honeyReady ? (honey?.zoom ? honey.note ?? "Zoom in to a metro to rank money holes." : honey?.note ?? null) : null}
+              zoomedOut={Boolean(honey?.zoom)}
+              note={honeyReady && !honey?.zoom ? honey?.note ?? null : null}
               error={honeyError}
               spots={honeyReady ? honey?.spots?.[honeyMode] ?? [] : []}
               selectedId={selectedHoneyId}
               needsDay={!honeyQuery}
               distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
-              attribution={honey?.attribution ?? "Lots © OpenStreetMap contributors. Homes from US Census ACS. Hail from NOAA MRMS MESH."}
+              attribution={honey?.attribution ?? "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports."}
               onClose={() => setHoneyOpen(false)}
               onSelect={(spot) => {
                 setSelectedHoneyId(spot.id);
@@ -1877,6 +2100,9 @@ export default function HailApp() {
                     history={addressHistory}
                     spanId={addressSpanId}
                     loading={placeLoading}
+                    expanded={placeExpanded}
+                    onToggle={() => setPlaceExpanded(true)}
+                    scopeLabel={viewScopeLabel(viewBounds, filter.state)}
                     onSpan={(id) => {
                       addressRetries.current = 0;
                       setScoreDate(null);
@@ -2036,6 +2262,10 @@ export default function HailApp() {
                 gpsError={gpsError}
                 street={street}
                 streetStatus={streetStatus}
+                lat={fieldLat}
+                lon={fieldLon}
+                waitedMs={streetStalled ? FIELD_LOOKUP_MS : 0}
+                windowLabel={fieldWindowLabel}
                 history={fieldPlace}
                 historyError={fieldError}
                 signedIn={Boolean(user)}
@@ -2047,7 +2277,8 @@ export default function HailApp() {
                 dealerNote={dealerNote}
                 dealerError={dealerError}
                 selectedDealerId={selectedDealerId}
-                onSearchArea={searchVisibleArea}
+                onSearchArea={searchNearField}
+                onWiden={() => setFieldSpanHours(90 * 24)}
                 onSelectDealer={(id) => {
                   setSelectedDealerId(id);
                   const dealer = dealers.find((item) => item.id === id);
@@ -2149,13 +2380,12 @@ export default function HailApp() {
             />
           ) : null}
         </div>
-      ) : null}
       {section === "storms" ? (
         <MobileOrPage label="Storms" mobile={mobile} onClose={() => setSection("map")}>
         <StormsPanel
           loading={loading}
           error={error}
-          reports={filtered}
+          reports={listedStorms}
           filter={filter}
           status={status}
           syncedAt={syncedAt}
@@ -2176,14 +2406,14 @@ export default function HailApp() {
       {section === "properties" ? (
         <MobileOrPage label="Addresses" mobile={mobile} onClose={() => setSection("map")}>
         <PropertiesPanel
-          radiusKm={radiusKm}
+          radiusMi={radiusMi}
           hours={filter.hours}
-          onRadius={setRadiusKm}
+          onRadius={setRadiusMi}
           onHours={setHours}
           onSearch={chooseAddress}
           history={place}
           label={placeLabel}
-          loading={placeLoading}
+          loading={livePlaceLoading}
           error={placeError}
           mesh={status?.mesh ?? null}
           radar={radar}
@@ -2192,7 +2422,7 @@ export default function HailApp() {
           watch={watch}
           onSave={() => void saveWatch()}
           onOpenWatch={(item) => {
-            setRadiusKm(item.radiusKm);
+            setRadiusMi(nearestRadiusMi(item.radiusKm));
             chooseAddress({ label: item.label, lat: item.lat, lon: item.lon, city: null, state: null });
           }}
           onRemoveWatch={(id) => void removeWatch(id)}
@@ -2227,6 +2457,8 @@ export default function HailApp() {
           signedIn={Boolean(user)}
           onAddress={() => void generateReport("address")}
           onView={() => void generateReport("view")}
+          onFindAddress={() => setSection("properties")}
+          onSignIn={() => setAuthOpen(true)}
         />
         </MobileOrPage>
       ) : null}

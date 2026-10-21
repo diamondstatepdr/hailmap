@@ -9,7 +9,7 @@ import { buildPlaceHistory } from "@/lib/place";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const WINDOW_HOURS = new Set(TIME_WINDOWS.map((item) => item.hours));
+const WINDOW_HOURS = new Set([...TIME_WINDOWS.map((item) => item.hours), 90 * 24]);
 
 function parsePlaceQuery(url: URL): { lat: number; lon: number; radiusKm: number; hours: number } | { error: string } {
   const latText = url.searchParams.get("lat");

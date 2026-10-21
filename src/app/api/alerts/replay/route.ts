@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if ((lat != null || lon != null) && (lat == null || lon == null || !validLatLon(lat, lon))) {
     return Response.json({ error: "lat and lon are required together" }, { status: 400 });
   }
-  if (!isRadiusMi(radiusMi)) return Response.json({ error: "radiusMi must be 5, 10, 25, or 50" }, { status: 400 });
+  if (!isRadiusMi(radiusMi)) return Response.json({ error: "radiusMi must be 1, 3, 5, 10, or 25" }, { status: 400 });
   if (!isThreshold(minSizeIn)) return Response.json({ error: 'minSizeIn must be 0, 1, 1.5, or 2' }, { status: 400 });
   if (state && !US_STATES.some((item) => item.abbr === state)) return Response.json({ error: "Unknown state" }, { status: 400 });
   if (lat == null && !state) return Response.json({ error: "Pass a point, a state, or both" }, { status: 400 });

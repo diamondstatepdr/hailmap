@@ -1,5 +1,5 @@
 import type { Confidence } from "@/lib/confidence";
-import { HAZARDS, type Hazard } from "@/lib/hazard";
+import type { Hazard } from "@/lib/hazard";
 import type { ReportFilter } from "@/lib/filters";
 
 export type { ReportFilter };
@@ -7,7 +7,7 @@ export type { ReportFilter };
 export const CONFIDENCE_OPTIONS: Array<{ id: Confidence; label: string }> = [
   { id: "nws", label: "Official (NWS)" },
   { id: "spotter", label: "Spotter" },
-  { id: "mesh", label: "Radar (MESH)" },
+  { id: "mesh", label: "Radar hail" },
   { id: "community", label: "Community" },
 ];
 
@@ -23,7 +23,7 @@ export function defaultFilter(): ReportFilter {
     hours: 168,
     confidences: ["nws", "spotter", "mesh", "community"],
     state: "",
-    hazards: [...HAZARDS],
+    hazards: ["hail"],
   };
 }
 

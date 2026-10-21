@@ -25,7 +25,7 @@ const MIRRORS = [
 const TILE_STEP = 0.36;
 const CACHE_TTL_MS = 14 * 24 * 3600 * 1000;
 const EMPTY_TTL_MS = 12 * 3600 * 1000;
-const MIRROR_TIMEOUT_MS = 28000;
+const MIRROR_TIMEOUT_MS = 8000;
 const OVERPASS_GAP_MS = 1500;
 /** Fresh Overpass calls per ranking so a metro view stays inside public rate limits. */
 export const MAX_FRESH_TILES = 2;
@@ -272,61 +272,61 @@ function writeCache(bounds: HoneyBounds, elements: OverpassElement[]) {
   fs.renameSync(temporary, file);
 }
 
-async function queryMirror(query: string): Promise<OverpassElement[]> {
-  let lastError = "Overpass is busy";
-  for (const mirror of MIRRORS) {
-    try {
-      const response = await fetch(mirror, {
-        method: "POST",
-        headers: {
-          "User-Agent": userAgent(),
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
-        cache: "no-store",
-      });
-      if (response.status === 429 || response.status === 504 || response.status === 503 || response.status === 400) {
-        lastError = `HTTP ${response.status}`;
-        continue;
-      }
-      if (!response.ok) {
-        lastError = `HTTP ${response.status}`;
-        continue;
-      }
-      const payload = (await response.json()) as {
-        elements?: OverpassElement[];
-        remark?: string;
-        osm3s?: { timestamp_osm_base?: string };
-      };
-      const stamp = payload.osm3s?.timestamp_osm_base ?? "";
-      if (payload.remark && /error|timeout/i.test(payload.remark) && !payload.elements?.length) {
-        lastError = payload.remark;
-        continue;
-      }
-      if (!payload.elements?.length && stamp && !/^\d{4}-\d{2}-\d{2}/.test(stamp)) {
-        lastError = "Overpass mirror returned an empty dataset";
-        continue;
-      }
-      return payload.elements ?? [];
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : "Overpass failed";
-      console.error("[hailmap] honey overpass", mirror, lastError);
-    }
+async function fetchMirror(mirror: string, query: string): Promise<OverpassElement[]> {
+  const response = await fetch(mirror, {
+    method: "POST",
+    headers: {
+      "User-Agent": userAgent(),
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: `data=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const payload = (await response.json()) as {
+    elements?: OverpassElement[];
+    remark?: string;
+    osm3s?: { timestamp_osm_base?: string };
+  };
+  const stamp = payload.osm3s?.timestamp_osm_base ?? "";
+  if (payload.remark && /error|timeout/i.test(payload.remark) && !payload.elements?.length) {
+    throw new Error(payload.remark);
   }
-  throw new Error(lastError);
+  if (!payload.elements?.length && stamp && !/^\d{4}-\d{2}-\d{2}/.test(stamp)) {
+    throw new Error("Overpass mirror returned an empty dataset");
+  }
+  return payload.elements ?? [];
+}
+
+async function queryMirror(query: string): Promise<OverpassElement[]> {
+  const [first, second, ...rest] = MIRRORS;
+  try {
+    return await Promise.any([fetchMirror(first, query), fetchMirror(second, query)]);
+  } catch (error) {
+    let lastError = error instanceof Error ? error.message : "Overpass is busy";
+    for (const mirror of rest) {
+      try {
+        return await fetchMirror(mirror, query);
+      } catch (next) {
+        lastError = next instanceof Error ? next.message : lastError;
+        console.error("[hailmap] honey overpass", mirror, lastError);
+      }
+    }
+    throw new Error(lastError);
+  }
 }
 
 const tileInflight = new Map<string, Promise<OverpassElement[]>>();
 
-async function fetchTile(bounds: HoneyBounds): Promise<OverpassElement[]> {
+async function fetchTile(bounds: HoneyBounds, slot = 0): Promise<OverpassElement[]> {
   const cached = readCache(bounds);
   if (cached) return cached;
   const key = cacheFile(bounds);
   const pending = tileInflight.get(key);
   if (pending) return pending;
-  const job = pace("overpass", OVERPASS_GAP_MS, () => queryMirror(honeyOverpassQuery(bounds)))
+  const job = pace(`overpass-${slot}`, slot === 0 ? OVERPASS_GAP_MS : 0, () => queryMirror(honeyOverpassQuery(bounds)))
     .then((elements) => {
       writeCache(bounds, elements);
       return elements;
@@ -387,7 +387,7 @@ export async function loadOsmTargets(
     .sort((a, b) => b.hail - a.hail)
     .map((item) => item.tile);
   const elements: OverpassElement[] = [];
-  let fresh = 0;
+  const fresh: HoneyBounds[] = [];
   let partial = false;
   const freshLimit = Math.max(0, maxFresh);
   for (const tile of tiles) {
@@ -396,18 +396,24 @@ export async function loadOsmTargets(
       elements.push(...cached);
       continue;
     }
-    if (fresh >= freshLimit) {
+    if (fresh.length >= freshLimit) {
       partial = true;
       continue;
     }
-    fresh += 1;
-    try {
-      elements.push(...(await fetchTile(tile)));
-    } catch (error) {
-      partial = true;
-      console.error("[hailmap] honey tile", error instanceof Error ? error.message : error);
-    }
+    fresh.push(tile);
   }
+  const loaded = await Promise.all(
+    fresh.map(async (tile, index) => {
+      try {
+        return await fetchTile(tile, index);
+      } catch (error) {
+        partial = true;
+        console.error("[hailmap] honey tile", error instanceof Error ? error.message : error);
+        return [] as OverpassElement[];
+      }
+    }),
+  );
+  for (const batch of loaded) elements.push(...batch);
   const parsed = targetsFromElements(elements, bounds);
   return { ...parsed, partial };
 }

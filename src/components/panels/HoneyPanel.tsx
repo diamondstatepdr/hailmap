@@ -1,6 +1,7 @@
 "use client";
 
 import { Gem, X } from "lucide-react";
+import { formatHailSources, formatMiles } from "@/lib/units";
 
 export type HoneyMode = "pdr" | "roof";
 
@@ -11,6 +12,8 @@ export interface HoneySpotView {
   lat: number;
   lon: number;
   hailIn: number;
+  radarIn?: number | null;
+  spotterIn?: number | null;
   vehicles: number | null;
   homes: number | null;
   score: number;
@@ -34,6 +37,7 @@ interface Props {
   onClose: () => void;
   attribution: string | null;
   needsDay: boolean;
+  zoomedOut?: boolean;
   /** Miles are only shown when they are measured from the tech or a searched address. */
   distanceFrom: "you" | "search" | null;
 }
@@ -55,7 +59,7 @@ export default function HoneyPanel(props: Props) {
       data-honey-panel
       data-mode={props.mode}
       data-honey-status={props.loading && !props.needsDay ? "loading" : props.spots.length ? "ready" : "empty"}
-      aria-label="Money holes"
+      aria-label="Money Hole"
     >
       <header className="honey-head">
         <div className="min-w-0">
@@ -66,7 +70,7 @@ export default function HoneyPanel(props: Props) {
           <h2>Money Holes</h2>
           <p className="truncate text-xs text-muted">{props.label}</p>
         </div>
-        <button type="button" className="honey-close press" onClick={props.onClose} aria-label="Close money holes">
+        <button type="button" className="honey-close press" onClick={props.onClose} aria-label="Close Money Hole">
           <X size={16} />
         </button>
       </header>
@@ -92,20 +96,24 @@ export default function HoneyPanel(props: Props) {
       </button>
       <div className="honey-body">
         {props.needsDay ? (
-          <p className="honey-note">Pick a storm day, or use Live through 24 hours. Money holes rank one convective day.</p>
+          <p className="honey-note">Pick a storm day, or use Live through 24 hours. Money Hole ranks one storm day.</p>
         ) : null}
         {props.error ? <p className="honey-note">{props.error}</p> : null}
         {props.note && !props.error ? <p className="honey-note">{props.note}</p> : null}
         {props.loading && !props.needsDay ? (
           <div aria-busy="true" className="space-y-2 px-1" data-honey-loading>
-            <p className="honey-note">Finding Money Holes…</p>
+            <p className="honey-note">Ranking Money Holes… lots and neighborhoods take a few seconds.</p>
+            <div className="honey-progress" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
           </div>
         ) : null}
-        {!props.needsDay && !props.loading && !props.spots.length && !props.error ? (
-          <p className="honey-note">No hail-hit stops in this view yet.</p>
+        {props.zoomedOut && !props.loading ? (
+          <p className="honey-note">Zoom in to a city and Money Hole will rank the hail-hit stops.</p>
+        ) : null}
+        {!props.needsDay && !props.zoomedOut && !props.loading && !props.spots.length && !props.error ? (
+          <p className="honey-note">Pan over a hail swath to rank stops, or pick another storm day.</p>
         ) : null}
         {props.loading ? null : <ol className="honey-list">
           {props.spots.map((spot, index) => {
@@ -125,9 +133,9 @@ export default function HoneyPanel(props: Props) {
                   <span className="min-w-0">
                     <span className="honey-name">{spot.name}</span>
                     <span className="honey-meta">
-                      {KIND_LABEL[spot.kind] ?? "Stop"} · {spot.hailIn.toFixed(2)} in
+                      {KIND_LABEL[spot.kind] ?? "Stop"} · {hailLine(spot)}
                       {count != null ? ` · ${count.toLocaleString("en-US")} ${countLabel}` : ""}
-                      {spot.distanceKm != null && props.distanceFrom ? ` · ${miles(spot.distanceKm)} from ${props.distanceFrom}` : ""}
+                      {spot.distanceKm != null && props.distanceFrom ? ` · ${formatMiles(spot.distanceKm)} from ${props.distanceFrom}` : ""}
                     </span>
                     <span className="honey-source">{spot.sourceLabel}</span>
                   </span>
@@ -145,8 +153,9 @@ export default function HoneyPanel(props: Props) {
   );
 }
 
-function miles(km: number): string {
-  const value = km * 0.621371;
-  if (value < 10) return `${value.toFixed(1)} mi`;
-  return `${Math.round(value)} mi`;
+function hailLine(spot: HoneySpotView): string {
+  if (spot.radarIn != null || spot.spotterIn != null) {
+    return formatHailSources({ radarIn: spot.radarIn, spotterIn: spot.spotterIn });
+  }
+  return `${spot.hailIn.toFixed(2)} in · ${spot.sourceLabel}`;
 }

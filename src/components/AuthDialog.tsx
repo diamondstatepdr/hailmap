@@ -53,7 +53,7 @@ export default function AuthDialog({ configured, onClose, onSignedIn }: Props) {
         </p>
         {configured ? null : (
           <p className="mt-3 rounded-2xl bg-app px-3 py-2 text-sm text-muted">
-            Sign-in is not configured. Set HAILMAP_TEAM_PASSCODE on the server.
+            Sign-in is not configured on this server yet. Ask whoever set up HailMap for the team passcode.
           </p>
         )}
         <label className="mt-4 block text-sm font-medium">

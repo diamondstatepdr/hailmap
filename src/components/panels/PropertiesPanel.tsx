@@ -7,6 +7,7 @@ import type { RadarSample } from "@/lib/area-selection";
 import { TIME_WINDOWS } from "@/lib/filters";
 import { laterPhase } from "@/lib/seams";
 import type { PlaceHistory } from "@/lib/place";
+import { formatMiles, SEARCH_RADIUS_MILES, type SearchRadiusMi } from "@/lib/units";
 
 export interface WatchItem {
   id: string;
@@ -18,9 +19,9 @@ export interface WatchItem {
 }
 
 interface Props {
-  radiusKm: number;
+  radiusMi: SearchRadiusMi;
   hours: number;
-  onRadius: (radiusKm: number) => void;
+  onRadius: (radiusMi: SearchRadiusMi) => void;
   onHours: (hours: number) => void;
   onSearch: (hit: AddressHit) => void;
   history: PlaceHistory | null;
@@ -54,15 +55,15 @@ export default function PropertiesPanel(props: Props) {
         <AddressSearch onPick={props.onSearch} autoFocus />
       </div>
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Search radius">
-        {[5, 10, 15, 25, 40].map((radius) => (
+        {SEARCH_RADIUS_MILES.map((radius) => (
           <button
             key={radius}
             type="button"
-            aria-pressed={props.radiusKm === radius}
+            aria-pressed={props.radiusMi === radius}
             onClick={() => props.onRadius(radius)}
-            className={`press rounded-full px-3 py-1.5 text-sm ${props.radiusKm === radius ? "chip-on" : "chip"}`}
+            className={`tap press rounded-full px-3 text-sm ${props.radiusMi === radius ? "chip-on" : "chip"}`}
           >
-            {radius} km
+            {radius} mi
           </button>
         ))}
       </div>
@@ -73,7 +74,7 @@ export default function PropertiesPanel(props: Props) {
             type="button"
             aria-pressed={props.hours === item.hours}
             onClick={() => props.onHours(item.hours)}
-            className={`press rounded-full px-3 py-1.5 text-sm ${props.hours === item.hours ? "chip-on" : "chip"}`}
+            className={`tap press rounded-full px-3 text-sm ${props.hours === item.hours ? "chip-on" : "chip"}`}
           >
             {item.label}
           </button>
@@ -90,7 +91,7 @@ export default function PropertiesPanel(props: Props) {
         </div>
       ) : null}
       {props.error ? <p className="mt-4 max-w-3xl rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{props.error}</p> : null}
-      {!props.history && !props.loading ? (
+      {!props.history && !props.loading && !props.label ? (
         <div className="empty-state mt-6 max-w-xl">
           <House className="mx-auto mb-2" size={26} />
           <p className="text-sm font-semibold text-ink">Search an address</p>
@@ -131,7 +132,7 @@ export default function PropertiesPanel(props: Props) {
             <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2">
               <button type="button" onClick={() => props.onOpenWatch(item)} className="min-w-0 text-left">
                 <span className="block truncate text-sm font-medium">{item.label}</span>
-                <span className="text-xs text-muted">{item.radiusKm} km</span>
+                <span className="text-xs text-muted">{formatMiles(item.radiusKm)}</span>
               </button>
               <button type="button" onClick={() => props.onRemoveWatch(item.id)} className="text-xs font-semibold text-muted">
                 Remove

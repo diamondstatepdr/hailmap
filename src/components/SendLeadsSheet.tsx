@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { CrmProvider } from "@/lib/crm";
+import { formatSentClock } from "@/lib/sent-clock";
 
 interface PublicSettings {
   provider: CrmProvider | null;
@@ -26,11 +27,9 @@ function leadLabel(count: number): string {
 
 function lastSentLine(at: string | null, result: string | null): string {
   if (!at) return "Not sent yet.";
-  const when = new Date(at);
-  const label = Number.isNaN(when.getTime())
-    ? at
-    : when.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  return result ? `Last sent ${label}. ${result}` : `Last sent ${label}.`;
+  const clock = formatSentClock(at);
+  if (!clock) return result ? `Last sent. ${result}` : "Not sent yet.";
+  return result ? `Last sent ${clock}. ${result}` : `Last sent ${clock}.`;
 }
 
 export default function SendLeadsSheet({

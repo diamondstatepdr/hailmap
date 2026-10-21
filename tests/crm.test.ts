@@ -20,6 +20,7 @@ import {
   webhookTarget,
   type OutboundLead,
 } from "@/lib/crm";
+import { formatSentClock } from "@/lib/sent-clock";
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-crm-"));
 process.env.HAILMAP_DATA_DIR = dataDir;
@@ -70,6 +71,12 @@ const norman: OutboundLead = {
 };
 
 describe("crm destinations", () => {
+  it("shows the last send in the device time zone", () => {
+    const at = "2026-10-21T18:13:01.722Z";
+    expect(formatSentClock(at, "America/Chicago")).toBe("Oct 21, 1:13 PM CDT");
+    expect(formatSentClock(at, "UTC")).toBe("Oct 21, 6:13 PM UTC");
+  });
+
   it("blocks private webhook addresses and allows a public https link", async () => {
     expect(isBlockedAddress("127.0.0.1")).toBe(true);
     expect(isBlockedAddress("10.1.2.3")).toBe(true);

@@ -47,6 +47,8 @@ interface Props {
   onSelectPin: (id: string) => void;
   onUpload: (pinId: string, file: File, damageType: string, note: string) => Promise<void>;
   onClose: () => void;
+  onProof?: () => void;
+  proofBusy?: boolean;
 }
 
 const STATUS_TONE: Record<PinStatus, string> = {
@@ -86,6 +88,8 @@ export default function FieldSheet({
   onSelectPin,
   onUpload,
   onClose,
+  onProof,
+  proofBusy,
 }: Props) {
   const [note, setNote] = useState("");
   const [damageType, setDamageType] = useState<(typeof FIELD_DAMAGE_TYPES)[number]>("hail");
@@ -154,6 +158,11 @@ export default function FieldSheet({
           ) : null}
         </div>
       )}
+      {onProof && lat != null && lon != null ? (
+        <button type="button" onClick={onProof} disabled={proofBusy} className="btn btn-secondary press mt-3 w-full text-sm" data-hail-proof>
+          {proofBusy ? "Making the PDF…" : "Hail proof PDF"}
+        </button>
+      ) : null}
       <div className="mt-3 rounded-2xl border border-line bg-panel-2 p-3" style={{ background: "var(--panel-2)" }}>
         <div className="flex items-center gap-2">
           <span className="hazard-badge h-8 w-8 hazard-hail">

@@ -18,6 +18,8 @@ interface Props {
   radarLoading?: boolean;
   onSave?: () => void;
   onReport?: () => void;
+  onProof?: () => void;
+  proofBusy?: boolean;
   onAlert?: () => void;
   onClose?: () => void;
   saveLabel?: string;
@@ -25,7 +27,7 @@ interface Props {
   bare?: boolean;
 }
 
-export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onProof, proofBusy, onAlert, onClose, saveLabel, bare }: Props) {
   const score = history.score;
   const factors = topScoreFactors(score.factors);
   const hailLine = formatHailSources({
@@ -155,6 +157,11 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
         {onReport ? (
           <button type="button" onClick={onReport} className="btn btn-secondary press">
             Storm report
+          </button>
+        ) : null}
+        {onProof ? (
+          <button type="button" onClick={onProof} disabled={proofBusy} className="btn btn-secondary press" data-hail-proof>
+            {proofBusy ? "Making the PDF…" : "Hail proof PDF"}
           </button>
         ) : null}
       </div>

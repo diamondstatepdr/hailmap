@@ -47,6 +47,8 @@ interface Props {
   onReplay?: (date: string) => void;
   onSave?: () => void;
   onReport?: () => void;
+  onProof?: () => void;
+  proofBusy?: boolean;
   onAlert?: () => void;
   onClose?: () => void;
   expanded?: boolean;
@@ -66,6 +68,8 @@ export default function AddressHistoryCard({
   onReplay,
   onSave,
   onReport,
+  onProof,
+  proofBusy,
   onAlert,
   onClose,
   expanded = true,
@@ -298,6 +302,11 @@ export default function AddressHistoryCard({
         {onReport ? (
           <button type="button" onClick={onReport} className="btn btn-secondary press">
             Storm report
+          </button>
+        ) : null}
+        {onProof ? (
+          <button type="button" onClick={onProof} disabled={proofBusy} className="btn btn-secondary press" data-hail-proof>
+            {proofBusy ? "Making the PDF…" : "Hail proof PDF"}
           </button>
         ) : null}
       </div>

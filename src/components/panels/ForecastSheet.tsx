@@ -151,7 +151,7 @@ export default function ForecastSheet({ label, query, onClose }: Props) {
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
       <BottomSheet label={ESTIMATE_TITLE} tone="money" onClose={onClose} expandedMax="min(74dvh, 40rem)" peekHeight={168}>
-        <div data-forecast className="px-4 pb-1">
+        <div data-forecast className="px-4 pb-6">
           <div className="forecast-head">
             <h2 className="forecast-title">{ESTIMATE_TITLE}</h2>
             <span className="forecast-badge" data-estimate-badge>

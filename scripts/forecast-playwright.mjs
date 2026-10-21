@@ -71,6 +71,16 @@ async function shoot(browser, label, options, theme, name) {
     if (await close.count()) await close.first().click();
   }
   if (!opened) throw new Error("no swath produced a dollar estimate");
+  const help = page.locator("[data-help-open]");
+  const helpBox = await help.boundingBox();
+  const viewport = page.viewportSize();
+  if (!helpBox || !viewport || helpBox.x < 0 || helpBox.x + helpBox.width > viewport.width + 1) {
+    throw new Error("help chip is clipped by the viewport");
+  }
+  const band = page.locator("[data-forecast] li").filter({ hasText: /1\.5/ }).first();
+  if (await band.count()) {
+    await band.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  }
   await page.waitForTimeout(400);
   const file = `${outDir}/${label}-${name}.png`;
   await page.screenshot({ path: file });

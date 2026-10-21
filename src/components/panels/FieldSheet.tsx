@@ -46,6 +46,8 @@ interface Props {
   onMark: (status: PinStatus, note: string) => void;
   onSelectPin: (id: string) => void;
   onUpload: (pinId: string, file: File, damageType: string, note: string) => Promise<void>;
+  onSendLeads: () => void;
+  sendMessage: string | null;
   onClose: () => void;
 }
 
@@ -85,6 +87,8 @@ export default function FieldSheet({
   onMark,
   onSelectPin,
   onUpload,
+  onSendLeads,
+  sendMessage,
   onClose,
 }: Props) {
   const [note, setNote] = useState("");
@@ -223,6 +227,14 @@ export default function FieldSheet({
               </button>
             ))}
           </div>
+          <button type="button" className="btn btn-primary press send-lead mt-3 w-full" onClick={onSendLeads}>
+            Send leads
+          </button>
+          {sendMessage ? (
+            <p className="send-lead-note" role="status">
+              {sendMessage}
+            </p>
+          ) : null}
           <div className="mt-3">
             <p className="text-xs font-semibold text-muted">Your pins</p>
             {!pins.length ? <p className="text-xs text-muted">No pins yet. Marks stay on your account.</p> : null}

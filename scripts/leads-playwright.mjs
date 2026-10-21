@@ -90,6 +90,7 @@ async function shoot(browser, label, options, theme, name) {
   await hideDev(page);
   await install(page);
   await page.goto(`${base}/?lat=33.415&lon=-111.837&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.locator(".maplibregl-canvas").waitFor({ timeout: 20000 });
   const reports = page.getByRole("button", { name: /^Reports/ });
   await reports.waitFor({ timeout: 20000 });
   await reports.click();

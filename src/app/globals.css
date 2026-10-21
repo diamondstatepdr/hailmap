@@ -3144,3 +3144,63 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
 .sheet-body .address-search {
   margin-top: 0.2rem;
 }
+
+.send-leads,
+.send-leads p,
+.send-leads label,
+.send-leads input,
+.send-leads button,
+.send-lead,
+.send-lead-note {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.send-leads h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.send-leads button,
+.send-leads input,
+.send-lead {
+  min-height: 44px;
+}
+
+.send-leads button {
+  width: 100%;
+  border-radius: 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  padding: 0 0.8rem;
+}
+
+.send-leads button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+.send-leads input {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 0.8rem;
+}
+
+.send-leads-ok,
+.send-leads-bad,
+.send-lead-note {
+  margin-top: 0.75rem;
+}
+
+.send-lead {
+  font-size: 15px;
+}

@@ -167,6 +167,14 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_action_limits ON action_limits(kind, ip_hash, created_at);
+    CREATE TABLE IF NOT EXISTS crm_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      provider TEXT NOT NULL,
+      secret TEXT NOT NULL,
+      record_type TEXT NOT NULL,
+      status_name TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Palette, SlidersHorizontal, SunMedium } from "lucide-react";
+import { Moon, Palette, Send, SlidersHorizontal, SunMedium } from "lucide-react";
 
 interface StateChip {
   code: string;
@@ -14,12 +14,13 @@ interface Props {
   onAppearance: () => void;
   onFilters: () => void;
   onHelp: () => void;
+  onSendLeads: () => void;
   onClose: () => void;
   states?: StateChip[];
   onState?: (code: string) => void;
 }
 
-export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters, onHelp, onClose, states = [], onState }: Props) {
+export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters, onHelp, onSendLeads, onClose, states = [], onState }: Props) {
   return (
     <div id="app-menu" className="app-menu" data-app-menu role="menu">
       <button type="button" role="menuitem" onClick={() => { onAppearance(); onClose(); }}>
@@ -37,6 +38,10 @@ export default function AppMenu({ theme, onToggleTheme, onAppearance, onFilters,
       <button type="button" role="menuitem" onClick={() => { onHelp(); onClose(); }}>
         ?
         What do I do here?
+      </button>
+      <button type="button" role="menuitem" onClick={() => { onSendLeads(); onClose(); }}>
+        <Send size={18} />
+        Send leads
       </button>
       {states.length && onState ? (
         <div className="menu-states">

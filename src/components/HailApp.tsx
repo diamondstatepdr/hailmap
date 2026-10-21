@@ -21,6 +21,7 @@ import AddressHistoryCard, { type AddressHistoryView } from "@/components/Addres
 import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import FieldSheet from "@/components/panels/FieldSheet";
+import SendLeadsSheet from "@/components/SendLeadsSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
@@ -200,6 +201,8 @@ export default function HailApp() {
   const [showHeat, setShowHeat] = useState(false);
   const [honeyOpen, setHoneyOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [fieldSendMessage, setFieldSendMessage] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
@@ -1439,6 +1442,17 @@ export default function HailApp() {
     setPins(list.pins ?? []);
   }
 
+  async function sendFieldLeads() {
+    setFieldSendMessage(null);
+    const response = await fetch("/api/crm/leads", { method: "POST" });
+    const payload = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;
+    if (response.status === 409) {
+      setCrmOpen(true);
+      return;
+    }
+    setFieldSendMessage(payload?.message || payload?.error || "Could not send leads.");
+  }
+
   async function loadDealers(selection: AreaSelection) {
     setArea(selection);
     setDealerLoading(true);
@@ -1980,6 +1994,7 @@ export default function HailApp() {
                   onAppearance={() => setPickerOpen(true)}
                   onFilters={() => setFiltersOpen(true)}
                   onHelp={() => setHelpOpen(true)}
+                  onSendLeads={() => setCrmOpen(true)}
                   onClose={() => setMenuOpen(false)}
                   states={stateCounts.slice(0, 12).map(([code, count]) => ({ code, count, on: filter.state === code }))}
                   onState={(code) => setStateFilter(filter.state === code ? "" : code)}
@@ -2545,9 +2560,21 @@ export default function HailApp() {
                   setFocus({ lon: pin.lon, lat: pin.lat, nonce: Date.now(), zoom: 16 });
                 }}
                 onUpload={uploadFieldPhoto}
+                onSendLeads={() => void sendFieldLeads()}
+                sendMessage={fieldSendMessage}
                 onClose={() => setSection("map")}
               />
             </div>
+          ) : null}
+          {crmOpen ? (
+            <SendLeadsSheet
+              onClose={() => setCrmOpen(false)}
+              signedIn={Boolean(user)}
+              onSignIn={() => {
+                setCrmOpen(false);
+                setAuthOpen(true);
+              }}
+            />
           ) : null}
           {filtersOpen ? (
             <MapFilters

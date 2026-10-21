@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CarFront } from "lucide-react";
+import { ProofLaunch } from "@/components/hail-proof/ProofActions";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { DealerPin } from "@/lib/area-selection";
 import { fieldScoreCopy, fieldStreetTitle } from "@/lib/field-status";
@@ -47,6 +48,8 @@ interface Props {
   onSelectPin: (id: string) => void;
   onUpload: (pinId: string, file: File, damageType: string, note: string) => Promise<void>;
   onClose: () => void;
+  onProof?: (company: string, phone: string) => void;
+  proofBusy?: boolean;
 }
 
 const STATUS_TONE: Record<PinStatus, string> = {
@@ -86,6 +89,8 @@ export default function FieldSheet({
   onSelectPin,
   onUpload,
   onClose,
+  onProof,
+  proofBusy,
 }: Props) {
   const [note, setNote] = useState("");
   const [damageType, setDamageType] = useState<(typeof FIELD_DAMAGE_TYPES)[number]>("hail");
@@ -154,6 +159,7 @@ export default function FieldSheet({
           ) : null}
         </div>
       )}
+      {onProof && lat != null && lon != null ? <ProofLaunch busy={proofBusy} onProof={onProof} /> : null}
       <div className="mt-3 rounded-2xl border border-line bg-panel-2 p-3" style={{ background: "var(--panel-2)" }}>
         <div className="flex items-center gap-2">
           <span className="hazard-badge h-8 w-8 hazard-hail">

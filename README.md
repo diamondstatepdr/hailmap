@@ -82,6 +82,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
 - `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot. A body with `start` and `end` uses the multi-year archive: date-of-loss candidates are listed, and the damage score is the selected `scoreDate` or the strongest hail day.
+- `POST /api/hail-proof` — one-tap hail proof. Returns a share link and a branded PDF with the address, storm dates, max hail size, a swath map, nearby reports, and the damage score. `GET /api/hail-proof/[id]` downloads the PDF. `GET /proof/[id]` is the phone page. The page is labeled an estimate.
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)
 - `POST /api/webhooks/spotter` and `POST /api/webhooks/community` — JSON body `{ "lat", "lon", "size", "occurredAt", "location", "remark" }` with `Authorization: Bearer $HAILMAP_WEBHOOK_SECRET`
 

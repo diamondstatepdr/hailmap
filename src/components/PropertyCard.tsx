@@ -7,6 +7,7 @@ import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { topScoreFactors } from "@/lib/probability";
 import { formatHailSources, formatMiles } from "@/lib/units";
+import { ProofLaunch } from "@/components/hail-proof/ProofActions";
 import ScoreRing from "@/components/ui/ScoreRing";
 import Sparkline from "@/components/ui/Sparkline";
 
@@ -18,6 +19,8 @@ interface Props {
   radarLoading?: boolean;
   onSave?: () => void;
   onReport?: () => void;
+  onProof?: (company: string, phone: string) => void;
+  proofBusy?: boolean;
   onAlert?: () => void;
   onClose?: () => void;
   saveLabel?: string;
@@ -25,7 +28,7 @@ interface Props {
   bare?: boolean;
 }
 
-export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onAlert, onClose, saveLabel, bare }: Props) {
+export default function PropertyCard({ label, history, mesh, radar, radarLoading, onSave, onReport, onProof, proofBusy, onAlert, onClose, saveLabel, bare }: Props) {
   const score = history.score;
   const factors = topScoreFactors(score.factors);
   const hailLine = formatHailSources({
@@ -157,6 +160,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
             Storm report
           </button>
         ) : null}
+        {onProof ? <ProofLaunch busy={proofBusy} onProof={onProof} /> : null}
       </div>
     </article>
   );

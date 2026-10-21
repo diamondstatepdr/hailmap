@@ -14,7 +14,7 @@ interface Props {
 export default function MapDetailSheet({ label, onClose, children, expandedMax = "min(70dvh, 32rem)" }: Props) {
   return (
     <BottomSheet label={label} tone="map" onClose={onClose} expandedMax={expandedMax} peekHeight={112}>
-      <div className="px-4 pb-4">{children}</div>
+      <div className="map-detail-body">{children}</div>
     </BottomSheet>
   );
 }

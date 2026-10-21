@@ -39,7 +39,15 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ timeout: 30000 });
-  if (fileLabel !== "before") await page.locator(".map-tool-row").waitFor({ timeout: 20000 });
+  if (fileLabel !== "before") {
+    await page.locator(".map-topbar .plain-actions").waitFor({ timeout: 20000 });
+    await page.locator("[data-help-open]").waitFor({ timeout: 20000 });
+    const help = await page.locator("[data-help-open]").boundingBox();
+    const viewport = page.viewportSize();
+    if (!help || !viewport || help.x < 0 || help.x + help.width > viewport.width + 1) {
+      throw new Error(`help chip is clipped: ${JSON.stringify(help)}`);
+    }
+  }
   await closeChase(page);
   await page.waitForTimeout(fileLabel === "before" ? 5000 : 3500);
   const box = await canvas.boundingBox();
@@ -85,6 +93,10 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
     await page.waitForTimeout(250);
   }
   if (!opened) throw new Error(`could not open a 2 inch swath with dealers on ${label} ${name}`);
+  if (fileLabel !== "before") {
+    const pad = await page.locator(".map-detail-body").evaluate((el) => Number.parseFloat(getComputedStyle(el).paddingLeft));
+    if (!(pad >= 16)) throw new Error(`swath sheet side padding is ${pad}px`);
+  }
   if (fileLabel !== "before") {
     await page.locator("[data-swath-place]").waitFor({ timeout: 12000 });
     await page.locator("[data-dealer-open]").click();

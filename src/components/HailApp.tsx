@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CloudHail, Gem, Moon, Palette, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
@@ -54,7 +54,8 @@ import { parseAlertLink } from "@/lib/alert-model";
 import { boundsCenter, fieldPinPoint, resolveFieldAnchor, FIELD_LOOKUP_MS, type FieldAnchor } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
 import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
-import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
+import { chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
+import { chaseDotUnseen, chaseTopKey } from "@/lib/list-freshness";
 import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
@@ -111,6 +112,7 @@ interface HoneyResponse {
   note?: string | null;
   attribution?: string;
   error?: string;
+  updatedAt?: string;
   spots?: { pdr: HoneySpotView[]; roof: HoneySpotView[] };
   heat?: { pdr: GeoJSON.FeatureCollection; roof: GeoJSON.FeatureCollection };
 }
@@ -193,6 +195,8 @@ export default function HailApp() {
   const [showOutlook, setShowOutlook] = useState(true);
   const [showHeat, setShowHeat] = useState(false);
   const [honeyOpen, setHoneyOpen] = useState(false);
+  const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
+  const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
   const [showHoney, setShowHoney] = useState(false);
   const [honey, setHoney] = useState<HoneyResponse | null>(null);
@@ -319,39 +323,49 @@ export default function HailApp() {
   useEffect(() => {
     let cancelled = false;
     setChaseLoading(true);
-    fetch("/api/chase")
-      .then(async (response) => {
-        const payload = (await response.json()) as ChasePayload & { error?: string };
-        if (!response.ok) throw new Error(payload.error || "unavailable");
-        if (!cancelled) setChase(payload);
-      })
-      .catch(() => {
-        // A refresh failure leaves the last good week on screen. The unavailable
-        // note is only for a first load that never arrives.
-      })
-      .finally(() => {
-        if (!cancelled) setChaseLoading(false);
-      });
+    const load = (initial: boolean) => {
+      fetch("/api/chase")
+        .then(async (response) => {
+          const payload = (await response.json()) as ChasePayload & { error?: string };
+          if (!response.ok) throw new Error(payload.error || "unavailable");
+          if (!cancelled) setChase(payload);
+        })
+        .catch(() => {
+          // A refresh failure leaves the last good week on screen. The unavailable
+          // note is only for a first load that never arrives.
+        })
+        .finally(() => {
+          if (!cancelled && initial) setChaseLoading(false);
+        });
+    };
+    load(true);
+    const timer = window.setInterval(() => load(false), 10 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [section]);
 
   useEffect(() => {
     if (!chase) return;
-    let viewed = false;
+    const topKey = chaseTopKey(chase);
+    let stored: string | null = null;
     try {
-      viewed = !chaseListIsNew(localStorage.getItem(chaseViewedKey(chase.week)));
+      stored = localStorage.getItem(chaseViewedKey(chase.week));
+      if (stored === "1") {
+        localStorage.setItem(chaseViewedKey(chase.week), topKey);
+        stored = topKey;
+      }
     } catch {
-      viewed = false;
+      stored = "1";
     }
-    setChaseUnseen(!viewed);
+    setChaseUnseen(chaseDotUnseen(stored, topKey));
   }, [chase]);
 
   useEffect(() => {
     if (section !== "storms" || !chase) return;
     try {
-      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chaseViewedKey(chase.week), chaseTopKey(chase));
       localStorage.setItem(chasePopupKey(chase.week), "1");
     } catch {
       // Private mode can block storage. The in-memory flag still hides the dot.
@@ -1146,7 +1160,7 @@ export default function HailApp() {
     if (!chase) return;
     setChasePopup(true);
     try {
-      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chaseViewedKey(chase.week), chaseTopKey(chase));
       localStorage.setItem(chasePopupKey(chase.week), "1");
     } catch {
       // Private mode can block storage. The sheet still opens.
@@ -1737,6 +1751,24 @@ export default function HailApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, pickerOpen, overlay, customOpen, placeExpanded]);
 
+  useLayoutEffect(() => {
+    const stage = mapStageRef.current;
+    if (!stage || section !== "map" || !honeyOpen) {
+      setHoneyStackPx(null);
+      return;
+    }
+    const dock = stage.querySelector<HTMLElement>(".honey-dock");
+    if (!dock) return;
+    const apply = () => {
+      const height = Math.ceil(dock.getBoundingClientRect().height);
+      if (height > 0) setHoneyStackPx((current) => (current === height ? current : height));
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [section, honeyOpen]);
+
   return (
     <AppShell
       section={section}
@@ -1755,11 +1787,13 @@ export default function HailApp() {
       stormsNew={chaseUnseen && section !== "storms"}
     >
       <div
+          ref={mapStageRef}
           className={showMap ? "absolute inset-0" : "hidden"}
           style={
             {
               "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
               "--chase-map-gap": "13.5rem",
+              "--honey-stack": honeyStackPx != null ? `${honeyStackPx}px` : undefined,
             } as CSSProperties
           }
         >
@@ -2257,6 +2291,7 @@ export default function HailApp() {
               needsDay={!honeyQuery}
               distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
               attribution={honey?.attribution ?? "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports."}
+              updatedAt={honey?.updatedAt ?? chase?.generatedAt ?? null}
               onClose={() => setHoneyOpen(false)}
               onSelect={(spot) => {
                 setSelectedHoneyId(spot.id);

@@ -525,6 +525,40 @@ describe("chase list UI", () => {
     expect(html).toContain(">86<");
   });
 
+  it("renders each stop's own hail size, vehicle count, and date", () => {
+    const base = samplePayload(false).fresh.pdr[0];
+    const payload: ChasePayload = {
+      ...samplePayload(false),
+      fresh: {
+        pdr: [
+          { ...base, id: "mesa", name: "Mesa, AZ", date: "2026-10-20", radarIn: null, spotterIn: 2, vehicles: 233409, score: 78 },
+          { ...base, id: "deming", name: "Deming, NM", date: "2026-10-19", radarIn: 2.24, spotterIn: 1.25, vehicles: 3912, score: 75 },
+        ],
+        roof: [],
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(ChaseSection, {
+        mode: "pdr",
+        payload,
+        preview: false,
+        onMode: () => undefined,
+        onSelect: () => undefined,
+      }),
+    );
+    expect(html).toContain("Mesa, AZ");
+    expect(html).toContain("Deming, NM");
+    expect(html).toContain("Oct 20, 2026");
+    expect(html).toContain("Oct 19, 2026");
+    expect(html).toContain("Radar —");
+    expect(html).toContain("Spotter 2.00&quot;");
+    expect(html).toContain("233,409 vehicles in path");
+    expect(html).toContain("Radar 2.24&quot;");
+    expect(html).toContain("Spotter 1.25&quot;");
+    expect(html).toContain("3,912 vehicles in path");
+    expect(html.match(/data-chase-stop/g)).toHaveLength(2);
+  });
+
   it("renders the quiet empty state and recent major storms", () => {
     const html = renderToStaticMarkup(
       createElement(ChaseSection, {

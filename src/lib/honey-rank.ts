@@ -22,6 +22,7 @@ import { loadPlanGrids } from "@/lib/mesh-cache";
 import { addIsoDays, formatStormDate, isoDateUTC, planMesh } from "@/lib/mesh-plan";
 import { convectiveDay } from "@/lib/parsers";
 import { ensureDaily } from "@/lib/spc-archive";
+import { readStormRefresh } from "@/lib/storm-refresh";
 
 export interface HoneyPayload {
   date: string | null;
@@ -34,6 +35,8 @@ export interface HoneyPayload {
   zoom: boolean;
   note: string | null;
   attribution: string;
+  /** When the server last pulled hail and rebuilt rankings. */
+  updatedAt: string;
   spots: { pdr: HoneySpot[]; roof: HoneySpot[] };
   heat: { pdr: GeoJSON.FeatureCollection; roof: GeoJSON.FeatureCollection };
 }
@@ -43,7 +46,11 @@ const ATTRIBUTION =
 
 const MAX_SPAN_KM = 210;
 
-function emptyPayload(label: string, note: string, zoom = false): HoneyPayload {
+function rankingUpdatedAt(now: Date): string {
+  return readStormRefresh()?.refreshedAt ?? now.toISOString();
+}
+
+function emptyPayload(label: string, note: string, zoom = false, now = new Date()): HoneyPayload {
   return {
     date: null,
     label,
@@ -53,6 +60,7 @@ function emptyPayload(label: string, note: string, zoom = false): HoneyPayload {
     zoom,
     note,
     attribution: ATTRIBUTION,
+    updatedAt: rankingUpdatedAt(now),
     spots: { pdr: [], roof: [] },
     heat: { pdr: emptyHeat(), roof: emptyHeat() },
   };
@@ -367,6 +375,7 @@ export async function buildHoney(input: {
     zoom: false,
     note: notes.length ? notes.join(" ") : null,
     attribution: ATTRIBUTION,
+    updatedAt: rankingUpdatedAt(now),
     spots: { pdr: pdrRanked.list, roof: roofRanked.list },
     heat: { pdr: pdrRanked.heat, roof: roofRanked.heat },
   };

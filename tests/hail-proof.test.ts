@@ -9,10 +9,12 @@ import {
   normalizeProof,
   proofFilename,
   proofMapSvg,
+  proofSwathStat,
   renderHailProofPdf,
   ringsNearPoint,
   stormsFromDaily,
 } from "@/lib/hail-proof";
+import { unproject } from "@/lib/geo";
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-proof-"));
 process.env.HAILMAP_DATA_DIR = dataDir;
@@ -92,6 +94,18 @@ describe("hail proof document", () => {
     expect(text).toContain("High");
     expect(text).toContain("Apr 25, 2026");
     expect(text).toContain("not a roof inspection");
+    expect(text).toContain("sq mi");
+    const rectangle = [
+      [0, 0],
+      [3.218688, 0],
+      [3.218688, 1.609344],
+      [0, 1.609344],
+      [0, 0],
+    ].map(([x, y]) => {
+      const point = unproject(x, y, -97.33, 32.75);
+      return [point.lon, point.lat];
+    });
+    expect(proofSwathStat([rectangle])).toBe("2 mi long · 1 mi wide · 2 sq mi");
     expect(proofMapSvg(proof)).toContain("Swath map");
     expect(proofMapSvg(proof)).toContain("<path");
   });

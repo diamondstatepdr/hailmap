@@ -55,6 +55,44 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
               <dd>{dates.length ? dates.join(", ") : "None in this view"}</dd>
             </div>
           </dl>
+          {proof.confirm ? (
+            <section className="proof-confirm" data-proof-confirm>
+              <div className="proof-confirm-copy">
+                {proof.confirm.seal ? null : (
+                  <p className="proof-radar-only" data-proof-radar-only>
+                    Radar only
+                  </p>
+                )}
+                <p className="proof-radar-line">{proof.confirm.radarLine}</p>
+                {proof.confirm.reports.length ? (
+                  <ul className="proof-spotters">
+                    {proof.confirm.reports.map((report) => (
+                      <li key={`${report.timeUtc}-${report.where}-${report.sizeIn}`}>
+                        <span className="spot-size">
+                          {report.sizeIn.toFixed(2)} in · {report.distanceMi.toFixed(1)} mi · {report.where}
+                        </span>
+                        <span className="spot-meta">
+                          {report.timeUtc} · {report.timeLocal}
+                        </span>
+                        <span className="spot-meta">{report.source}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {proof.confirm.note ? <p className="proof-confirm-note">{proof.confirm.note}</p> : null}
+                <p className="proof-confirm-note">{proof.confirm.disclaimer}</p>
+              </div>
+              {proof.confirm.seal ? (
+                <p className="proof-seal" data-proof-seal>
+                  Radar +
+                  <br />
+                  spotter
+                  <br />
+                  confirmed
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           <div className="proof-map" dangerouslySetInnerHTML={{ __html: map }} />
           <p className="text-[11px] text-muted">Streets © OpenStreetMap contributors</p>
           {swathLine ? <p className="text-sm font-semibold">{swathLine}</p> : null}

@@ -18,6 +18,7 @@ import {
 } from "@/lib/hail-proof";
 import { unproject } from "@/lib/geo";
 import { renderHailProofPdf } from "@/lib/hail-proof-pdf";
+import { decideConfirmation, type LsrHit } from "@/lib/proof-confirm";
 import { statLine } from "@/lib/swath-measure";
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-proof-"));
@@ -156,6 +157,114 @@ describe("hail proof document", () => {
     expect(proofMapSvg(proof)).not.toContain("#9d174d");
   });
 
+  it("prints the seal only when radar hail is at least 1 inch and a spotter report matches", () => {
+    const mesa: LsrHit = {
+      occurredAt: "2026-10-21T05:10:00.000Z",
+      lat: 33.38,
+      lon: -111.87,
+      sizeIn: 1,
+      where: "3 SW Mesa, Maricopa, AZ",
+      remark: "Report from mPING: Quarter (1.00 in.). (PSR)",
+      observer: null,
+      from: "spc",
+    };
+    const gilbert: LsrHit = {
+      ...mesa,
+      lat: 33.35,
+      lon: -111.84,
+      where: "3 W Gilbert, Maricopa, AZ",
+      remark: "Dime to quarter size. (PSR)",
+    };
+    const late: LsrHit = { ...mesa, occurredAt: "2026-10-21T07:30:00.000Z" };
+    const confirmed = decideConfirmation({
+      lat: 33.415,
+      lon: -111.837,
+      radarIn: 2.53,
+      radarAt: "2026-10-21T05:12:00.000Z",
+      radarKind: "scan",
+      reports: [mesa, gilbert, late],
+    });
+    expect(confirmed.seal).toBe(true);
+    expect(confirmed.headline).toBe("Radar + spotter confirmed");
+    expect(confirmed.reports).toHaveLength(1);
+    expect(confirmed.reports[0]?.source).toContain("mPING");
+    expect(confirmed.reports[0]?.source).toContain("PSR");
+    expect(confirmed.reports[0]?.distanceMi).toBe(3.1);
+    expect(confirmed.reports[0]?.timeUtc).toContain("05:10");
+    expect(confirmed.reports[0]?.timeLocal).toMatch(/MST|10:10/);
+    expect(confirmed.radarLine).toContain("05:12");
+    expect(confirmed.radarLine).toContain("UTC");
+    expect(confirmed.disclaimer).toContain("not a meteorologist certification");
+    expect(confirmed.disclaimer).toContain("not an insurance decision");
+
+    const small = decideConfirmation({
+      lat: 33.415,
+      lon: -111.837,
+      radarIn: 0.75,
+      radarAt: "2026-10-21T05:12:00.000Z",
+      radarKind: "scan",
+      reports: [mesa],
+    });
+    expect(small.seal).toBe(false);
+    expect(small.headline).toBe("Radar only");
+    expect(small.reports).toHaveLength(1);
+
+    const daily = decideConfirmation({
+      lat: 33.415,
+      lon: -111.837,
+      radarIn: 2.53,
+      radarAt: "2026-10-21T12:00:00.000Z",
+      radarKind: "daily",
+      reports: [mesa],
+    });
+    expect(daily.seal).toBe(false);
+    expect(daily.reports).toHaveLength(0);
+
+    const proof = normalizeProof(
+      {
+        ...draft,
+        confirm: {
+          seal: true,
+          headline: "Radar + spotter confirmed",
+          radarIn: 0.4,
+          radarAt: "2026-10-21T05:12:00.000Z",
+          radarKind: "scan",
+          radarLine: "Radar scan 0.40 in",
+          note: "",
+          reports: [{ timeUtc: "2026-10-21 05:10 UTC", timeLocal: "Oct 20, 10:10 PM MST", sizeIn: 1, distanceMi: 3.1, source: "SPC Local Storm Report · mPING · PSR", where: "3 SW Mesa" }],
+          disclaimer: "forged",
+        },
+      },
+      "2026-04-26T12:00:00.000Z",
+    );
+    if ("error" in proof) throw new Error(proof.error);
+    expect(proof.confirm?.seal).toBe(false);
+    expect(proof.confirm?.headline).toBe("Radar only");
+    const quiet = renderHailProofPdf(proof).toString("latin1");
+    expect(quiet).toContain("Radar only");
+    expect(quiet).not.toContain("Radar + spotter confirmed");
+    expect(quiet).toContain("not a meteorologist certification");
+    expect(quiet).not.toContain("Company");
+
+    const sealed = normalizeProof(
+      {
+        ...draft,
+        confirm: {
+          ...confirmed,
+          reports: confirmed.reports,
+        },
+      },
+      "2026-04-26T12:00:00.000Z",
+    );
+    if ("error" in sealed) throw new Error(sealed.error);
+    const sealedText = renderHailProofPdf(sealed).toString("latin1");
+    expect(sealedText).toContain("Radar + spotter confirmed");
+    expect(sealedText).toContain("mPING");
+    expect(sealedText).toContain("3.1 mi");
+    expect(sealedText).toContain("not an insurance decision");
+    expect(sealedText).not.toContain("certified meteorologist");
+  });
+
   it("rejects a proof with no address and serves a saved PDF", async () => {
     const missing = await POST(
       new Request("http://localhost/api/hail-proof", {
@@ -183,6 +292,55 @@ describe("hail proof document", () => {
     const bytes = Buffer.from(await pdf.arrayBuffer());
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     expect(bytes.toString("latin1")).toContain("3500 W 7th St");
+    expect(bytes.toString("latin1")).not.toContain("Radar + spotter confirmed");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: RequestInfo | URL) => {
+      const href = String(url);
+      if (href.includes("rpts_hail")) {
+        return new Response(
+          "Time,Size,Location,County,State,Lat,Lon,Comments\n0510,100,3 SW Mesa,Maricopa,AZ,33.38,-111.87,Report from mPING: Quarter (1.00 in.). (PSR)\n",
+          { status: 200 },
+        );
+      }
+      if (href.includes("lsr.py")) return new Response(JSON.stringify({ type: "FeatureCollection", features: [] }), { status: 200 });
+      return new Response("missing", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const forged = await POST(
+        new Request("http://localhost/api/hail-proof", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...draft,
+            lat: 33.415,
+            lon: -111.837,
+            address: "East Main Street, Mesa, AZ",
+            stormDate: "2026-10-20",
+            confirm: {
+              seal: true,
+              headline: "Radar + spotter confirmed",
+              radarIn: 2.5,
+              radarAt: "2026-10-21T05:10:00.000Z",
+              radarKind: "scan",
+              radarLine: "forged",
+              reports: [{ timeUtc: "2026-10-21 05:10 UTC", timeLocal: "10:10 PM MST", sizeIn: 1, distanceMi: 1, source: "forged", where: "Mesa" }],
+            },
+          }),
+        }),
+      );
+      expect(forged.status).toBe(201);
+      const forgedBody = (await forged.json()) as { pdfUrl: string };
+      const forgedPdf = await GET(new Request(`http://localhost${forgedBody.pdfUrl}`), {
+        params: Promise.resolve({ id: forgedBody.pdfUrl.split("/").pop() ?? "" }),
+      });
+      const forgedText = Buffer.from(await forgedPdf.arrayBuffer()).toString("latin1");
+      expect(forgedText).toContain("Radar only");
+      expect(forgedText).not.toContain("Radar + spotter confirmed");
+      expect(forgedText).toContain("24-hour radar maximum");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("saves a blank company and phone for the signed-in team", async () => {

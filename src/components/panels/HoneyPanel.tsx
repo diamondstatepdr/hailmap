@@ -1,6 +1,7 @@
 "use client";
 
 import { Gem, X } from "lucide-react";
+import UpdatedLine from "@/components/ui/UpdatedLine";
 import { formatHailSources, formatMiles } from "@/lib/units";
 
 export type HoneyMode = "pdr" | "roof";
@@ -36,6 +37,7 @@ interface Props {
   onSelect: (spot: HoneySpotView) => void;
   onClose: () => void;
   attribution: string | null;
+  updatedAt?: string | null;
   needsDay: boolean;
   zoomedOut?: boolean;
   /** Miles are only shown when they are measured from the tech or a searched address. */
@@ -70,6 +72,7 @@ export default function HoneyPanel(props: Props) {
           </p>
           <h2>Money Holes</h2>
           <p className="truncate text-xs text-muted">{props.label}</p>
+          <UpdatedLine at={props.updatedAt} />
         </div>
         <button type="button" className="honey-close press" onClick={props.onClose} aria-label="Close Money Hole">
           <X size={16} />

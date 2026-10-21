@@ -1,6 +1,7 @@
 "use client";
 
 import { Gem } from "lucide-react";
+import UpdatedLine from "@/components/ui/UpdatedLine";
 import { CHASE_PREVIEW, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import type { HoneyMode } from "@/lib/honey";
 import { formatDay } from "@/lib/history-range";
@@ -108,6 +109,7 @@ export function ChaseSection({ mode, payload, preview, onMode, onSelect }: Secti
         <p className="mt-1 text-sm leading-relaxed text-muted">
           This week&apos;s hail areas, ranked by Money Hole score. {formatDay(payload.windowStart)} – {formatDay(payload.windowEnd)}.
         </p>
+        <UpdatedLine at={payload.generatedAt} />
       </header>
       <ChaseModeToggle mode={mode} onMode={onMode} />
       <ChaseRows mode={mode} payload={payload} preview={preview} onSelect={onSelect} />

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isoWeekKey, type ChasePayload } from "@/lib/chase-week";
 import { dataDir } from "@/lib/db";
+import { stormRefreshDue } from "@/lib/list-freshness";
 
 export function chaseCacheFile(): string {
   return path.join(dataDir(), "chase", "week.json");
@@ -35,9 +36,7 @@ export function cachedChase(now = new Date()): ChasePayload | null {
   return payload;
 }
 
-const FRESH_MS = 3 * 60 * 60 * 1000;
-
+/** True when the weekly file is older than the server refresh interval. */
 export function chaseCacheStale(payload: ChasePayload, now = new Date()): boolean {
-  const age = now.getTime() - Date.parse(payload.generatedAt);
-  return !Number.isFinite(age) || age < 0 || age > FRESH_MS;
+  return stormRefreshDue(payload.generatedAt, now);
 }

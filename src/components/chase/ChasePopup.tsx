@@ -2,6 +2,7 @@
 
 import { Gem, X } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import UpdatedLine from "@/components/ui/UpdatedLine";
 import { ChaseModeToggle, ChaseRows } from "@/components/chase/ChaseList";
 import type { ChasePayload, ChaseStop } from "@/lib/chase-week";
 import type { HoneyMode } from "@/lib/honey";
@@ -31,6 +32,7 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Top hail areas from the last 7 days, ranked by Money Hole score. {formatDay(payload.windowStart)} – {formatDay(payload.windowEnd)}.
           </p>
+          <UpdatedLine at={payload.generatedAt} />
         </div>
         {mobile ? null : (
           <button type="button" className="honey-close press" aria-label="Close" onClick={onClose}>

@@ -278,6 +278,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const flownNonce = useRef<number | null>(null);
   const mapStyle = useMapStyle(theme);
   const brand = useBrandPaint(theme);
   const iconsBound = useRef(false);
@@ -387,17 +388,23 @@ export default function HailMap({
     if (!map) return;
     const width = map.getContainer().clientWidth;
     const desktop = width >= 768;
-    const camera = {
-      center: [focus.lon, focus.lat] as [number, number],
-      zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
-      duration: 700,
-    };
     const padding = honeyPanel
       ? desktop
         ? { top: 120, bottom: 48, left: Math.min(400, Math.round(width * 0.34)), right: 36 }
         : { top: 88, bottom: 280, left: 16, right: 16 }
       : { top: 96, bottom: 260, left: 28, right: 28 };
-    map.flyTo(focus.zoom ? { ...camera, padding } : camera);
+    if (flownNonce.current === focus.nonce) {
+      map.easeTo({ padding, duration: 0 });
+      return;
+    }
+    flownNonce.current = focus.nonce;
+    const camera = {
+      center: [focus.lon, focus.lat] as [number, number],
+      zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
+      duration: 700,
+      padding,
+    };
+    map.flyTo(focus.zoom ? camera : { center: camera.center, zoom: camera.zoom, duration: 700 });
   }, [focus, honeyPanel]);
 
   useEffect(() => {
@@ -436,7 +443,11 @@ export default function HailMap({
   function publishZoom() {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    map.getContainer().dataset.mapZoom = map.getZoom().toFixed(2);
+    const center = map.getCenter();
+    const root = map.getContainer();
+    root.dataset.mapZoom = map.getZoom().toFixed(2);
+    root.dataset.mapLat = center.lat.toFixed(5);
+    root.dataset.mapLon = center.lng.toFixed(5);
   }
 
   function tuckAttribution() {
@@ -603,8 +614,8 @@ export default function HailMap({
         publishZoom();
         if (!bounds) return;
         onPreviewBounds?.(bounds);
-        onViewChange?.(bounds);
         if (event.originalEvent) onUserMove?.();
+        onViewChange?.(bounds);
       }}
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();

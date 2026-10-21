@@ -49,7 +49,6 @@ export default function PhotoReportSheet({
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const located = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
 
@@ -113,10 +112,6 @@ export default function PhotoReportSheet({
     }
     setError(null);
     setStep("pin");
-    if (!located.current) {
-      located.current = true;
-      locate();
-    }
   }
 
   function inches(): number | null {

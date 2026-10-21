@@ -19,6 +19,9 @@ interface FieldPinView {
 
 interface Props {
   gpsError: string | null;
+  locationOn: boolean;
+  onMyLocation: () => void;
+  onCenterOnMe: () => void;
   street: string | null;
   streetStatus: "idle" | "loading" | "unavailable" | "ok";
   lat: number | null;
@@ -55,6 +58,9 @@ const STATUS_TONE: Record<PinStatus, string> = {
 
 export default function FieldSheet({
   gpsError,
+  locationOn,
+  onMyLocation,
+  onCenterOnMe,
   street,
   streetStatus,
   lat,
@@ -109,9 +115,19 @@ export default function FieldSheet({
     <BottomSheet label="Field" tone="field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
       <header className="sheet-band">
         <p className="sheet-kicker">Field</p>
-        <p className="truncate text-sm font-semibold">{title}</p>
+        <p className="truncate text-sm font-semibold" data-field-street>
+          {title}
+        </p>
       </header>
       <div className="px-4 pb-3">
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onMyLocation} className="btn btn-secondary press text-sm">
+          {gpsError ? "Location is blocked" : locationOn ? "Location on" : "My location"}
+        </button>
+        <button type="button" onClick={onCenterOnMe} className="btn btn-secondary press text-sm">
+          Center on me
+        </button>
+      </div>
       {gpsError ? <p className="mt-2 text-sm text-muted">{gpsError}</p> : null}
       {scoreCopy.showScore && history ? (
         <div className="mt-2 text-sm">
@@ -149,7 +165,7 @@ export default function FieldSheet({
           </div>
         </div>
         <button type="button" onClick={onSearchArea} disabled={dealerLoading} className="btn btn-primary press mt-2 w-full text-sm disabled:opacity-60">
-          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Find dealerships near me"}
+          {dealerLoading ? "Searching…" : dealerError ? "Try again" : "Find dealerships near this spot"}
         </button>
         {dealerLoading ? <p className="mt-2 text-xs text-muted">Searching OpenStreetMap…</p> : null}
         {dealerError ? <p className="mt-2 text-xs text-muted">{dealerError}</p> : null}

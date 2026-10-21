@@ -174,6 +174,12 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_hail_proofs_created ON hail_proofs(created_at);
+    CREATE TABLE IF NOT EXISTS proof_identity (
+      team TEXT PRIMARY KEY,
+      company TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

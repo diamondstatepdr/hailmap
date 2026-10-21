@@ -6,21 +6,30 @@ export function ProofLaunch({ busy, onProof }: { busy?: boolean; onProof: (compa
   const [company, setCompany] = useState("");
   const [phone, setPhone] = useState("");
   useEffect(() => {
-    try {
-      setCompany(localStorage.getItem("swathline-proof-company") ?? "");
-      setPhone(localStorage.getItem("swathline-proof-phone") ?? "");
-    } catch {
-      /* Private mode can block storage. The fields still work for this proof. */
-    }
+    let cancel = false;
+    void fetch("/api/hail-proof/identity")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as { company?: unknown; phone?: unknown };
+      })
+      .then((payload) => {
+        if (cancel || !payload) return;
+        setCompany(typeof payload.company === "string" ? payload.company : "");
+        setPhone(typeof payload.phone === "string" ? payload.phone : "");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
   }, []);
   return (
     <div className="proof-launch">
       <label>
-        Company name
+        Your company
         <input value={company} maxLength={80} autoComplete="organization" placeholder="Your company" onChange={(event) => setCompany(event.target.value)} />
       </label>
       <label>
-        Phone
+        Your phone
         <input value={phone} maxLength={40} inputMode="tel" autoComplete="tel" placeholder="Your phone" onChange={(event) => setPhone(event.target.value)} />
       </label>
       <button
@@ -31,13 +40,18 @@ export function ProofLaunch({ busy, onProof }: { busy?: boolean; onProof: (compa
         onClick={() => {
           const nextCompany = company.trim();
           const nextPhone = phone.trim();
-          try {
-            localStorage.setItem("swathline-proof-company", nextCompany);
-            localStorage.setItem("swathline-proof-phone", nextPhone);
-          } catch {
-            /* Ignore storage failures. */
-          }
-          onProof(nextCompany, nextPhone);
+          void (async () => {
+            try {
+              await fetch("/api/hail-proof/identity", {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ company: nextCompany, phone: nextPhone }),
+              });
+            } catch {
+              /* The proof still prints whatever was typed. A later visit can save it. */
+            }
+            onProof(nextCompany, nextPhone);
+          })();
         }}
       >
         {busy ? "Making the PDF…" : "Hail proof PDF"}

@@ -17,6 +17,11 @@ function text(font: "F1" | "F2", size: number, x: number, y: number, value: stri
   return `BT /${font} ${size} Tf ${color} rg ${x.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(value)}) Tj ET\n`;
 }
 
+function companyContact(proof: HailProof): string[] {
+  const line = [proof.company, proof.phone].filter(Boolean).join(" · ").slice(0, 80);
+  return line ? [text("F1", 10, 36, 670, line, "0.28 0.35 0.46")] : [];
+}
+
 export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): Buffer {
   const hailLine = proof.maxHailIn != null ? `${proof.maxHailIn.toFixed(2)} in` : "No hail size";
   const dates = proof.storms.map((storm) => storm.label || storm.date).join(", ") || "No storm date in this view";
@@ -36,7 +41,7 @@ export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): B
   map += "Q\n";
   const pin = project(bounds, frame, proof.lon, proof.lat);
   map += `0.04 0.12 0.43 rg ${pin.x.toFixed(1)} ${pin.y.toFixed(1)} 5 0 360 arc f\n`;
-  const measured = proofSwathStat(proof.rings);
+  const measured = proof.swathLine || proofSwathStat(proof.rings);
   map += text("F1", 9, 48, 572, measured ? `Swath · ${measured}` : "Street map", "0.24 0.30 0.40");
 
   const summary = wrapPdfText(proof.summary, 92).slice(0, 3);
@@ -47,14 +52,15 @@ export function renderHailProofPdf(proof: HailProof, image?: PdfImage | null): B
   });
   if (!proof.nearby.length) nearby = text("F1", 9, 40, 348, "No nearby reports in this view.");
 
+  const contact = companyContact(proof);
   const content = [
     "0.04 0.12 0.43 rg 0 720 612 72 re f\n",
     text("F2", 18, 36, 756, "SWATHLINE", "1 1 1"),
     text("F1", 11, 36, 736, "Hail proof", "0.85 0.91 1"),
     text("F1", 9, 430, 748, "Estimate", "1 1 1"),
     text("F2", 16, 36, 688, proof.address.slice(0, 70)),
-    text("F1", 10, 36, 670, [proof.company, proof.phone].filter(Boolean).join(" · ").slice(0, 80) || "Company · phone", "0.28 0.35 0.46"),
-    text("F1", 10, 36, 654, `${proof.lat.toFixed(5)}, ${proof.lon.toFixed(5)}`, "0.28 0.35 0.46"),
+    ...contact,
+    text("F1", 10, 36, contact.length ? 654 : 670, `${proof.lat.toFixed(5)}, ${proof.lon.toFixed(5)}`, "0.28 0.35 0.46"),
     "0.96 0.97 0.99 rg 36 612 540 42 re f\n",
     text("F1", 9, 48, 632, "Max hail"),
     text("F2", 12, 48, 616, hailLine),

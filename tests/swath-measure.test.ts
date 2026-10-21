@@ -71,4 +71,22 @@ describe("swath measurements", () => {
     expect(readout.motion.direction).toBe("moving ENE");
     expect(readout.motion.startedAt).toBe("2026-10-20T22:10:00.000Z");
   });
+
+  it("keeps total length and width at least as large as every band", () => {
+    const parent = rectangle(4, 4);
+    const barOrigin = unproject(-3, 1.75, -111.7, 33.5);
+    const bar = rectangle(10, 0.5, barOrigin.lon, barOrigin.lat);
+    const readout = readoutForSelection(
+      { geometry: parent, minIn: 1, maxIn: 2.53 },
+      [{ geometry: bar, properties: { minIn: 1.5, maxIn: 1.7 } }],
+    );
+    expect(readout.bands.map((band) => band.label)).toEqual(['1.5"', '1"']);
+    const longest = Math.max(...readout.bands.map((band) => band.lengthMi));
+    const widest = Math.max(...readout.bands.map((band) => band.widthMi));
+    expect(readout.total.lengthMi).toBeGreaterThanOrEqual(longest - 0.05);
+    expect(readout.total.widthMi).toBeGreaterThanOrEqual(widest - 0.05);
+    const parentBand = readout.bands.find((band) => band.label === '1"');
+    expect(parentBand).toBeTruthy();
+    expect(readout.total.lengthMi).toBeGreaterThan((parentBand?.lengthMi ?? 0) + 1);
+  });
 });

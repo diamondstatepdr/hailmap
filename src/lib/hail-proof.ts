@@ -1,6 +1,6 @@
 import { pointInGeometry } from "@/lib/geo";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
-import { measureGeometry, statLine } from "@/lib/swath-measure";
+import { measureGeometry, readoutForSelection, statLine } from "@/lib/swath-measure";
 
 export interface ProofStorm {
   date: string;
@@ -28,6 +28,8 @@ export interface HailProof {
   nearby: ProofNearby[];
   rings: number[][][];
   colors: string[];
+  /** Length, width, and area from the full swath, matching the swath sheet. */
+  swathLine: string;
   createdAt: string;
 }
 
@@ -112,6 +114,7 @@ export function normalizeProof(input: unknown, createdAt = new Date().toISOStrin
     }),
     rings,
     colors: rings.map((_, index) => colors[index] || "#f97316"),
+    swathLine: clip(row.swathLine, 120),
     createdAt,
   };
 }
@@ -260,4 +263,37 @@ export function ringsNearPoint(
     }
   }
   return bands.sort((a, b) => (a.minIn ?? 0) - (b.minIn ?? 0)).slice(0, 6);
+}
+
+/** The swath sheet's total for the storm covering this address, from the full polygons. */
+export function swathCaptionNearPoint(
+  features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }>,
+  lat: number,
+  lon: number,
+): string {
+  let best: { geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon; properties?: Record<string, unknown> | null } | null = null;
+  let bestArea = -1;
+  for (const feature of features) {
+    const geometry = feature.geometry;
+    if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon")) continue;
+    if (!pointInGeometry(lon, lat, geometry)) continue;
+    const area = measureGeometry(geometry).areaSqMi;
+    if (area > bestArea) {
+      best = { geometry, properties: feature.properties };
+      bestArea = area;
+    }
+  }
+  if (!best) return "";
+  const minIn = Number(best.properties?.minIn ?? best.properties?.maxSizeIn);
+  const maxIn = Number(best.properties?.maxIn ?? best.properties?.maxSizeIn);
+  const readout = readoutForSelection(
+    {
+      geometry: best.geometry,
+      minIn: Number.isFinite(minIn) ? minIn : null,
+      maxIn: Number.isFinite(maxIn) ? maxIn : null,
+    },
+    features,
+  );
+  if (readout.total.lengthMi <= 0 && readout.total.areaSqMi <= 0) return "";
+  return statLine(readout.total);
 }

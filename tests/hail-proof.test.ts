@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/hail-proof/route";
 import { GET } from "@/app/api/hail-proof/[id]/route";
+import { GET as readIdentity, PUT as saveIdentity } from "@/app/api/hail-proof/identity/route";
+import { signSession } from "@/lib/auth";
 import {
   nearbyLines,
   normalizeProof,
@@ -12,9 +14,11 @@ import {
   proofSwathStat,
   ringsNearPoint,
   stormsFromDaily,
+  swathCaptionNearPoint,
 } from "@/lib/hail-proof";
 import { unproject } from "@/lib/geo";
 import { renderHailProofPdf } from "@/lib/hail-proof-pdf";
+import { statLine } from "@/lib/swath-measure";
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-proof-"));
 process.env.HAILMAP_DATA_DIR = dataDir;
@@ -117,7 +121,8 @@ describe("hail proof document", () => {
     expect(text).toContain("High");
     expect(text).toContain("Apr 25, 2026");
     expect(text).toContain("not a roof inspection");
-    expect(text).toContain("Company");
+    expect(text).not.toContain("Company");
+    expect(text).not.toContain("480-");
     const named = normalizeProof({ ...draft, company: "Diamond State PDR", phone: "480-800-0148" }, "2026-04-26T12:00:00.000Z");
     if ("error" in named) throw new Error(named.error);
     expect(renderHailProofPdf(named).toString("latin1")).toContain("Diamond State PDR");
@@ -134,6 +139,17 @@ describe("hail proof document", () => {
       return [point.lon, point.lat];
     });
     expect(proofSwathStat([rectangle])).toBe("2 mi long · 1 mi wide · 2 sq mi");
+    const full = { type: "Polygon" as const, coordinates: [rectangle] };
+    const center = unproject(1.6, 0.8, -97.33, 32.75);
+    const caption = swathCaptionNearPoint([{ geometry: full, properties: { minIn: 1.5, maxIn: 1.5 } }], center.lat, center.lon);
+    expect(caption).toBe("2 mi long · 1 mi wide · 2 sq mi");
+    const stored = normalizeProof({ ...draft, swathLine: "42 mi long · 5.6 mi wide · 122 sq mi" }, "2026-04-26T12:00:00.000Z");
+    if ("error" in stored) throw new Error(stored.error);
+    const storedText = renderHailProofPdf(stored).toString("latin1");
+    expect(storedText).toContain("42 mi long");
+    expect(storedText).toContain("5.6 mi wide");
+    expect(storedText).toContain("122 sq mi");
+    expect(statLine({ lengthMi: 42, widthMi: 5.6, areaSqMi: 122, axisDeg: null })).toBe("42 mi long · 5.6 mi wide · 122 sq mi");
     expect(proofMapSvg(proof)).toContain("Swath map");
     expect(proofMapSvg(proof)).toContain("<path");
     expect(proofMapSvg(proof)).toContain("#f97316");
@@ -167,5 +183,31 @@ describe("hail proof document", () => {
     const bytes = Buffer.from(await pdf.arrayBuffer());
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     expect(bytes.toString("latin1")).toContain("3500 W 7th St");
+  });
+
+  it("saves a blank company and phone for the signed-in team", async () => {
+    process.env.HAILMAP_TEAM_PASSCODE = "team-pass";
+    process.env.HAILMAP_AUTH_SECRET = "test-secret";
+    const denied = await readIdentity(new Request("http://localhost/api/hail-proof/identity"));
+    expect(denied.status).toBe(401);
+    const cookie = `hailmap_session=${encodeURIComponent(signSession({ id: "alex", name: "Alex" }))}`;
+    const saved = await saveIdentity(
+      new Request("http://localhost/api/hail-proof/identity", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ company: "North Side Roofs", phone: "480-555-0199" }),
+      }),
+    );
+    expect(saved.status).toBe(200);
+    const loaded = await readIdentity(new Request("http://localhost/api/hail-proof/identity", { headers: { cookie } }));
+    expect(await loaded.json()).toEqual({ company: "North Side Roofs", phone: "480-555-0199" });
+    const cleared = await saveIdentity(
+      new Request("http://localhost/api/hail-proof/identity", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ company: "  ", phone: "" }),
+      }),
+    );
+    expect(await cleared.json()).toEqual({ company: "", phone: "" });
   });
 });

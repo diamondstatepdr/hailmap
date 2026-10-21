@@ -16,6 +16,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
   const dates = proof.storms.map((storm) => storm.label || storm.date);
   const map = await proofStreetSvg(proof, proofMapSvg(proof));
   const companyLine = [proof.company, proof.phone].filter(Boolean).join(" · ");
+  const swathLine = proof.swathLine || proofSwathStat(proof.rings);
   return (
     <main className="proof-page">
       <div className="proof-toolbar">
@@ -34,7 +35,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
         </header>
         <div className="proof-body">
           <h2>{proof.address}</h2>
-          <p className="proof-company">{companyLine || "Company · phone"}</p>
+          {companyLine ? <p className="proof-company">{companyLine}</p> : null}
           <p className="text-xs text-muted">
             {proof.lat.toFixed(5)}, {proof.lon.toFixed(5)}
           </p>
@@ -56,7 +57,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
           </dl>
           <div className="proof-map" dangerouslySetInnerHTML={{ __html: map }} />
           <p className="text-[11px] text-muted">Streets © OpenStreetMap contributors</p>
-          {proofSwathStat(proof.rings) ? <p className="text-sm font-semibold">{proofSwathStat(proof.rings)}</p> : null}
+          {swathLine ? <p className="text-sm font-semibold">{swathLine}</p> : null}
           <h3>Nearby reports</h3>
           {proof.nearby.length ? (
             <ul className="proof-list">

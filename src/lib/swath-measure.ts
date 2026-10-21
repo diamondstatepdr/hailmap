@@ -291,12 +291,13 @@ export function readoutForSelection(
     }
     return { minIn: band.minIn, label: band.label, lengthMi: band.lengthMi, widthMi: band.widthMi, areaSqMi: Math.max(0, areaSqMi), axisDeg: band.axisDeg };
   });
-  const footprint = rawBands.reduce((best, band) => (band.areaSqMi > best.areaSqMi ? band : best), rawBands[0]);
+  const unionGeometry = rawBands.length <= 1 ? rawBands[0]?.geometry : combine(rawBands.map((band) => band.geometry));
+  const unionStats = unionGeometry ? measureGeometry(unionGeometry) : { lengthMi: 0, widthMi: 0, areaSqMi: 0, axisDeg: null };
   const total = {
-    lengthMi: footprint?.lengthMi ?? 0,
-    widthMi: footprint?.widthMi ?? 0,
+    lengthMi: Math.max(unionStats.lengthMi, ...rawBands.map((band) => band.lengthMi), 0),
+    widthMi: Math.max(unionStats.widthMi, ...rawBands.map((band) => band.widthMi), 0),
     areaSqMi: bands.reduce((sum, band) => sum + band.areaSqMi, 0),
-    axisDeg: footprint?.axisDeg ?? null,
+    axisDeg: unionStats.axisDeg,
   };
   const direction =
     selection.startLat != null && selection.startLon != null && selection.endLat != null && selection.endLon != null

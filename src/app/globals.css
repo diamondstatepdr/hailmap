@@ -185,6 +185,10 @@ button {
   color: var(--accent-ink);
 }
 
+.map-detail-body {
+  padding: 0.35rem 1rem 1.15rem;
+}
+
 .swath-kicker {
   margin: 0.15rem 0 0;
   color: var(--muted);
@@ -2953,6 +2957,13 @@ html.dark .replay-range::-moz-range-thumb {
 .map-topbar .plain-actions .chase-open {
   gap: 0.28rem;
   padding-inline: 0.45rem;
+}
+
+.map-topbar .plain-actions .range-control {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .help-chip {

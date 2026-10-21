@@ -56,12 +56,13 @@ export default function HoneyPanel(props: Props) {
   return (
     <aside
       className="honey-dock glass"
+      data-tone="money"
       data-honey-panel
       data-mode={props.mode}
       data-honey-status={props.loading && !props.needsDay ? "loading" : props.spots.length ? "ready" : "empty"}
       aria-label="Money Hole"
     >
-      <header className="honey-head">
+      <header className="honey-head sheet-band">
         <div className="min-w-0">
           <p className="honey-kicker">
             <Gem size={13} />

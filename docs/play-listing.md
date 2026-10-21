@@ -1,4 +1,4 @@
-# Play Console listing — HailMap
+# Play Console listing — Swathline
 
 Package name: `com.hailmap.app`
 
@@ -6,7 +6,7 @@ Category: Weather
 
 ## Title
 
-HailMap
+Swathline
 
 ## Short description
 
@@ -14,7 +14,7 @@ Live nationwide hail reports, swaths, and county income context.
 
 ## Full description
 
-HailMap is a nationwide map of recent United States hail.
+Swathline is a nationwide map of recent United States hail.
 
 - Live reports from National Weather Service alerts, Storm Prediction Center hail reports, and Iowa Environmental Mesonet local storm reports
 - Reports are fused and de-duplicated. Official NWS reports outrank spotter reports, which outrank radar MESH, which outrank community submissions
@@ -27,7 +27,7 @@ HailMap is a nationwide map of recent United States hail.
 - Import your own CSV or GeoJSON. Spotter feeds are webhook-only
 - Report hail with a photo, a confirmed map pin, and a size. Those reports are community observations
 
-HailMap does not scrape social networks. The public map does not require an account. Field notes use an optional team sign-in. Location is requested in Field mode and when you submit a photo report. The Android app is a secure WebView of the HTTPS site.
+Swathline does not scrape social networks. The public map does not require an account. Field notes use an optional team sign-in. Location is requested in Field mode and when you submit a photo report. The Android app is a secure WebView of the HTTPS site.
 
 Privacy policy: https://YOUR-RAILWAY-DOMAIN/privacy
 
@@ -37,7 +37,7 @@ Use the icon in `public/icons/icon-512.png`. Take a phone screenshot of the map 
 
 ## Content rating
 
-No violence, no user chat, no social sharing, no unrestricted web (the WebView loads only the HailMap HTTPS origin). Questionnaire result should be Everyone / PEGI 3.
+No violence, no user chat, no social sharing, no unrestricted web (the WebView loads only the Swathline HTTPS origin). Questionnaire result should be Everyone / PEGI 3.
 
 ## Release
 

@@ -34,7 +34,7 @@ let inflight: Promise<void> | null = null;
 export function userAgent(): string {
   return (
     process.env.HAILMAP_USER_AGENT?.trim() ||
-    "HailMap/1.0 (https://github.com/diamondstatepdr/hailmap)"
+    "Swathline/1.0 (https://github.com/diamondstatepdr/hailmap)"
   );
 }
 

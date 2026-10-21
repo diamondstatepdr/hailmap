@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CarFront, Navigation } from "lucide-react";
+import { CarFront } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { DealerPin } from "@/lib/area-selection";
 import { fieldScoreCopy, fieldStreetTitle } from "@/lib/field-status";
@@ -106,17 +106,12 @@ export default function FieldSheet({
   }
 
   return (
-    <BottomSheet label="Field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
+    <BottomSheet label="Field" tone="field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
+      <header className="sheet-band">
+        <p className="sheet-kicker">Field</p>
+        <p className="truncate text-sm font-semibold">{title}</p>
+      </header>
       <div className="px-4 pb-3">
-      <div className="mt-1 flex items-center gap-2">
-        <span className="hazard-badge h-8 w-8 hazard-wind">
-          <Navigation size={15} />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Field</p>
-          <p className="truncate text-sm font-semibold">{title}</p>
-        </div>
-      </div>
       {gpsError ? <p className="mt-2 text-sm text-muted">{gpsError}</p> : null}
       {scoreCopy.showScore && history ? (
         <div className="mt-2 text-sm">

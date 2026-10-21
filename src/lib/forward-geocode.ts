@@ -33,7 +33,7 @@ function text(value: unknown, max = 160): string | null {
 function userAgent(): string {
   return (
     process.env.HAILMAP_USER_AGENT?.trim() ||
-    "HailMap/1.0 (https://github.com/diamondstatepdr/hailmap)"
+    "Swathline/1.0 (https://github.com/diamondstatepdr/hailmap)"
   );
 }
 

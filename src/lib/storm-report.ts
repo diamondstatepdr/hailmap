@@ -185,7 +185,7 @@ export function buildStormReport(input: {
   if (input.history.warnings.length) sources.add("National Weather Service active watches and warnings");
   if (input.radar) sources.add("Radar hail size estimates");
   if (input.nearbyWarnings?.length) sources.add("Iowa Environmental Mesonet archive of NWS warnings");
-  sources.add("Damage probability model documented in HailMap (not a trained model)");
+  sources.add("Damage probability model documented in Swathline (not a trained model)");
 
   const photos = (input.photos ?? []).flatMap((pin) =>
     pin.photos.flatMap((photo) => {

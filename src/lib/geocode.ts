@@ -49,7 +49,7 @@ export async function lookupPlace(lat: number, lon: number): Promise<PlaceLabel>
         Accept: "application/json",
         "User-Agent":
           process.env.HAILMAP_USER_AGENT?.trim() ||
-          "HailMap/1.0 (https://github.com/diamondstatepdr/hailmap)",
+          "Swathline/1.0 (https://github.com/diamondstatepdr/hailmap)",
       },
       signal: AbortSignal.timeout(4000),
     });

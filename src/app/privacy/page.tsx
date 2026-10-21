@@ -3,8 +3,8 @@ import Link from "next/link";
 import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
 export const metadata: Metadata = {
-  title: "Privacy · HailMap",
-  description: "How HailMap handles weather reports and the data it does not collect.",
+  title: "Privacy · Swathline",
+  description: "How Swathline handles weather reports and the data it does not collect.",
 };
 
 export default function PrivacyPage() {
@@ -21,14 +21,14 @@ export default function PrivacyPage() {
       </div>
       <article className="prose-hail space-y-3">
         <h1>Privacy policy</h1>
-        <p>Effective October 19, 2026. HailMap is operated by Diamond State Hail Solutions.</p>
+        <p>Effective October 19, 2026. Swathline is operated by Diamond State Hail Solutions.</p>
         <p>
           Contact: <a href="mailto:diamondstatepdr@gmail.com">diamondstatepdr@gmail.com</a>
         </p>
 
-        <h2>What HailMap is</h2>
+        <h2>What Swathline is</h2>
         <p>
-          HailMap shows recent United States hail, wind, and tornado reports on a map, draws hail
+          Swathline shows recent United States hail, wind, and tornado reports on a map, draws hail
           swaths, and can shade counties by Census median household income. It is a weather display.
           It is not a social network and it does not scrape social media, forums, or private accounts.
         </p>
@@ -86,12 +86,12 @@ export default function PrivacyPage() {
 
         <h2>Phone alerts</h2>
         <p>
-          If you turn on alerts, the browser creates a push subscription. HailMap stores that
+          If you turn on alerts, the browser creates a push subscription. Swathline stores that
           subscription, the areas you watch, quiet hours, and an optional last GPS fix for Near me.
           There is no name on that record. Radar hail, spotter reports, and National Weather Service
           warnings are checked on the server. A notification includes the place, hail size, and time,
           and opens the map or the address card. The subscription is deleted when you turn alerts off
-          or when the push service says the browser is gone. iPhone alerts require adding HailMap to
+          or when the push service says the browser is gone. iPhone alerts require adding Swathline to
           the Home Screen.
         </p>
 
@@ -111,13 +111,13 @@ export default function PrivacyPage() {
 
         <h2>The Android app</h2>
         <p>
-          The HailMap Android package <strong>com.hailmap.app</strong> is a WebView of the HTTPS
+          The Swathline Android package <strong>com.hailmap.app</strong> is a WebView of the HTTPS
           site. It does not add a separate analytics SDK. Cleartext HTTP is disabled. Play data-safety
           answers that match this policy are in the repository under <strong>docs/data-safety.md</strong>.
         </p>
 
         <h2>Children</h2>
-        <p>HailMap is not directed at children under 13 and we do not knowingly collect their personal information.</p>
+        <p>Swathline is not directed at children under 13 and we do not knowingly collect their personal information.</p>
 
         <h2>Changes</h2>
         <p>If this policy changes, the updated text will be published at this page with a new effective date.</p>

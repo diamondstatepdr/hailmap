@@ -1,4 +1,4 @@
-const CACHE = "hailmap-shell-v2";
+const CACHE = "swathline-shell-v3";
 const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -33,7 +33,7 @@ self.addEventListener("fetch", (event) => {
 
 function readPush(event) {
   const fallback = {
-    title: "HailMap",
+    title: "Swathline",
     body: "Hail alert",
     url: "/",
     tag: "",

@@ -14,6 +14,8 @@ interface Props {
   /** Visible height, in pixels, while collapsed. */
   peekHeight?: number;
   className?: string;
+  /** Screen accent: map, storms, addresses, field, reports, alerts, money, chase. */
+  tone?: string;
 }
 
 type Mode = "expanded" | "collapsed" | "dragging" | "dismissing";
@@ -31,6 +33,7 @@ export default function BottomSheet({
   expandedMax = "min(78dvh, 42rem)",
   peekHeight = 132,
   className,
+  tone,
 }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -139,6 +142,7 @@ export default function BottomSheet({
       role="dialog"
       aria-label={label}
       data-bottom-sheet
+      data-tone={tone}
       data-sheet-state={mode}
       data-dragging={mode === "dragging" ? "true" : "false"}
       style={{

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#070b16"/>
+  <svg x="86" y="86" width="340" height="340" viewBox="0 0 64 64">
+    <defs>
+      <linearGradient id="bg" x1="4" y1="0" x2="60" y2="64" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#243a9a"/>
+        <stop offset="0.46" stop-color="#101a3d"/>
+        <stop offset="1" stop-color="#070b16"/>
+      </linearGradient>
+      <linearGradient id="swath" x1="8" y1="54" x2="58" y2="8" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#9d174d"/>
+        <stop offset="0.46" stop-color="#22d3ee"/>
+        <stop offset="1" stop-color="#f8feff"/>
+      </linearGradient>
+      <linearGradient id="stone" x1="24" y1="20" x2="44" y2="42" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset="0.5" stop-color="#c8f7ff"/>
+        <stop offset="1" stop-color="#38bdf8"/>
+      </linearGradient>
+    </defs>
+    <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+    <circle cx="32" cy="32" r="23" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1.2"/>
+    <path d="M9 48.5 H28.5 L49 11.5 H29.5 Z" fill="url(#swath)"/>
+    <path d="M44.2 11.2 L56.2 8.2 L49.4 22.6 Z" fill="#f9a8d4"/>
+    <path d="M27.2 27.2 L33.6 23.4 L40 27.2 L40 34.6 L33.6 38.4 L27.2 34.6 Z" fill="url(#stone)"/>
+    <path d="M27.2 27.2 L33.6 23.4 L40 27.2 L33.6 30.6 Z" fill="#ffffff" fill-opacity="0.78"/>
+  </svg>
+</svg>

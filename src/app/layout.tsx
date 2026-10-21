@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import RegisterSw from "@/components/RegisterSw";
+import { themeBootScript } from "@/lib/palette";
 import "./globals.css";
 
 const inter = Inter({
@@ -10,10 +11,12 @@ const inter = Inter({
   variable: "--font-sans",
 });
 
+const description = "Live US hail, wind, and tornado reports, property storm history, field notes, and phone hail alerts.";
+
 export const metadata: Metadata = {
-  title: "HailMap",
-  description: "Live US hail, wind, and tornado reports, property storm history, field notes, and phone hail alerts.",
-  applicationName: "HailMap",
+  title: "Swathline",
+  description,
+  applicationName: "Swathline",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -24,8 +27,17 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "HailMap",
+    title: "Swathline",
     statusBarStyle: "default",
+  },
+  openGraph: {
+    title: "Swathline",
+    description,
+    siteName: "Swathline",
+  },
+  twitter: {
+    title: "Swathline",
+    description,
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -35,16 +47,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#eef3f8",
+  themeColor: "#e7eefb",
 };
-
-const themeBoot = `(function(){try{if(localStorage.getItem("hailmap-theme")==="dark"){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content","#0b111a");}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" data-palette="a" className={inter.variable} suppressHydrationWarning>
       <body>
-        <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
         <RegisterSw />
         {children}
       </body>

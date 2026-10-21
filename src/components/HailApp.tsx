@@ -2,11 +2,14 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { CloudHail, Gem, Moon, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
+import { CloudHail, Gem, Moon, Palette, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
+import { BrandSplash, LogoMark, Wordmark } from "@/components/brand/Logo";
+import { applyPalette, applyScheme, activePalette, paletteName, type PaletteId } from "@/lib/palette";
+import ThemePicker from "@/components/theme/ThemePicker";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
 import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
@@ -66,16 +69,7 @@ import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const HailMap = dynamic(() => import("@/components/HailMap"), {
   ssr: false,
-  loading: () => (
-    <div className="grid h-full place-items-center bg-app text-sm text-muted">
-      <div className="w-56 space-y-2" aria-busy="true">
-        <span className="sr-only">Loading map…</span>
-        <div className="skeleton mx-auto h-10 w-10 rounded-2xl" />
-        <div className="skeleton h-3" />
-        <div className="skeleton h-3 w-2/3" />
-      </div>
-    </div>
-  ),
+  loading: () => <BrandSplash label="Loading map" />,
 });
 
 interface WatchItem {
@@ -182,6 +176,9 @@ function readTheme(): "light" | "dark" {
 export default function HailApp() {
   const [section, setSection] = useState<AppSection>("map");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [palette, setPalette] = useState<PaletteId>("a");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [holdSplash, setHoldSplash] = useState(false);
   const [reports, setReports] = useState<HailReport[]>([]);
   const [rawCount, setRawCount] = useState(0);
   const [status, setStatus] = useState<SourceStatus | null>(null);
@@ -492,6 +489,7 @@ export default function HailApp() {
 
   useEffect(() => {
     setTheme(readTheme());
+    setPalette(activePalette());
     fetch("/api/auth/session")
       .then((response) => response.json())
       .then((payload: { user?: { id: string; name: string } | null; configured?: boolean }) => {
@@ -1057,14 +1055,24 @@ export default function HailApp() {
     [pins],
   );
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHoldSplash(params.get("splash") === "1");
+  }, []);
+
+  function setScheme(next: "light" | "dark") {
     setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    document.documentElement.style.colorScheme = next;
+    applyScheme(next);
     localStorage.setItem("hailmap-theme", next);
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", next === "dark" ? "#0b111a" : "#eef3f8");
+  }
+
+  function toggleTheme() {
+    setScheme(theme === "dark" ? "light" : "dark");
+  }
+
+  function choosePalette(id: PaletteId) {
+    setPalette(id);
+    applyPalette(id);
   }
 
   function frameFilter(next: typeof filter) {
@@ -1657,7 +1665,7 @@ export default function HailApp() {
 
   const mapDetailOpen = section === "map" && Boolean(selected || threat || county || area);
   useEffect(() => {
-    if (alertDraft || authOpen || reportOpen) return;
+    if (alertDraft || authOpen || reportOpen || pickerOpen) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (filtersOpen) {
@@ -1677,7 +1685,7 @@ export default function HailApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, overlay, customOpen, placeExpanded]);
+  }, [mapDetailOpen, alertDraft, filtersOpen, authOpen, reportOpen, pickerOpen, overlay, customOpen, placeExpanded]);
 
   return (
     <AppShell
@@ -1685,6 +1693,8 @@ export default function HailApp() {
       onSection={setSection}
       theme={theme}
       onToggleTheme={toggleTheme}
+      onOpenAppearance={() => setPickerOpen(true)}
+      paletteLabel={paletteName(palette)}
       userName={user?.name ?? null}
       authConfigured={authConfigured}
       onSignIn={() => setAuthOpen(true)}
@@ -1801,8 +1811,18 @@ export default function HailApp() {
               setPlaceExpanded(false);
             }}
           />
-          <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
-            <div className="pointer-events-auto flex items-start gap-2">
+          <div ref={chromeRef} data-tone="map" className="map-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
+            <div className="map-topbar pointer-events-auto">
+              <div className="map-brand-row">
+                <button type="button" className="map-brand press" aria-label="Swathline appearance" onClick={() => setPickerOpen(true)}>
+                  <LogoMark size={30} title="Swathline" />
+                  <Wordmark subtitle={null} />
+                </button>
+                <button type="button" className="icon-btn press" aria-label="Appearance" onClick={() => setPickerOpen(true)}>
+                  <Palette size={18} />
+                </button>
+              </div>
+              <div className="map-controls">
               <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
                 <SlidersHorizontal size={18} />
@@ -1818,6 +1838,7 @@ export default function HailApp() {
               <button
                 type="button"
                 data-honey-open
+                data-tone="money"
                 aria-pressed={honeyOpen}
                 aria-label="Money Hole"
                 title="Money Hole"
@@ -1831,7 +1852,9 @@ export default function HailApp() {
               >
                 <Gem size={18} />
               </button>
+              </div>
             </div>
+            <div className="map-chrome-rest">
             {honeyOpen ? null : (
             <>
             {replay.active ? null : (
@@ -2017,7 +2040,7 @@ export default function HailApp() {
               </div>
             ) : null}
             {showMesh ? (
-              <div className="pointer-events-auto glass flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
+              <div className="map-chip pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
                 <span className="shrink-0 font-semibold">{replay.active ? "Hail size" : "Radar"}</span>
                 {replay.active ? null : (
                   <span className="shrink-0 font-semibold" data-radar-label>
@@ -2039,9 +2062,10 @@ export default function HailApp() {
             ) : null}
             </>
             )}
+            </div>
           </div>
           {section === "map" ? (
-            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
+            <div data-tone="map" className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
               <div className="state-strip">
                 <div className="map-quick-row">
                   {!honeyOpen && !replay.active && stateCounts.length ? (
@@ -2083,7 +2107,7 @@ export default function HailApp() {
             </p>
           ) : null}
           {(showOutlook || showPoints) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
-            <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
+            <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
                 {showPoints ? (
                   <span className="inline-flex items-center gap-1.5">
@@ -2166,7 +2190,7 @@ export default function HailApp() {
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && placeCardOpen && placeLabel && placePoint ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-              <BottomSheet label="Address" onClose={() => setPlaceCardOpen(false)} expandedMax="min(72dvh, 36rem)">
+              <BottomSheet label="Address" tone="addresses" onClose={() => setPlaceCardOpen(false)} expandedMax="min(72dvh, 36rem)">
                 {addressHistory ? (
                   <AddressHistoryCard
                     bare
@@ -2455,7 +2479,7 @@ export default function HailApp() {
           ) : null}
         </div>
       {section === "storms" ? (
-        <MobileOrPage label="Storms" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Storms" tone="storms" mobile={mobile} onClose={() => setSection("map")}>
         <StormsPanel
           loading={loading}
           error={error}
@@ -2478,7 +2502,7 @@ export default function HailApp() {
         </MobileOrPage>
       ) : null}
       {section === "properties" ? (
-        <MobileOrPage label="Addresses" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Addresses" tone="addresses" mobile={mobile} onClose={() => setSection("map")}>
         <PropertiesPanel
           radiusMi={radiusMi}
           hours={filter.hours}
@@ -2514,12 +2538,12 @@ export default function HailApp() {
         </MobileOrPage>
       ) : null}
       {section === "alerts" ? (
-        <MobileOrPage label="Alerts" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Alerts" tone="alerts" mobile={mobile} onClose={() => setSection("map")}>
           <AlertsPanel onOpenAlert={followAlertLink} />
         </MobileOrPage>
       ) : null}
       {section === "reports" ? (
-        <MobileOrPage label="Reports" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Reports" tone="reports" mobile={mobile} onClose={() => setSection("map")}>
         <ReportsPanel
           canUseView={Boolean(viewBounds)}
           hasPlace={Boolean(placePoint && placeLabel)}
@@ -2558,17 +2582,33 @@ export default function HailApp() {
           }}
         />
       ) : null}
+      {pickerOpen ? (
+        <ThemePicker
+          palette={palette}
+          scheme={theme}
+          onPalette={choosePalette}
+          onScheme={setScheme}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
+      {holdSplash ? (
+        <div className="splash-hold" data-splash>
+          <BrandSplash />
+        </div>
+      ) : null}
     </AppShell>
   );
 }
 
 function MobileOrPage({
   label,
+  tone,
   mobile,
   onClose,
   children,
 }: {
   label: string;
+  tone: string;
   mobile: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -2576,7 +2616,7 @@ function MobileOrPage({
   if (!mobile) return children;
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
-      <BottomSheet label={label} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
+      <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
         {children}
       </BottomSheet>
     </div>

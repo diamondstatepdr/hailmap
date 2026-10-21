@@ -21,7 +21,27 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const states = stateOverlay as FeatureCollection;
 
 const LIGHT_STYLE = "/map/light.json";
-const DARK_STYLE = "/map/night.json";
+
+function nightStyle(palette: string | undefined): string {
+  if (palette === "b") return "/map/night-b.json";
+  if (palette === "c") return "/map/night-c.json";
+  return "/map/night-a.json";
+}
+
+function useMapStyle(theme: "light" | "dark") {
+  const [palette, setPalette] = useState<"a" | "b" | "c">("a");
+  useEffect(() => {
+    const read = () => {
+      const value = document.documentElement.dataset.palette;
+      setPalette(value === "b" || value === "c" ? value : "a");
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-palette"] });
+    return () => observer.disconnect();
+  }, []);
+  return theme === "dark" ? nightStyle(palette) : LIGHT_STYLE;
+}
 
 const hailSizeColor = [
   "interpolate",
@@ -209,6 +229,30 @@ function readMapBounds(map: { getBounds: () => { getWest: () => number; getSouth
   }
 }
 
+function useBrandPaint(theme: "light" | "dark") {
+  const fallback = theme === "dark"
+    ? { cluster: "#1d4ed8", stroke: "#e0f2fe", halo: "#38bdf8", select: "#7dd3fc" }
+    : { cluster: "#1d4ed8", stroke: "#ffffff", halo: "#38bdf8", select: "#0c5f78" };
+  const [paint, setPaint] = useState(fallback);
+  useEffect(() => {
+    const read = () => {
+      const style = getComputedStyle(document.documentElement);
+      const pick = (name: string, backup: string) => style.getPropertyValue(name).trim() || backup;
+      setPaint({
+        cluster: pick("--cluster", fallback.cluster),
+        stroke: pick("--cluster-stroke", fallback.stroke),
+        halo: pick("--cluster-halo", fallback.halo),
+        select: pick("--mark", fallback.select),
+      });
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-palette"] });
+    return () => observer.disconnect();
+  }, [theme, fallback.cluster, fallback.stroke, fallback.halo, fallback.select]);
+  return paint;
+}
+
 export default function HailMap({
   theme,
   points,
@@ -254,6 +298,8 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const mapStyle = useMapStyle(theme);
+  const brand = useBrandPaint(theme);
   const iconsBound = useRef(false);
   const frameRef = useRef(frame);
   const frameWait = useRef(false);
@@ -375,6 +421,19 @@ export default function HailMap({
     applyFrame(frame);
   }, [frame]);
 
+  useEffect(() => {
+    const started = performance.now();
+    let raf = 0;
+    const tick = () => {
+      tuckAttribution();
+      const root = mapRef.current?.getMap()?.getContainer()?.querySelector(".maplibregl-ctrl-attrib");
+      const tucked = root?.getAttribute("data-tucked") === "1" && !root.classList.contains("maplibregl-compact-show");
+      if (!tucked && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mapStyle]);
+
   function installIcons() {
     const map = mapRef.current?.getMap();
     if (!map?.isStyleLoaded()) return;
@@ -384,6 +443,18 @@ export default function HailMap({
     } catch {
       /* Style swaps drop images; the next style event adds them again. */
     }
+  }
+
+  function tuckAttribution() {
+    const map = mapRef.current?.getMap();
+    const root = map?.getContainer()?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
+    if (!root?.classList.contains("maplibregl-compact")) return;
+    root.classList.remove("maplibregl-compact-show");
+    if (root.dataset.tucked === "1") return;
+    root.dataset.tucked = "1";
+    root.querySelector("summary")?.addEventListener("click", (event) => {
+      event.preventDefault();
+    });
   }
 
   function quietBaseStateLayers() {
@@ -493,7 +564,7 @@ export default function HailMap({
         latitude: focus?.lat ?? 38.4,
         zoom: focus?.zoom ?? 4.15,
       }}
-      mapStyle={theme === "dark" ? DARK_STYLE : LIGHT_STYLE}
+      mapStyle={mapStyle}
       attributionControl={false}
       onLoad={() => {
         const map = mapRef.current?.getMap();
@@ -508,6 +579,7 @@ export default function HailMap({
         }
         installIcons();
         quietBaseStateLayers();
+        tuckAttribution();
         applyFrame();
         const raw = mapRef.current?.getMap();
         const bounds = raw ? readMapBounds(raw) : null;
@@ -647,11 +719,12 @@ export default function HailMap({
           <Layer
             id="swath-glow"
             type="line"
+            layout={{ "line-join": "round", "line-cap": "round" }}
             paint={{
-              "line-color": swathColor as never,
-              "line-width": 6,
-              "line-opacity": 0.28,
-              "line-blur": 1.2,
+              "line-color": theme === "dark" ? "#f7fbff" : "#102033",
+              "line-width": 5.4,
+              "line-opacity": theme === "dark" ? 0.9 : 0.82,
+              "line-blur": 0.35,
             }}
           />
           <Layer
@@ -852,7 +925,7 @@ export default function HailMap({
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": theme === "dark" ? "#67e8f9" : "#0c6278",
+              "circle-color": brand.halo,
               "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 22, 8, 30, 20, 40, 40, 48],
               "circle-opacity": 0.22,
             }}
@@ -862,9 +935,9 @@ export default function HailMap({
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": theme === "dark" ? "#14687c" : "#0c6278",
+              "circle-color": brand.cluster,
               "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 15, 8, 21, 20, 28, 40, 34],
-              "circle-stroke-color": theme === "dark" ? "#e8fbff" : "#ffffff",
+              "circle-stroke-color": brand.stroke,
               "circle-stroke-width": 2.5,
               "circle-opacity": 0.96,
             }}
@@ -921,9 +994,9 @@ export default function HailMap({
               "circle-stroke-color": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
-                theme === "dark" ? "#67e8f9" : "#0c6278",
+                brand.select,
                 ["==", ["get", "hasPhoto"], 1],
-                theme === "dark" ? "#67e8f9" : "#0c6278",
+                brand.select,
                 "#ffffff",
               ] as never,
               "circle-stroke-width": [
@@ -1147,8 +1220,8 @@ function MeshContours({
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} />
-        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} theme={theme} />
+        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
   }
@@ -1164,6 +1237,7 @@ function MeshContours({
           lineOpacity={meshFade.current === index ? lineOpacity : 0}
           blur={0.2}
           fade
+          theme={theme}
         />
       ))}
       {pulseFade.items.map((collection, index) => (
@@ -1176,6 +1250,7 @@ function MeshContours({
           lineOpacity={pulseFade.current === index ? 0.95 : 0}
           blur={0}
           fade
+          theme={theme}
         />
       ))}
     </>
@@ -1190,6 +1265,7 @@ function SwathSource({
   lineOpacity,
   blur,
   fade = false,
+  theme,
 }: {
   id: string;
   data: GeoJSON.FeatureCollection | null;
@@ -1198,9 +1274,11 @@ function SwathSource({
   lineOpacity: number;
   blur: number;
   fade?: boolean;
+  theme: "light" | "dark";
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
+  const halo = theme === "dark" ? "#f7fbff" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1211,6 +1289,20 @@ function SwathSource({
             "fill-color": ["get", "color"],
             "fill-opacity": fill,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
+          } as never
+        }
+      />
+      <Layer
+        id={`${id}-halo`}
+        type="line"
+        layout={{ "line-join": "round", "line-cap": "round" }}
+        paint={
+          {
+            "line-color": halo,
+            "line-width": lineWidth + 3.1,
+            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity + 0.22) : 0,
+            "line-blur": 0.45,
+            ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
       />

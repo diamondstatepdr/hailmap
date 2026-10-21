@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Bell, CloudHail, FileText, House, Map, Moon, Navigation, SunMedium } from "lucide-react";
+import { Bell, CloudHail, FileText, House, Map, Moon, Navigation, Palette, SunMedium } from "lucide-react";
 import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
 export type AppSection = "map" | "storms" | "properties" | "field" | "reports" | "alerts";
 
-const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map }> = [
-  { id: "map", label: "Map", hint: "Live map", icon: Map },
-  { id: "storms", label: "Storms", hint: "Report list", icon: CloudHail },
-  { id: "properties", label: "Addresses", hint: "Property history", icon: House },
-  { id: "field", label: "Field", hint: "Drive mode", icon: Navigation },
-  { id: "reports", label: "Reports", hint: "Shareable reports", icon: FileText },
-  { id: "alerts", label: "Alerts", hint: "Phone alerts", icon: Bell },
+const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map; tone: string }> = [
+  { id: "map", label: "Map", hint: "Live map", icon: Map, tone: "map" },
+  { id: "storms", label: "Storms", hint: "Report list", icon: CloudHail, tone: "storms" },
+  { id: "properties", label: "Addresses", hint: "Property history", icon: House, tone: "addresses" },
+  { id: "field", label: "Field", hint: "Drive mode", icon: Navigation, tone: "field" },
+  { id: "reports", label: "Reports", hint: "Shareable reports", icon: FileText, tone: "reports" },
+  { id: "alerts", label: "Alerts", hint: "Phone alerts", icon: Bell, tone: "alerts" },
 ];
 
 interface Props {
@@ -21,6 +21,8 @@ interface Props {
   onSection: (section: AppSection) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  onOpenAppearance: () => void;
+  paletteLabel: string;
   userName: string | null;
   authConfigured: boolean;
   onSignIn: () => void;
@@ -35,6 +37,8 @@ export default function AppShell({
   onSection,
   theme,
   onToggleTheme,
+  onOpenAppearance,
+  paletteLabel,
   userName,
   authConfigured,
   onSignIn,
@@ -44,10 +48,19 @@ export default function AppShell({
 }: Props) {
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-app text-ink">
-      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-line bg-panel md:flex">
-        <div className="flex items-center gap-3 px-4 pb-3 pt-5">
-          <LogoMark size={40} />
-          <Wordmark />
+      <aside className="shell-rail hidden w-[248px] shrink-0 flex-col md:flex">
+        <div className="px-3 pb-3 pt-4">
+          <button type="button" className="brand-launcher press" aria-label="Swathline appearance" onClick={onOpenAppearance}>
+            <LogoMark size={40} />
+            <Wordmark />
+          </button>
+          <button type="button" className="appearance-open press" onClick={onOpenAppearance}>
+            <Palette size={16} />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold tracking-tight">Appearance</span>
+              <span className="block text-[11px] text-muted">{paletteLabel}</span>
+            </span>
+          </button>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Sections">
           {NAV.map((item) => {
@@ -59,6 +72,7 @@ export default function AppShell({
                 type="button"
                 aria-current={on ? "page" : undefined}
                 onClick={() => onSection(item.id)}
+                data-tone={item.tone}
                 className={`nav-item press ${on ? "nav-item-active" : ""}`}
               >
                 <span className="nav-icon">
@@ -106,7 +120,7 @@ export default function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">{children}</div>
         <nav
-          className="grid grid-cols-6 border-t border-line bg-panel/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(16,36,56,0.06)] backdrop-blur-md md:hidden"
+          className="tab-bar grid grid-cols-6 pb-[max(0.25rem,env(safe-area-inset-bottom))] md:hidden"
           aria-label="Sections"
         >
           {NAV.map((item) => {
@@ -118,6 +132,7 @@ export default function AppShell({
                 type="button"
                 aria-current={on ? "page" : undefined}
                 onClick={() => onSection(item.id)}
+                data-tone={item.tone}
                 className="tab-item"
               >
                 <span className="tab-icon">

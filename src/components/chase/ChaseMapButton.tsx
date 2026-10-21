@@ -14,6 +14,7 @@ export default function ChaseMapButton({ unseen, expanded, onClick }: Props) {
     <button
       type="button"
       className="chase-open press"
+      data-tone="chase"
       data-chase-open
       aria-expanded={expanded}
       aria-haspopup="dialog"

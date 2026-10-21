@@ -35,16 +35,16 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
     <main className="report-paper min-h-screen px-3 py-6 sm:px-6 print:px-0 print:py-0">
       <div className="no-print mx-auto mb-4 flex max-w-3xl items-center justify-between gap-3">
         <Link href="/" className="text-sm font-semibold text-accent">
-          Back to HailMap
+          Back to Swathline
         </Link>
         <PrintButton />
       </div>
       <article className="report-sheet">
         <header className="report-banner">
           <div className="flex items-center gap-3">
-            <LogoMark size={42} title="HailMap" />
+            <LogoMark size={42} title="Swathline" />
             <div>
-              <p className="text-lg font-semibold leading-none tracking-tight">HailMap</p>
+              <p className="text-lg font-semibold leading-none tracking-tight">Swathline</p>
               <p className="report-kicker mt-1">Storm intelligence</p>
             </div>
           </div>
@@ -277,7 +277,7 @@ export default async function StormReportPage({ params }: { params: Promise<{ id
             ))}
           </ul>
           <p className="mt-6 border-t border-line pt-4 text-sm leading-relaxed text-muted">{report.disclaimer}</p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted">HailMap · Storm intelligence</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted">Swathline · Storm intelligence</p>
         </div>
       </article>
     </main>

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Wait a few seconds before another test" }, { status: 429 });
   }
   const now = new Date().toISOString();
-  const title = "HailMap test";
+  const title = "Swathline test";
   const body = "Alerts are on. This is a test ping.";
   const url = "/?section=alerts";
   const stormKey = `test:${device.id}:${Date.now()}`;

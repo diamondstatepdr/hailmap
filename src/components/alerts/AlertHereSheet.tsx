@@ -69,7 +69,7 @@ export default function AlertHereSheet({ label, lat, lon, onClose, onSaved }: Pr
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(8,18,28,0.45)]" role="presentation" onClick={onClose}>
       <div className="w-full max-w-md" onClick={(event) => event.stopPropagation()}>
-      <BottomSheet label="Alert me here" onClose={onClose} expandedMax="min(85dvh, 40rem)">
+      <BottomSheet label="Alert me here" tone="alerts" onClose={onClose} expandedMax="min(85dvh, 40rem)">
         <div className="px-4 pb-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Phone alert</p>
@@ -80,7 +80,7 @@ export default function AlertHereSheet({ label, lat, lon, onClose, onSaved }: Pr
         </div>
         {iosHint ? (
           <p className="mt-3 rounded-2xl bg-panel-2 px-3 py-2 text-sm leading-relaxed" style={{ background: "var(--panel-2)" }}>
-            Add to Home Screen to get alerts. In Safari, tap Share, then Add to Home Screen. Open HailMap from the icon, then turn alerts on.
+            Add to Home Screen to get alerts. In Safari, tap Share, then Add to Home Screen. Open Swathline from the icon, then turn alerts on.
           </p>
         ) : (
           <>

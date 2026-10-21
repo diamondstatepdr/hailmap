@@ -1436,8 +1436,8 @@ export default function HailApp() {
           nonce: Date.now(),
           maxZoom: 16,
           padding: phone
-            ? { top: 210, bottom: 440, left: 40, right: 40 }
-            : { top: 120, bottom: 320, left: 48, right: 48 },
+            ? { top: 220, bottom: 500, left: 36, right: 48 }
+            : { top: 140, bottom: 340, left: 56, right: 56 },
         });
       }
     } catch (error) {
@@ -2351,7 +2351,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && !knock && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && filtered.length === 0 && !reportOpen ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading

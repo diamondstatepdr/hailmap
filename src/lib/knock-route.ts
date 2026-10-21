@@ -270,3 +270,21 @@ export function compactBands(
   bands.sort((a, b) => b.minIn - a.minIn);
   return bands.slice(0, 6);
 }
+
+/** Casing first, then the colored line, so both sit above hail fills. */
+export const KNOCK_ROUTE_LAYERS = ["knock-casing", "knock-line"] as const;
+
+/**
+ * Hail fills are re-added when the radar crossfades, which puts them back on top of the walk.
+ * Move the route to the end of the layer stack whenever it is on the map.
+ */
+export function raiseKnockRoute(map: {
+  getLayer: (id: string) => unknown;
+  moveLayer: (id: string) => void;
+}): boolean {
+  if (!map.getLayer("knock-line")) return false;
+  for (const id of KNOCK_ROUTE_LAYERS) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
+  return true;
+}

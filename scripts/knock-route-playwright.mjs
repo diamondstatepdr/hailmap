@@ -11,21 +11,6 @@ const themes = [
   ["c", "ice-swath"],
 ];
 
-const ring = [
-  [-97.42, 32.7],
-  [-97.24, 32.7],
-  [-97.24, 32.82],
-  [-97.42, 32.82],
-  [-97.42, 32.7],
-];
-
-const stops = [
-  { id: "1", name: "West 7th Street", lat: 32.751, lon: -97.334, hailIn: 1.75 },
-  { id: "2", name: "Harley Avenue", lat: 32.756, lon: -97.328, hailIn: 1.5 },
-  { id: "3", name: "University Drive", lat: 32.746, lon: -97.322, hailIn: 1.25 },
-  { id: "4", name: "Montgomery Street", lat: 32.742, lon: -97.338, hailIn: 1 },
-];
-
 async function hideDev(page) {
   await page.addInitScript(() => {
     const style = document.createElement("style");
@@ -42,43 +27,11 @@ async function install(page) {
       body: JSON.stringify({ reports: [], swaths: { type: "FeatureCollection", features: [] }, fetchedAt: new Date().toISOString(), status: [] }),
     });
   });
-  await page.route("**/api/mesh?**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        label: "Radar hail",
-        note: null,
-        collection: {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              id: "swath-1",
-              properties: { id: "swath-1", minIn: 1.5, maxIn: 1.75, label: "1.5–1.75 in" },
-              geometry: { type: "Polygon", coordinates: [ring] },
-            },
-          ],
-        },
-      }),
-    });
-  });
   await page.route("**/api/dealers", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ dealers: [], note: "No mapped dealerships in this swath.", attribution: "© OpenStreetMap contributors" }),
-    });
-  });
-  await page.route("**/api/knock-route", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        stops,
-        note: "Named residential streets from OpenStreetMap. Hardest hail first, then ordered into one route.",
-        attribution: "Streets © OpenStreetMap contributors",
-      }),
     });
   });
   await page.route("**/api/chase", async (route) => {
@@ -137,24 +90,24 @@ async function install(page) {
 async function openSwath(page) {
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ timeout: 30000 });
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(4000);
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no map");
   const points = [
-    [box.x + box.width * 0.5, box.y + box.height * 0.45],
-    [box.x + box.width * 0.42, box.y + box.height * 0.5],
-    [box.x + box.width * 0.58, box.y + box.height * 0.4],
+    [0.5, 0.5],
+    [0.46, 0.48],
+    [0.55, 0.52],
+    [0.42, 0.55],
+    [0.58, 0.42],
   ];
-  for (const [x, y] of points) {
-    await page.mouse.click(x, y);
+  for (const [fx, fy] of points) {
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
     const button = page.locator("[data-knock-route]");
-    if (await button.count()) {
-      try {
-        await button.waitFor({ state: "visible", timeout: 2000 });
-        return;
-      } catch {
-        /* try another point */
-      }
+    try {
+      await button.waitFor({ state: "visible", timeout: 2500 });
+      return;
+    } catch {
+      /* the swath may still be painting */
     }
   }
   throw new Error("swath click did not open the area card");
@@ -165,11 +118,9 @@ async function shoot(browser, label, options, theme, name) {
   const page = await context.newPage();
   await hideDev(page);
   await install(page);
-  await page.goto(`${base}/?lat=32.75&lon=-97.33&z=12&theme=${theme}`, { waitUntil: "domcontentloaded" });
-  const close = page.getByRole("button", { name: "Close" });
-  if (await close.count()) {
-    await close.first().click().catch(() => undefined);
-  }
+  const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
+  await page.goto(`${base}/?lat=33.389&lon=-111.830&z=12.8&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await meshReady;
   await openSwath(page);
   await page.locator("[data-knock-route]").waitFor();
   await page.waitForTimeout(300);
@@ -177,9 +128,8 @@ async function shoot(browser, label, options, theme, name) {
   await page.screenshot({ path: card });
   console.log("wrote", card);
   await page.locator("[data-knock-route]").click();
-  await page.locator("[data-knock-sheet]").waitFor({ timeout: 15000 });
-  await page.getByText("West 7th Street").waitFor();
-  await page.waitForTimeout(1200);
+  await page.locator("[data-knock-sheet] .knock-list li").first().waitFor({ timeout: 45000 });
+  await page.waitForTimeout(2800);
   const route = `${outDir}/${label}-${name}-route.png`;
   await page.screenshot({ path: route });
   console.log("wrote", route);

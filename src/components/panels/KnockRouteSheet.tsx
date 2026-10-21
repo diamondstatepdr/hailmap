@@ -19,7 +19,7 @@ export default function KnockRouteSheet({ label, stops, mode, note, onMode, onCl
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
       <BottomSheet label="Door-knock route" tone="field" onClose={onClose} expandedMax="min(58dvh, 32rem)" peekHeight={132}>
-        <div data-knock-sheet>
+        <div data-knock-sheet className="knock-sheet">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Door-knock route</p>
           <p className="mt-1 text-lg font-semibold tracking-tight">{label}</p>
           <p className="mt-1 text-sm text-muted">{note}</p>
@@ -46,25 +46,27 @@ export default function KnockRouteSheet({ label, stops, mode, note, onMode, onCl
           ) : (
             <p className="mt-3 text-sm">No streets to route yet.</p>
           )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {google.url ? (
-              <a className="btn btn-primary press" href={google.url} target="_blank" rel="noreferrer" data-knock-google>
-                Google Maps
-              </a>
-            ) : null}
-            {apple.url ? (
-              <a className="btn btn-secondary press" href={apple.url} target="_blank" rel="noreferrer" data-knock-apple>
-                Apple Maps
-              </a>
-            ) : null}
+          <div className="knock-foot">
+            <div className="flex flex-wrap gap-2">
+              {google.url ? (
+                <a className="btn btn-primary press" href={google.url} target="_blank" rel="noreferrer" data-knock-google>
+                  Google Maps
+                </a>
+              ) : null}
+              {apple.url ? (
+                <a className="btn btn-secondary press" href={apple.url} target="_blank" rel="noreferrer" data-knock-apple>
+                  Apple Maps
+                </a>
+              ) : null}
+            </div>
+            {trimmed ? (
+              <p className="mt-2 text-xs text-muted">
+                Google Maps opens {google.count} stops (9 between the start and the end). Apple Maps opens {apple.count}. The map shows the full walk.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-muted">Opens this order in Google Maps or Apple Maps.</p>
+            )}
           </div>
-          {trimmed ? (
-            <p className="mt-2 text-xs text-muted">
-              Google Maps opens {google.count} stops (9 between the start and the end). Apple Maps opens {apple.count}. The map shows the full walk.
-            </p>
-          ) : (
-            <p className="mt-2 text-xs text-muted">Opens this order in Google Maps or Apple Maps.</p>
-          )}
         </div>
       </BottomSheet>
     </div>

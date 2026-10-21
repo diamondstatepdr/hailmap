@@ -2362,14 +2362,28 @@ html.dark .replay-range::-moz-range-thumb {
   color: var(--accent-ink);
 }
 
+.knock-sheet {
+  padding: 0 1rem 0.15rem;
+}
+
 .knock-list {
   display: grid;
   gap: 0.35rem;
-  max-height: 14rem;
+  max-height: min(28dvh, 14rem);
   margin: 0.75rem 0 0;
   overflow: auto;
-  padding: 0;
+  padding: 0 0.15rem 0.15rem 0;
   list-style: none;
+}
+
+.knock-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0.65rem -1rem 0;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  padding: 0.7rem 1rem 0.85rem;
 }
 
 .knock-list li {

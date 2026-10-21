@@ -6,6 +6,7 @@ import {
   circlePolygon,
   googleMapsHref,
   orderKnockStops,
+  raiseKnockRoute,
   streetsFromWays,
   type KnockStop,
 } from "@/lib/knock-route";
@@ -86,6 +87,21 @@ describe("door-knock route", () => {
     expect(apple.url.split("+to:")).toHaveLength(APPLE_INTERMEDIATE + 1);
     expect(apple.url.includes("%2B")).toBe(false);
     expect(apple.count).toBe(APPLE_INTERMEDIATE + 2);
+  });
+
+  it("lifts the route line above hail fills that were added later", () => {
+    const order = ["mesh-fill", "knock-casing", "knock-line", "mesh-a-fill", "mesh-b-fill"];
+    const map = {
+      getLayer: (id: string) => (order.includes(id) ? { id } : undefined),
+      moveLayer: (id: string) => {
+        const index = order.indexOf(id);
+        if (index >= 0) order.splice(index, 1);
+        order.push(id);
+      },
+    };
+    expect(raiseKnockRoute(map)).toBe(true);
+    expect(order.slice(-2)).toEqual(["knock-casing", "knock-line"]);
+    expect(raiseKnockRoute({ getLayer: () => undefined, moveLayer: () => undefined })).toBe(false);
   });
 
   it("uses a pin link when the route is a single street", () => {

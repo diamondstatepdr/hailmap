@@ -14,6 +14,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
+import { raiseKnockRoute } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
@@ -368,6 +369,19 @@ export default function HailMap({
             sheet: true,
           })
         : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
+    const roomY = Math.max(120, height - 150);
+    const roomX = Math.max(80, width - 72);
+    const ySum = padding.top + padding.bottom;
+    const xSum = padding.left + padding.right;
+    const fitted =
+      ySum > roomY || xSum > roomX
+        ? {
+            top: Math.round(padding.top * (ySum > roomY ? roomY / ySum : 1)),
+            bottom: Math.round(padding.bottom * (ySum > roomY ? roomY / ySum : 1)),
+            left: Math.round(padding.left * (xSum > roomX ? roomX / xSum : 1)),
+            right: Math.round(padding.right * (xSum > roomX ? roomX / xSum : 1)),
+          }
+        : padding;
     try {
       map.fitBounds(
         [
@@ -375,7 +389,7 @@ export default function HailMap({
           [safe.east, safe.north],
         ],
         {
-          padding,
+          padding: fitted,
           duration: 0,
           maxZoom: next.maxZoom ?? 8.2,
         },
@@ -419,6 +433,18 @@ export default function HailMap({
   useEffect(() => {
     applyFrame(frame);
   }, [frame]);
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !knockLine?.features.length) return;
+    const raise = () => raiseKnockRoute(map);
+    const frameId = window.requestAnimationFrame(raise);
+    map.on("idle", raise);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      map.off("idle", raise);
+    };
+  }, [knockLine, mesh]);
 
   useEffect(() => {
     const started = performance.now();
@@ -1081,13 +1107,13 @@ export default function HailMap({
             id="knock-casing"
             type="line"
             layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{ "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.92 }}
+            paint={{ "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.95 }}
           />
           <Layer
             id="knock-line"
             type="line"
             layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{ "line-color": "#1d4ed8", "line-width": 4 }}
+            paint={{ "line-color": "#1d4ed8", "line-width": 5, "line-opacity": 1 }}
           />
         </Source>
       ) : null}

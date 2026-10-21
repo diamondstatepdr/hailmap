@@ -229,6 +229,7 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
           maxSizeIn,
           minIn: row.band.minIn,
           label: row.band.label,
+          mapLabel: row.band.mapLabel,
           color: row.band.color,
           ink: row.band.ink,
           startedAt,

@@ -712,9 +712,9 @@ export default function HailMap({
         <SwathSource
           id="swath"
           data={swaths}
-          fill={theme === "dark" ? 0.8 : 0.86}
-          lineWidth={1.2}
-          lineOpacity={0.95}
+          fill={theme === "dark" ? 0.48 : 0.52}
+          lineWidth={1.75}
+          lineOpacity={1}
           blur={0}
           theme={theme}
           labels
@@ -1196,10 +1196,10 @@ function MeshContours({
 }) {
   const meshFade = useCrossfade(mesh);
   const pulseFade = useCrossfade(meshPulse);
-  const fill = faded ? (theme === "dark" ? 0.36 : 0.4) : emphasis ? (theme === "dark" ? 0.86 : 0.9) : theme === "dark" ? 0.8 : 0.86;
-  const lineWidth = 1.15;
-  const lineOpacity = (faded ? 0.55 : 0.94);
-  const pulseFill = (theme === "dark" ? 0.88 : 0.92) * (faded ? 0.45 : 1);
+  const fill = faded ? 0.28 : theme === "dark" ? 0.48 : 0.52;
+  const lineWidth = 1.75;
+  const lineOpacity = faded ? 0.7 : 1;
+  const pulseFill = 0.55 * (faded ? 0.5 : 1);
   if (!emphasis) {
     return (
       <>
@@ -1288,7 +1288,7 @@ function SwathSource({
         paint={
           {
             "line-color": halo,
-            "line-width": lineWidth + 2.4,
+            "line-width": lineWidth + 3.2,
             "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
@@ -1317,18 +1317,18 @@ function SwathSource({
           minzoom={9}
           filter={["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "showLabel"], true]]}
           layout={{
-            "text-field": ["get", "label"],
-            "text-font": ["Noto Sans Bold"],
-            "text-size": ["interpolate", ["linear"], ["zoom"], 9, 11, 12, 14],
+            "text-field": ["coalesce", ["get", "mapLabel"], ""],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 9, 12, 12, 15],
             "text-allow-overlap": false,
-            "text-padding": 8,
+            "text-padding": 6,
             "text-optional": true,
           }}
           paint={{
-            "text-color": ["coalesce", ["get", "ink"], "#ffffff"] as never,
-            "text-halo-color": theme === "dark" ? "#071018" : "#f8fafc",
-            "text-halo-width": 1.5,
-            "text-halo-blur": 0.2,
+            "text-color": "#ffffff",
+            "text-halo-color": "#102033",
+            "text-halo-width": 2,
+            "text-halo-blur": 0.15,
           }}
         />
       ) : null}

@@ -92,6 +92,7 @@ describe("reportsToSwaths", () => {
     expect(mins).toContain(0.75);
     expect(mins).toContain(2.5);
     expect(polygons.find((feature) => feature.properties?.minIn === 2.5)?.properties?.color).toBe("#d946ef");
+    expect(polygons.find((feature) => feature.properties?.minIn === 2.5)?.properties?.mapLabel).toBe("2.5+");
     const outer = polygons.find((feature) => feature.properties?.minIn === 0.75);
     expect(outer?.geometry.type === "Polygon" ? outer.geometry.coordinates.length : 0).toBeGreaterThan(1);
     expect(collection.features.some((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true)).toBe(true);

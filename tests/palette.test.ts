@@ -119,6 +119,8 @@ describe("Swathline palettes", () => {
   it("keeps hail-size legend colors out of the theme files", () => {
     expect(MESH_LEGEND.map((band) => band.color)).toEqual(["#16a34a", "#facc15", "#f97316", "#e11d48", "#d946ef"]);
     expect(MESH_LEGEND.map((band) => band.label)).toEqual(['<1"', '1"', '1.5"', '2"', '2.5"+']);
+    expect(MESH_LEGEND.map((band) => band.mapLabel)).toEqual(["<1", "1", "1.5", "2", "2.5+"]);
+    for (const band of MESH_LEGEND) expect(band.mapLabel).toMatch(/^[\x20-\x7e]+$/);
     for (const token of ["--low:", "--moderate:", "--high:", "--severe:", "--hail:"]) {
       expect(css).not.toContain(token);
       expect(globals).toContain(token);

@@ -162,6 +162,8 @@ describe("MESH contours", () => {
     const core = collection.features.find((feature) => feature.properties?.minIn === 2.5 && feature.geometry.type === "Polygon");
     expect(core?.properties?.color).toBe("#d946ef");
     expect(core?.properties?.label).toBe('2.5"+');
+    expect(core?.properties?.mapLabel).toBe("2.5+");
+    expect(String(core?.properties?.mapLabel)).not.toMatch(/["“”]/);
     expect(core?.properties?.showLabel).toBe(true);
     const mid = collection.features.find((feature) => feature.properties?.minIn === 1.5 && feature.geometry.type === "Polygon");
     expect(mid?.geometry.type === "Polygon" ? mid.geometry.coordinates.length : 0).toBeGreaterThan(1);

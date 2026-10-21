@@ -164,6 +164,10 @@ button {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset) + 2.35rem);
 }
 
+.map-empty {
+  top: calc(var(--chrome-offset) + 0.7rem);
+}
+
 .map-legend {
   bottom: 0.7rem;
   left: 0.75rem;

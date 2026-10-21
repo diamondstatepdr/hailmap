@@ -221,6 +221,7 @@ export function cellsToSwaths(
           minIn: band.minIn,
           maxIn,
           label: band.label,
+          mapLabel: band.mapLabel,
           color: band.color,
           ink: band.ink,
           product: properties.product,

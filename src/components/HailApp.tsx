@@ -2166,7 +2166,7 @@ export default function HailApp() {
             </div>
           ) : null}
           {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
-            <p className="glass pointer-events-none absolute left-1/2 top-1/3 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
+            <p className="map-empty glass pointer-events-none absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
               {historyLoading
                 ? "Loading storm history…"
                 : historyActive

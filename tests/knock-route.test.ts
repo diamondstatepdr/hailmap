@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+import {
+  APPLE_INTERMEDIATE,
+  GOOGLE_WAYPOINTS,
+  appleMapsHref,
+  circlePolygon,
+  googleMapsHref,
+  orderKnockStops,
+  streetsFromWays,
+  type KnockStop,
+} from "@/lib/knock-route";
+
+const area: GeoJSON.Polygon = {
+  type: "Polygon",
+  coordinates: [
+    [
+      [-97.4, 32.7],
+      [-97.25, 32.7],
+      [-97.25, 32.82],
+      [-97.4, 32.82],
+      [-97.4, 32.7],
+    ],
+  ],
+};
+
+function way(id: number, name: string, lat: number, lon: number, highway = "residential") {
+  return {
+    type: "way",
+    id,
+    tags: { name, highway },
+    geometry: [
+      { lat: lat - 0.002, lon: lon - 0.002 },
+      { lat, lon },
+      { lat: lat + 0.002, lon: lon + 0.002 },
+    ],
+  };
+}
+
+describe("door-knock route", () => {
+  const focus = { lat: 32.75, lon: -97.33 };
+
+  it("keeps the hardest sample of each residential street inside the swath", () => {
+    const stops = streetsFromWays(
+      [
+        way(1, "West 7th Street", 32.75, -97.33),
+        way(2, "West 7th Street", 32.751, -97.331),
+        way(3, "Camp Bowie Boulevard", 32.76, -97.35, "primary"),
+        way(4, "Harley Avenue", 32.77, -97.3),
+        way(5, "Outside Lane", 33.2, -97.3),
+        way(6, "", 32.74, -97.32),
+      ],
+      area,
+      [{ minIn: 1.75, geometry: circlePolygon(32.75, -97.33, 0.4) }],
+      focus,
+      1,
+    );
+    expect(stops.map((stop) => stop.name)).toEqual(["West 7th Street", "Harley Avenue"]);
+    expect(stops[0].hailIn).toBe(1.75);
+    expect(stops[1].hailIn).toBe(1);
+  });
+
+  it("walks the nearest hard-hit street first, then the closest remaining block", () => {
+    const stops: KnockStop[] = [
+      { id: "a", name: "Far", lat: 32.8, lon: -97.2, hailIn: 2.5 },
+      { id: "b", name: "Start", lat: 32.75, lon: -97.33, hailIn: 1 },
+      { id: "c", name: "Next", lat: 32.755, lon: -97.325, hailIn: 1.5 },
+    ];
+    expect(orderKnockStops(stops, focus).map((stop) => stop.name)).toEqual(["Start", "Next", "Far"]);
+  });
+
+  it("respects Google and Apple waypoint limits", () => {
+    const stops: KnockStop[] = Array.from({ length: 20 }, (_, index) => ({
+      id: String(index),
+      name: `Street ${index}`,
+      lat: 32.7 + index * 0.01,
+      lon: -97.4 + index * 0.01,
+      hailIn: 1,
+    }));
+    const google = googleMapsHref(stops, "walk");
+    const apple = appleMapsHref(stops, "drive");
+    const waypoints = new URL(google.url).searchParams.get("waypoints")?.split("|") ?? [];
+    expect(waypoints).toHaveLength(GOOGLE_WAYPOINTS);
+    expect(google.count).toBe(GOOGLE_WAYPOINTS + 2);
+    expect(new URL(google.url).searchParams.get("travelmode")).toBe("walking");
+    expect(apple.url).toContain("dirflg=d");
+    expect(apple.url.split("+to:")).toHaveLength(APPLE_INTERMEDIATE + 1);
+    expect(apple.url.includes("%2B")).toBe(false);
+    expect(apple.count).toBe(APPLE_INTERMEDIATE + 2);
+  });
+
+  it("uses a pin link when the route is a single street", () => {
+    const stop: KnockStop = { id: "1", name: "West 7th Street", lat: 32.75, lon: -97.33, hailIn: 1.25 };
+    expect(googleMapsHref([stop], "walk").url).toContain("query=32.75000,-97.33000");
+    expect(appleMapsHref([stop], "walk").url).toContain("West%207th%20Street");
+  });
+});

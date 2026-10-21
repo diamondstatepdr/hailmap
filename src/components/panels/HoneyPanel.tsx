@@ -44,6 +44,9 @@ interface Props {
   zoomedOut?: boolean;
   /** Miles are only shown when they are measured from the tech or a searched address. */
   distanceFrom: "you" | "search" | null;
+  onRoute?: () => void;
+  routeBusy?: boolean;
+  routeError?: string | null;
 }
 
 export default function HoneyPanel(props: Props) {
@@ -92,6 +95,18 @@ export default function HoneyPanel(props: Props) {
         <span className="honey-switch" aria-hidden />
         Show on the map
       </button>
+      {props.onRoute ? (
+        <button
+          type="button"
+          className="btn btn-primary press"
+          data-knock-route
+          disabled={Boolean(props.routeBusy || props.needsDay || !props.spots.length)}
+          onClick={props.onRoute}
+        >
+          {props.routeBusy ? "Building the route…" : "Door-knock route"}
+        </button>
+      ) : null}
+      {props.routeError ? <p className="honey-note">{props.routeError}</p> : null}
       <div className="honey-body">
         {props.needsDay ? (
           <p className="honey-note">Pick the day the hail fell. Money spots are ranked one storm at a time.</p>

@@ -177,6 +177,8 @@ interface Props {
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
+  knockLine?: GeoJSON.FeatureCollection | null;
+  knockStops?: Array<{ id: string; lat: number; lon: number; n: number }> | null;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -257,6 +259,8 @@ export default function HailMap({
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
+  knockLine = null,
+  knockStops = null,
   selectedId,
   focus,
   frame,
@@ -1071,6 +1075,27 @@ export default function HailMap({
           />
         </Source>
       ) : null}
+      {knockLine?.features.length ? (
+        <Source id="knock-route" type="geojson" data={knockLine}>
+          <Layer
+            id="knock-casing"
+            type="line"
+            layout={{ "line-cap": "round", "line-join": "round" }}
+            paint={{ "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.92 }}
+          />
+          <Layer
+            id="knock-line"
+            type="line"
+            layout={{ "line-cap": "round", "line-join": "round" }}
+            paint={{ "line-color": "#1d4ed8", "line-width": 4 }}
+          />
+        </Source>
+      ) : null}
+      {knockStops?.map((stop) => (
+        <Marker key={stop.id} longitude={stop.lon} latitude={stop.lat} anchor="center">
+          <span className="knock-pin">{stop.n}</span>
+        </Marker>
+      ))}
       {userLocation ? (
         <Marker longitude={userLocation.lon} latitude={userLocation.lat} anchor="center">
           <span className="user-dot-hit">

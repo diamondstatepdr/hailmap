@@ -42,6 +42,51 @@ describe("dealership hit list", () => {
     expect(ranked[1].distanceKm).toBeLessThan(ranked[2].distanceKm);
   });
 
+  it("uses the mesh inches inside the heaviest band covering the lot", () => {
+    const outer: GeoJSON.Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-111.9, 33.3],
+          [-111.7, 33.3],
+          [-111.7, 33.5],
+          [-111.9, 33.5],
+          [-111.9, 33.3],
+        ],
+      ],
+    };
+    const core: GeoJSON.Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-111.8, 33.4],
+          [-111.76, 33.4],
+          [-111.76, 33.44],
+          [-111.8, 33.44],
+          [-111.8, 33.4],
+        ],
+      ],
+    };
+    const bands = [
+      { minIn: 1, geometry: outer },
+      { minIn: 2.5, geometry: core },
+    ];
+    const ranked = rankDealersByHail(
+      [
+        dealer({ id: "edge", name: "Edge Motors", lat: 33.35, lon: -111.85, distanceKm: 1, meshIn: 1.22 }),
+        dealer({ id: "core", name: "Core Honda", lat: 33.42, lon: -111.78, distanceKm: 4, meshIn: 2.53 }),
+        dealer({ id: "floor", name: "Floor Cars", lat: 33.36, lon: -111.84, distanceKm: 0.5 }),
+      ],
+      bands,
+      1,
+    );
+    expect(ranked.map((item) => item.name)).toEqual(["Core Honda", "Edge Motors", "Floor Cars"]);
+    expect(ranked[0].hailIn).toBe(2.53);
+    expect(ranked[1].hailIn).toBe(1.22);
+    expect(ranked[2].hailIn).toBe(1);
+    expect(hailAtLot(33.35, -111.85, bands, 1, 2.53)).toBe(2.53);
+  });
+
   it("builds a tap-to-call link and driving directions", () => {
     expect(telHref("(817) 555-0100")).toBe("tel:8175550100");
     expect(telHref("not a phone")).toBeNull();

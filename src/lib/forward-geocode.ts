@@ -92,6 +92,76 @@ export function parseNominatim(payload: unknown): GeocodeHit[] {
   return hits;
 }
 
+const STATE_CODE: Record<string, string> = {
+  alabama: "AL",
+  alaska: "AK",
+  arizona: "AZ",
+  arkansas: "AR",
+  california: "CA",
+  colorado: "CO",
+  connecticut: "CT",
+  delaware: "DE",
+  florida: "FL",
+  georgia: "GA",
+  hawaii: "HI",
+  idaho: "ID",
+  illinois: "IL",
+  indiana: "IN",
+  iowa: "IA",
+  kansas: "KS",
+  kentucky: "KY",
+  louisiana: "LA",
+  maine: "ME",
+  maryland: "MD",
+  massachusetts: "MA",
+  michigan: "MI",
+  minnesota: "MN",
+  mississippi: "MS",
+  missouri: "MO",
+  montana: "MT",
+  nebraska: "NE",
+  nevada: "NV",
+  "new hampshire": "NH",
+  "new jersey": "NJ",
+  "new mexico": "NM",
+  "new york": "NY",
+  "north carolina": "NC",
+  "north dakota": "ND",
+  ohio: "OH",
+  oklahoma: "OK",
+  oregon: "OR",
+  pennsylvania: "PA",
+  "rhode island": "RI",
+  "south carolina": "SC",
+  "south dakota": "SD",
+  tennessee: "TN",
+  texas: "TX",
+  utah: "UT",
+  vermont: "VT",
+  virginia: "VA",
+  washington: "WA",
+  "west virginia": "WV",
+  wisconsin: "WI",
+  wyoming: "WY",
+  "district of columbia": "DC",
+};
+
+/** "Mesa, AZ" from a Nominatim reverse payload. */
+export function placeFromNominatim(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const address = (payload as { address?: Record<string, unknown> }).address;
+  if (!address) return null;
+  const city =
+    text(address.city, 80) ?? text(address.town, 80) ?? text(address.village, 80) ?? text(address.hamlet, 80);
+  if (!city) return null;
+  const iso = text(address["ISO3166-2-lvl4"], 12);
+  const fromIso = iso && /^US-[A-Z]{2}$/.test(iso) ? iso.slice(3) : null;
+  const rawState = text(address.state, 40);
+  const fromName = rawState ? (STATE_CODE[rawState.toLowerCase()] ?? (/^[A-Za-z]{2}$/.test(rawState) ? rawState.toUpperCase() : null)) : null;
+  const code = fromIso ?? fromName;
+  return code ? `${city}, ${code}` : city;
+}
+
 export function streetFromNominatim(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const address = (payload as { address?: Record<string, unknown> }).address;
@@ -157,22 +227,45 @@ export async function forwardGeocode(query: string, cache?: GeocodeCache): Promi
   return places;
 }
 
-export async function reverseStreet(lat: number, lon: number, cache?: GeocodeCache): Promise<string | null> {
-  if (!validLatLon(lat, lon)) return null;
+export async function reverseLookup(
+  lat: number,
+  lon: number,
+  cache?: GeocodeCache,
+): Promise<{ street: string | null; place: string | null }> {
+  if (!validLatLon(lat, lon)) return { street: null, place: null };
   const key = `reverse:${lat.toFixed(3)},${lon.toFixed(3)}`;
   const cached = cache?.get(key);
-  if (cached) return cached[0]?.label ?? null;
+  if (cached && !cached.length) return { street: null, place: null };
+  const hit = cached?.[0];
+  if (hit?.city) {
+    const place = hit.state ? `${hit.city}, ${hit.state}` : hit.city;
+    return { street: hit.label || null, place };
+  }
   try {
     const url = new URL("https://nominatim.openstreetmap.org/reverse");
     url.searchParams.set("lat", lat.toFixed(5));
     url.searchParams.set("lon", lon.toFixed(5));
     url.searchParams.set("format", "jsonv2");
     url.searchParams.set("addressdetails", "1");
-    const street = streetFromNominatim(await nominatim(url.toString()));
-    cache?.set(key, street ? [{ label: street, lat, lon, city: null, state: null, zip: null, source: "nominatim" }] : [], street ? 7 * 86400000 : 60 * 60 * 1000);
-    return street;
+    const payload = await nominatim(url.toString());
+    const street = streetFromNominatim(payload);
+    const place = placeFromNominatim(payload);
+    const [city, state] = place?.split(", ") ?? [];
+    cache?.set(
+      key,
+      street || place
+        ? [{ label: street ?? "", lat, lon, city: city ?? null, state: state ?? null, zip: null, source: "nominatim" }]
+        : [],
+      street || place ? 7 * 86400000 : 60 * 60 * 1000,
+    );
+    return { street, place };
   } catch (error) {
     console.error("[hailmap] reverse", error instanceof Error ? error.message : error);
-    return null;
+    return { street: null, place: null };
   }
+}
+
+export async function reverseStreet(lat: number, lon: number, cache?: GeocodeCache): Promise<string | null> {
+  const lookup = await reverseLookup(lat, lon, cache);
+  return lookup.street;
 }

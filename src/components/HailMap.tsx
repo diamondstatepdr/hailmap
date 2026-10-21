@@ -296,6 +296,20 @@ export default function HailMap({
   frameRef.current = frame;
   const outlookData = useMemo(() => subsetThreats(threats, ["outlook", "significant"]), [threats]);
   const alertData = useMemo(() => subsetThreats(threats, ["watch", "warning", "statement"]), [threats]);
+  const clusteredDealers = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (dealers?.features ?? []).filter((feature) => String(feature.properties?.id ?? "") !== (selectedDealerId ?? "")),
+    }),
+    [dealers, selectedDealerId],
+  );
+  const selectedDealer = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (dealers?.features ?? []).filter((feature) => String(feature.properties?.id ?? "") === (selectedDealerId ?? "")),
+    }),
+    [dealers, selectedDealerId],
+  );
   const interactiveLayerIds = [
     showHoney && honey?.features.length ? "honey-pins" : "",
     showHoney && honey?.features.length ? "honey-heat" : "",
@@ -306,6 +320,7 @@ export default function HailMap({
       ? ["mesh-a-fill", "mesh-b-fill", "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
       : [showMesh && mesh?.features.length ? "mesh-fill" : "", showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : ""]),
     showSwaths ? "swath-fill" : "",
+    dealers?.features.length ? "dealer-clusters" : "",
     dealers?.features.length ? "dealer-pins" : "",
     dealers?.features.length ? "dealer-hit" : "",
     showThreats ? "threat-warning-fill" : "",
@@ -469,6 +484,8 @@ export default function HailMap({
     try {
       if (!map.hasImage("mark-wind")) map.addImage("mark-wind", windGlyph(), { pixelRatio: 2 });
       if (!map.hasImage("mark-tornado")) map.addImage("mark-tornado", tornadoGlyph(), { pixelRatio: 2 });
+      if (!map.hasImage("mark-dealer")) map.addImage("mark-dealer", dealerGlyph("#0c6278"), { pixelRatio: 2 });
+      if (!map.hasImage("mark-dealer-on")) map.addImage("mark-dealer-on", dealerGlyph("#d97706"), { pixelRatio: 2 });
     } catch {
       /* Style swaps drop images; the next style event adds them again. */
     }
@@ -540,7 +557,10 @@ export default function HailMap({
       onSelectHoney?.(String(honeyHit.properties.id));
       return;
     }
-    for (const feature of event.features ?? []) {
+    const features = [...(event.features ?? [])].sort(
+      (a, b) => Number(isRadarLayer(b.layer?.id)) - Number(isRadarLayer(a.layer?.id)),
+    );
+    for (const feature of features) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
         const source = mapRef.current?.getSource("reports");
@@ -561,6 +581,19 @@ export default function HailMap({
       }
       if ((feature.layer?.id === "hail-points" || feature.layer?.id === "hail-point-hit") && props.id) {
         onSelectReport(String(props.id));
+        return;
+      }
+      if (feature.layer?.id === "dealer-clusters" && props.cluster_id != null) {
+        const source = mapRef.current?.getSource("dealers");
+        const geometry = feature.geometry;
+        if (!source || geometry.type !== "Point" || !("getClusterExpansionZoom" in source)) return;
+        const [lon, lat] = geometry.coordinates;
+        void (source as GeoJSONSource)
+          .getClusterExpansionZoom(Number(props.cluster_id))
+          .then((zoom) => {
+            mapRef.current?.easeTo({ center: [lon, lat], zoom: Math.max(zoom, 15), duration: 600 });
+          })
+          .catch(() => undefined);
         return;
       }
       if ((feature.layer?.id === "dealer-pins" || feature.layer?.id === "dealer-hit") && props.id) {
@@ -587,6 +620,8 @@ export default function HailMap({
           startLon: numberProp(props.startLon),
           endLat: numberProp(props.endLat),
           endLon: numberProp(props.endLon),
+          anchorLat: event.lngLat.lat,
+          anchorLon: event.lngLat.lng,
         });
         return;
       }
@@ -682,9 +717,11 @@ export default function HailMap({
           iconsBound.current = true;
           map.on("styleimagemissing", (event) => {
             const id = event.id;
-            if (id !== "mark-wind" && id !== "mark-tornado") return;
+            if (id !== "mark-wind" && id !== "mark-tornado" && id !== "mark-dealer" && id !== "mark-dealer-on") return;
             if (map.hasImage(id)) return;
-            map.addImage(id, id === "mark-wind" ? windGlyph() : tornadoGlyph(), { pixelRatio: 2 });
+            const glyph =
+              id === "mark-wind" ? windGlyph() : id === "mark-tornado" ? tornadoGlyph() : dealerGlyph(id === "mark-dealer-on" ? "#d97706" : "#0c6278");
+            map.addImage(id, glyph, { pixelRatio: 2 });
           });
         }
         installIcons();
@@ -1123,39 +1160,60 @@ export default function HailMap({
         </Source>
       ) : null}
       {dealers?.features.length ? (
-        <Source id="dealers" type="geojson" data={dealers}>
+        <Source id="dealers" type="geojson" data={clusteredDealers} cluster clusterRadius={28} clusterMaxZoom={14}>
           <Layer
-            id="dealer-hit"
+            id="dealer-clusters"
             type="circle"
-            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
-          />
-          <Layer
-            id="dealer-pin-halo"
-            type="circle"
+            filter={["has", "point_count"]}
             paint={{
-              "circle-color": "#ffffff",
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 8, 10, 12, 14, 16],
+              "circle-color": "#0c6278",
+              "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 11, 8, 14, 20, 16],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 1.5,
               "circle-opacity": 0.94,
             }}
           />
           <Layer
-            id="dealer-pins"
+            id="dealer-cluster-count"
+            type="symbol"
+            filter={["has", "point_count"]}
+            layout={{
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-size": 11,
+              "text-font": ["Noto Sans Bold"],
+              "text-allow-overlap": true,
+            }}
+            paint={{ "text-color": "#ffffff" }}
+          />
+          <Layer
+            id="dealer-hit"
             type="circle"
-            paint={{
-              "circle-color": ["case", ["==", ["get", "id"], selectedDealerId ?? ""], "#d97706", "#0c6278"] as never,
-              "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                5,
-                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 7, 5],
-                10,
-                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 10, 8],
-                14,
-                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 13, 11],
-              ] as never,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 3, 2] as never,
+            filter={["!", ["has", "point_count"]]}
+            paint={{ "circle-color": "#000000", "circle-radius": 14, "circle-opacity": 0 }}
+          />
+          <Layer
+            id="dealer-pins"
+            type="symbol"
+            filter={["!", ["has", "point_count"]]}
+            layout={{
+              "icon-image": "mark-dealer",
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.4, 13, 0.48, 16, 0.56],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            }}
+          />
+        </Source>
+      ) : null}
+      {selectedDealer.features.length ? (
+        <Source id="dealer-selected" type="geojson" data={selectedDealer}>
+          <Layer
+            id="dealer-selected-pin"
+            type="symbol"
+            layout={{
+              "icon-image": "mark-dealer-on",
+              "icon-size": 0.72,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
             }}
           />
         </Source>
@@ -1265,6 +1323,32 @@ function windGlyph(): ImageData {
   });
 }
 
+function dealerGlyph(color: string): ImageData {
+  return glyphCanvas((ctx) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(32, 32, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(18, 34);
+    ctx.lineTo(24, 23);
+    ctx.quadraticCurveTo(32, 18, 40, 23);
+    ctx.lineTo(46, 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(14, 32, 36, 11);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(22, 44, 4.2, 0, Math.PI * 2);
+    ctx.arc(42, 44, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
 function tornadoGlyph(): ImageData {
   return glyphCanvas((ctx) => {
     ctx.strokeStyle = "#ffffff";
@@ -1301,18 +1385,18 @@ function zoomFill(fill: number): number | unknown[] {
     5,
     fill,
     9.5,
-    fill * 0.7,
-    11.5,
-    Math.min(0.28, fill * 0.48),
-    13,
-    Math.min(0.14, fill * 0.24),
-    15.5,
-    Math.min(0.07, fill * 0.12),
+    Math.max(0.46, fill * 0.85),
+    12,
+    0.72,
+    14.2,
+    0.6,
+    16,
+    0.48,
   ];
 }
 
 function zoomLine(width: number): unknown[] {
-  return ["interpolate", ["linear"], ["zoom"], 6, Math.max(1.2, width * 0.85), 12, width, 15.5, width + 1.15];
+  return ["interpolate", ["linear"], ["zoom"], 6, Math.max(1.4, width * 0.9), 11, width + 0.7, 13.5, width + 1.7, 15.5, width + 2.3];
 }
 
 function isRadarLayer(id?: string): boolean {

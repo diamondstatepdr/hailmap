@@ -11,7 +11,7 @@ const themes = [
   ["b", "supercell"],
   ["c", "ice-swath"],
 ];
-const view = "lat=33.400&lon=-111.830&z=13.2&day=2026-10-20&scheme=light";
+const view = "lat=33.389&lon=-111.830&z=12.8&day=2026-10-20&scheme=light";
 
 async function hideDev(page) {
   await page.addInitScript(() => {
@@ -45,12 +45,12 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
   const box = await canvas.boundingBox();
   if (!box) throw new Error("map canvas has no box");
   const spots = [
-    [0.39, 0.36],
-    [0.42, 0.34],
-    [0.36, 0.32],
-    [0.48, 0.3],
-    [0.33, 0.4],
-    [0.5, 0.55],
+    [0.5, 0.22],
+    [0.38, 0.24],
+    [0.64, 0.2],
+    [0.3, 0.28],
+    [0.72, 0.26],
+    [0.5, 0.18],
   ];
   let opened = false;
   for (const [fx, fy] of spots) {
@@ -72,8 +72,11 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
     const dealerText = (await dealers.innerText().catch(() => "")) || (await legacyDealers.innerText().catch(() => "")) || "";
     console.log(label, name, "spot", fx, fy, JSON.stringify(title), JSON.stringify(dealerText.replace(/\s+/g, " ").slice(0, 80)));
     const count = Number((dealerText.match(/(\d+)\s+dealership/) || [])[1] ?? "0");
-    const titled = /[12]\.\d+/.test(title) || /swath/i.test(title);
-    if (titled && (fileLabel === "before" || count > 0)) {
+    const statsText = (await stats.innerText().catch(() => "")) || "";
+    const titled = fileLabel === "before" ? /[12]\.\d+/.test(title) || /swath/i.test(title) : /radar hail/.test(title);
+    const bands = fileLabel === "before" || /2(\.5)?"/.test(statsText);
+    console.log(label, name, "stats", JSON.stringify(statsText.replace(/\s+/g, " ").slice(0, 180)));
+    if (titled && bands && (fileLabel === "before" || count > 0)) {
       opened = true;
       break;
     }
@@ -83,10 +86,14 @@ async function shoot(browser, label, options, theme, name, base, fileLabel) {
   }
   if (!opened) throw new Error(`could not open a 2 inch swath with dealers on ${label} ${name}`);
   if (fileLabel !== "before") {
+    await page.locator("[data-swath-place]").waitFor({ timeout: 12000 });
     await page.locator("[data-dealer-open]").click();
     await page.locator("[data-dealer-hit]").waitFor({ timeout: 8000 });
+    const row = page.locator(".dealer-hit-main").first();
+    if (await row.count()) await row.click();
+    await page.waitForTimeout(900);
   }
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
   const file = `${outDir}/${fileLabel}-${label}-${name}.png`;
   await page.screenshot({ path: file });
   console.log("wrote", file);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCensusLocations, parseNominatim, streetFromNominatim } from "@/lib/forward-geocode";
+import { parseCensusLocations, parseNominatim, placeFromNominatim, streetFromNominatim } from "@/lib/forward-geocode";
 
 describe("forward geocoding parsers", () => {
   it("reads a Census oneline match", () => {
@@ -34,6 +34,8 @@ describe("forward geocoding parsers", () => {
     expect(hits[0].source).toBe("nominatim");
     expect(streetFromNominatim({ address: { road: "Main Street", city: "Norman" } })).toBe("Main Street, Norman");
     expect(streetFromNominatim({})).toBeNull();
+    expect(placeFromNominatim({ address: { city: "Mesa", state: "Arizona", "ISO3166-2-lvl4": "US-AZ" } })).toBe("Mesa, AZ");
+    expect(placeFromNominatim({ address: { town: "Gilbert", state: "Arizona" } })).toBe("Gilbert, AZ");
   });
 
   it("ignores matches without coordinates", () => {

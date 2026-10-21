@@ -1,6 +1,8 @@
 import type { DealerPin } from "@/lib/area-selection";
 import { findDealers } from "@/lib/dealers";
 import { validLatLon } from "@/lib/geo";
+import { meshAtPoints } from "@/lib/mesh-cache";
+import { planMesh } from "@/lib/mesh-plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +14,18 @@ function asGeometry(value: unknown): GeoJSON.Polygon | GeoJSON.MultiPolygon | nu
   const encoded = JSON.stringify(geometry.coordinates);
   if (encoded.length > 400000) return null;
   return geometry;
+}
+
+/** Heavier hail is punched out of the parent ring. Lots in those cores are still in the swath. */
+function outerOnly(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Polygon | GeoJSON.MultiPolygon {
+  if (geometry.type === "Polygon") {
+    const ring = geometry.coordinates[0];
+    return { type: "Polygon", coordinates: ring ? [ring] : [] };
+  }
+  return {
+    type: "MultiPolygon",
+    coordinates: geometry.coordinates.flatMap((polygon) => (polygon[0] ? [[polygon[0]]] : [])),
+  };
 }
 
 export async function POST(request: Request) {
@@ -30,8 +44,20 @@ export async function POST(request: Request) {
       ? { lat: Number(nearRaw.lat), lon: Number(nearRaw.lon) }
       : null;
   try {
-    const result = await findDealers({ geometry, near });
-    const dealers: DealerPin[] = result.dealers;
+    const result = await findDealers({ geometry: outerOnly(geometry), near });
+    let mesh: Array<number | null> = [];
+    const date = typeof record.date === "string" ? record.date : null;
+    if (date && result.dealers.length) {
+      const plan = planMesh({ date });
+      if (!("error" in plan)) {
+        try {
+          mesh = await meshAtPoints(plan, result.dealers);
+        } catch (error) {
+          console.error("[hailmap] dealer mesh", error instanceof Error ? error.message : error);
+        }
+      }
+    }
+    const dealers: DealerPin[] = result.dealers.map((dealer, index) => ({ ...dealer, meshIn: mesh[index] ?? null }));
     return Response.json(
       { dealers, note: result.note, attribution: "© OpenStreetMap contributors" },
       { headers: { "Cache-Control": "public, max-age=300" } },

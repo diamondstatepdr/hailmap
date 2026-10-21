@@ -379,6 +379,7 @@ export function scheduleOsmFill(bounds: HoneyBounds, hailAtTile: (tile: HoneyBou
 export async function loadOsmTargets(
   bounds: HoneyBounds,
   hailAtTile: (tile: HoneyBounds) => number,
+  maxFresh = MAX_FRESH_TILES,
 ): Promise<OsmTileResult> {
   const tiles = gridTiles(bounds, TILE_STEP)
     .map((tile) => ({ tile, hail: hailAtTile(tile) }))
@@ -388,13 +389,14 @@ export async function loadOsmTargets(
   const elements: OverpassElement[] = [];
   const fresh: HoneyBounds[] = [];
   let partial = false;
+  const freshLimit = Math.max(0, maxFresh);
   for (const tile of tiles) {
     const cached = readCache(tile);
     if (cached) {
       elements.push(...cached);
       continue;
     }
-    if (fresh.length >= MAX_FRESH_TILES) {
+    if (fresh.length >= freshLimit) {
       partial = true;
       continue;
     }
@@ -412,6 +414,20 @@ export async function loadOsmTargets(
     }),
   );
   for (const batch of loaded) elements.push(...batch);
+  const parsed = targetsFromElements(elements, bounds);
+  return { ...parsed, partial };
+}
+
+/** Lots already stored for this view. Never calls Overpass. */
+export function cachedOsmTargets(bounds: HoneyBounds, hailAtTile: (tile: HoneyBounds) => number): OsmTileResult {
+  const tiles = gridTiles(bounds, TILE_STEP).filter((tile) => hailAtTile(tile) >= 0.75);
+  const elements: OverpassElement[] = [];
+  let partial = tiles.length === 0;
+  for (const tile of tiles) {
+    const cached = readCache(tile);
+    if (cached) elements.push(...cached);
+    else partial = true;
+  }
   const parsed = targetsFromElements(elements, bounds);
   return { ...parsed, partial };
 }

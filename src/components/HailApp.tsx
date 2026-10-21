@@ -16,6 +16,8 @@ import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
+import ChaseMapButton from "@/components/chase/ChaseMapButton";
+import ChasePopup from "@/components/chase/ChasePopup";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
@@ -48,6 +50,8 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
+import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
+import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
@@ -196,6 +200,10 @@ export default function HailApp() {
   const [honey, setHoney] = useState<HoneyResponse | null>(null);
   const [honeyLoading, setHoneyLoading] = useState(false);
   const [honeyError, setHoneyError] = useState<string | null>(null);
+  const [chase, setChase] = useState<ChasePayload | null>(null);
+  const [chaseLoading, setChaseLoading] = useState(true);
+  const [chasePopup, setChasePopup] = useState(false);
+  const [chaseUnseen, setChaseUnseen] = useState(false);
   const [selectedHoneyId, setSelectedHoneyId] = useState<string | null>(null);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
@@ -287,7 +295,9 @@ export default function HailApp() {
   const placePointRef = useRef(placePoint);
   placePointRef.current = placePoint;
   const meshFrameKey = useRef<string | null>(null);
-  const lockFrame = useRef(false);
+  const lockFrame = useRef(true);
+  const chaseFly = useRef(false);
+  const holdNationalFrame = useRef(true);
   const historyActive = historyMode.kind !== "window";
   const historyActiveRef = useRef(false);
   historyActiveRef.current = historyActive;
@@ -299,6 +309,59 @@ export default function HailApp() {
   const refreshMs = refreshIntervalMs(filter.hours);
   const freshSync = wantsFreshSync(filter.hours);
   const replay = useReplayPlayer();
+
+  useEffect(() => {
+    let cancelled = false;
+    setChaseLoading(true);
+    fetch("/api/chase")
+      .then(async (response) => {
+        const payload = (await response.json()) as ChasePayload & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "unavailable");
+        if (!cancelled) setChase(payload);
+      })
+      .catch(() => {
+        // A refresh failure leaves the last good week on screen. The unavailable
+        // note is only for a first load that never arrives.
+      })
+      .finally(() => {
+        if (!cancelled) setChaseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  useEffect(() => {
+    if (!chase) return;
+    let viewed = false;
+    try {
+      viewed = !chaseListIsNew(localStorage.getItem(chaseViewedKey(chase.week)));
+    } catch {
+      viewed = false;
+    }
+    setChaseUnseen(!viewed);
+  }, [chase]);
+
+  useEffect(() => {
+    if (section !== "storms" || !chase) return;
+    try {
+      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chasePopupKey(chase.week), "1");
+    } catch {
+      // Private mode can block storage. The in-memory flag still hides the dot.
+    }
+    setChaseUnseen(false);
+    setChasePopup(false);
+  }, [section, chase]);
+
+  useEffect(() => {
+    if (!chase || section !== "map" || replay.active) return;
+    try {
+      if (shouldShowWeeklyChase(localStorage.getItem(chasePopupKey(chase.week)))) setChasePopup(true);
+    } catch {
+      setChasePopup(true);
+    }
+  }, [chase, section, replay.active]);
 
   function followAlertLink(href: string) {
     const target = parseAlertLink(href);
@@ -686,7 +749,8 @@ export default function HailApp() {
           : Infinity;
         if (payload.bounds && meshSpan < 1600 && meshFrameKey.current !== key && !placePointRef.current && !lockFrame.current) {
           meshFrameKey.current = key;
-          setFrame({ ...payload.bounds, nonce: Date.now(), maxZoom: 9.5 });
+          const clipped = frameInsideUnitedStates(payload.bounds);
+          setFrame({ ...clipped, nonce: Date.now(), maxZoom: 9.5 });
         }
       })
       .catch((reason: unknown) => {
@@ -1018,6 +1082,55 @@ export default function HailApp() {
     }
     setCustomOpen(false);
     setOverlay((current) => (current === "calendar" ? null : "calendar"));
+  }
+
+  function dismissChase() {
+    if (chase) {
+      try {
+        localStorage.setItem(chasePopupKey(chase.week), "1");
+      } catch {
+        // The pop-up still closes for this visit.
+      }
+    }
+    setChasePopup(false);
+  }
+
+  function openChaseFromMap() {
+    setSection("map");
+    setOverlay(null);
+    setCustomOpen(false);
+    setHoneyOpen(false);
+    setFiltersOpen(false);
+    if (!chase) return;
+    setChasePopup(true);
+    try {
+      localStorage.setItem(chaseViewedKey(chase.week), "1");
+      localStorage.setItem(chasePopupKey(chase.week), "1");
+    } catch {
+      // Private mode can block storage. The sheet still opens.
+    }
+    setChaseUnseen(false);
+  }
+
+  function openChaseStop(stop: ChaseStop) {
+    chaseFly.current = true;
+    dismissChase();
+    setSection("map");
+    setHoneyOpen(false);
+    setShowHoney(false);
+    setOverlay(null);
+    setCustomOpen(false);
+    setFiltersOpen(false);
+    setPlaceCardOpen(false);
+    setSelectedId(null);
+    setThreat(null);
+    setCounty(null);
+    setArea(null);
+    setShowMesh(true);
+    setShowPoints(true);
+    lockFrame.current = true;
+    pickStormDay(stop.date);
+    setFocus({ lat: stop.lat, lon: stop.lon, zoom: 9.5, nonce: Date.now() });
   }
 
   function pickStormDay(date: string) {
@@ -1430,6 +1543,28 @@ export default function HailApp() {
   const fieldWindowLabel = fieldSpanHours === 90 * 24 ? "last 90 days" : (TIME_WINDOWS.find((item) => item.hours === filter.hours)?.detail ?? "selected window");
   const mobile = useMediaQuery("(max-width: 767px)");
   const showMap = section === "map" || section === "field" || mobile;
+
+  useEffect(() => {
+    if (chaseLoading && !chase) return;
+    const mapHeight = Math.round(document.querySelector(".maplibregl-map")?.clientHeight || window.innerHeight);
+    if (chasePopup) {
+      chaseFly.current = false;
+      lockFrame.current = true;
+      holdNationalFrame.current = true;
+      const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: mobile });
+      setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.2 : 4.6, padding });
+      return;
+    }
+    if (chaseFly.current) {
+      holdNationalFrame.current = false;
+      return;
+    }
+    if (!holdNationalFrame.current) return;
+    holdNationalFrame.current = false;
+    lockFrame.current = false;
+    const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: false });
+    setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.4 : 4.8, padding });
+  }, [chasePopup, chaseLoading, chase, mobile, chromePx]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
 
@@ -1508,12 +1643,14 @@ export default function HailApp() {
       authConfigured={authConfigured}
       onSignIn={() => setAuthOpen(true)}
       onSignOut={() => void signOut()}
+      stormsNew={chaseUnseen && section !== "storms"}
     >
       <div
           className={showMap ? "absolute inset-0" : "hidden"}
           style={
             {
               "--chrome-offset": chromePx > 0 ? `${chromePx + 8}px` : calendarOpen ? (hailDaysOpen ? "34rem" : "24rem") : showMesh ? "11.4rem" : "9rem",
+              "--chase-map-gap": "13.5rem",
             } as CSSProperties
           }
         >
@@ -1854,17 +1991,23 @@ export default function HailApp() {
             </>
             )}
           </div>
-          {stateCounts.length && !replay.active && !honeyOpen ? (
+          {section === "map" && !replay.active && !honeyOpen ? (
             <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen || honeyOpen ? "is-covered" : ""}`}>
               <div className="state-strip">
-                <button
-                  type="button"
-                  className="state-toggle press md:hidden"
-                  aria-expanded={statesOpen}
-                  onClick={() => setStatesOpen((open) => !open)}
-                >
-                  {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
-                </button>
+                <div className="map-quick-row">
+                  {stateCounts.length ? (
+                    <button
+                      type="button"
+                      className="state-toggle press md:hidden"
+                      aria-expanded={statesOpen}
+                      onClick={() => setStatesOpen((open) => !open)}
+                    >
+                      {statesOpen ? "Hide states" : filter.state ? `${filter.state} selected` : `States · ${Math.min(stateCounts.length, 12)}`}
+                    </button>
+                  ) : null}
+                  <ChaseMapButton unseen={chaseUnseen} expanded={chasePopup} onClick={openChaseFromMap} />
+                </div>
+                {stateCounts.length ? (
                 <div className={`state-chip-row ${statesOpen ? "is-open" : ""}`} role="toolbar" aria-label="Jump to a state">
                   {stateCounts.slice(0, 12).map(([code, count]) => {
                     const on = filter.state === code;
@@ -1881,6 +2024,7 @@ export default function HailApp() {
                     );
                   })}
                 </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -2245,6 +2389,21 @@ export default function HailApp() {
               Loading reports…
             </p>
           ) : null}
+          {chasePopup && section === "map" && chase && !replay.active ? (
+            <ChasePopup
+              mobile={mobile}
+              mode={honeyMode}
+              payload={chase}
+              preview
+              onMode={setHoneyMode}
+              onClose={dismissChase}
+              onSeeAll={() => {
+                dismissChase();
+                setSection("storms");
+              }}
+              onSelect={openChaseStop}
+            />
+          ) : null}
         </div>
       {section === "storms" ? (
         <MobileOrPage label="Storms" mobile={mobile} onClose={() => setSection("map")}>
@@ -2261,6 +2420,11 @@ export default function HailApp() {
             setFocus({ lon: report.lon, lat: report.lat, nonce: Date.now(), zoom: 10 });
             setSection("map");
           }}
+          chase={chase}
+          chaseLoading={chaseLoading}
+          chaseMode={honeyMode}
+          onChaseMode={setHoneyMode}
+          onOpenChase={openChaseStop}
         />
         </MobileOrPage>
       ) : null}

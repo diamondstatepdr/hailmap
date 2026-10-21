@@ -25,6 +25,8 @@ interface Props {
   authConfigured: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
+  /** True when this week's chase list has refreshed and has not been opened. */
+  stormsNew?: boolean;
   children: ReactNode;
 }
 
@@ -37,6 +39,7 @@ export default function AppShell({
   authConfigured,
   onSignIn,
   onSignOut,
+  stormsNew = false,
   children,
 }: Props) {
   return (
@@ -60,6 +63,7 @@ export default function AppShell({
               >
                 <span className="nav-icon">
                   <Icon size={18} strokeWidth={2.1} />
+                  {item.id === "storms" && stormsNew ? <span className="chase-dot" data-chase-new /> : null}
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold tracking-tight">{item.label}</span>
@@ -118,8 +122,10 @@ export default function AppShell({
               >
                 <span className="tab-icon">
                   <Icon size={18} strokeWidth={on ? 2.35 : 1.85} />
+                  {item.id === "storms" && stormsNew ? <span className="chase-dot" data-chase-new /> : null}
                 </span>
                 {item.label}
+                {item.id === "storms" && stormsNew ? <span className="sr-only">New chase list</span> : null}
               </button>
             );
           })}

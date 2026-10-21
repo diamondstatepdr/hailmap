@@ -72,11 +72,26 @@ function knownState(value: string | null | undefined): string | null {
   return stateLabel(abbr) === abbr ? null : abbr;
 }
 
-/** Spotter towns stay. Multi-county warning zones are not a place name. */
-function placeName(location: string | null | undefined): string | null {
+const OFFSET = /^\d+(?:\.\d+)?\s+(?:NNE|NNW|SSE|SSW|ENE|ESE|WNW|WSW|NE|NW|SE|SW|N|S|E|W)\s+(.+)$/i;
+const DIRECTIONAL_DIVISION = /^(?:north|south|east|west|northeast|northwest|southeast|southwest|central)\b|\b(?:north|south|east|west|northeast|northwest|southeast|southwest)$/i;
+const NOT_A_TOWN = /\b(?:county|parish|borough|census area|precinct|district|unorganized|gore|ccd)\b/i;
+
+/** Town name from a spotter string. "4 SW Crowell" becomes "Crowell". */
+export function townFromLocation(location: string | null | undefined): string | null {
   const text = location?.replace(/\s+/g, " ").trim() ?? "";
   if (!text || text.includes(";") || text.length > 48) return null;
-  return text;
+  const offset = text.match(OFFSET);
+  let town = (offset?.[1] ?? text).replace(/^town of\s+/i, "").trim();
+  const comma = town.indexOf(",");
+  if (comma > 0) town = town.slice(0, comma).trim();
+  town = town.replace(/\s+(?:city|town|village|cdp)$/i, "").trim();
+  if (!town || town.length > 40 || NOT_A_TOWN.test(town)) return null;
+  return town;
+}
+
+/** Census county-division names such as "West Terrell" are not towns. */
+export function isDirectionalDivision(name: string): boolean {
+  return DIRECTIONAL_DIVISION.test(name.trim());
 }
 
 /**
@@ -86,7 +101,7 @@ function placeName(location: string | null | undefined): string | null {
 export function placeChaseHit(hit: ChaseHit): ChaseHit | null {
   const state = knownState(hit.state) ?? stateOf(hit.lat, hit.lon);
   if (!state) return null;
-  const location = placeName(hit.location);
+  const location = townFromLocation(hit.location);
   const next: ChaseHit = { ...hit, state, location };
   if (location) return next;
   const county = countyNameAt(next.lat, next.lon);

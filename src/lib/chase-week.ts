@@ -39,14 +39,14 @@ export interface ChaseStop {
 }
 
 export interface ChasePayload {
-  version: 2;
+  version: 3;
   week: string;
   generatedAt: string;
   windowStart: string;
   windowEnd: string;
   /** No hail area reached an inch in the last 7 days. */
   quiet: boolean;
-  /** True while lot or home counts are still missing for a listed area. */
+  /** True when a candidate area could not be counted yet. Listed rows already have counts. */
   partial: boolean;
   fresh: { pdr: ChaseStop[]; roof: ChaseStop[] };
   fallback: { pdr: ChaseStop[]; roof: ChaseStop[] };

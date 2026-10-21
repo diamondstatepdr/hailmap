@@ -41,12 +41,12 @@ function hailInches(value: number | null): string | null {
   return `${value.toFixed(2)}"`;
 }
 
-function countLine(stop: ChaseStop, mode: HoneyMode): string {
+function countLine(stop: ChaseStop, mode: HoneyMode): string | null {
   if (mode === "pdr") {
-    if (stop.vehicles == null) return "Vehicles in path loading";
+    if (stop.vehicles == null) return null;
     return `${stop.vehicles.toLocaleString("en-US")} vehicles in path`;
   }
-  if (stop.homes == null) return "Homes in path loading";
+  if (stop.homes == null) return null;
   return `${stop.homes.toLocaleString("en-US")} homes in path`;
 }
 
@@ -68,16 +68,20 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
           {stops.map((stop, index) => {
             const radar = hailInches(stop.radarIn);
             const spotter = hailInches(stop.spotterIn);
+            const count = countLine(stop, mode);
             return (
             <li key={stop.id}>
               <button type="button" className="honey-row press" data-chase-stop onClick={() => onSelect(stop)}>
                 <span className="honey-rank">{index + 1}</span>
                 <span className="min-w-0">
-                  <span className="honey-name">{stop.name}</span>
+                  <span className="honey-name">
+                    <span className="chase-title">{stop.name}</span>
+                    {stop.source === "mesh" ? <span className="chase-radar">Radar only</span> : null}
+                  </span>
                   <span className="honey-meta">
                     {formatDay(stop.date)} · Radar {radar ?? "—"} · {spotter ? `Spotter ${spotter}` : "No spotter reports"}
                   </span>
-                  <span className="honey-meta">{countLine(stop, mode)}</span>
+                  {count ? <span className="honey-meta">{count}</span> : null}
                 </span>
                 <span className="honey-score" data-level={stop.level} title={`${stop.score} Money Hole score · ${stop.level}`}>
                   {stop.score}
@@ -87,9 +91,6 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
             );
           })}
         </ol>
-      ) : null}
-      {payload.partial && stops.length ? (
-        <p className="honey-note">Money Hole scores firm up as vehicle and home counts load.</p>
       ) : null}
     </div>
   );

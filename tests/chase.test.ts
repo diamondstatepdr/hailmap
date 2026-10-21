@@ -6,7 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import ChasePopup from "@/components/chase/ChasePopup";
 import { ChaseSection } from "@/components/chase/ChaseList";
-import { placeChaseHit } from "@/lib/chase-place";
+import { placeChaseHit, townFromLocation } from "@/lib/chase-place";
+import { nearestTownName, townFromCensusGeographies } from "@/lib/chase-town";
 import { cachedChase, readChaseCache, writeChaseCache } from "@/lib/chase-cache";
 import { frameInsideUnitedStates } from "@/lib/map-home";
 import {
@@ -268,6 +269,97 @@ describe("money hole chase ranking", () => {
     expect(payload.fallback.pdr[0].radarIn).toBe(2.25);
     expect(payload.fallback.pdr[0].score).toBeGreaterThan(0);
   });
+
+  it("leaves out an area until its vehicle or home count is known", () => {
+    const rural = hit({
+      lat: 30.1,
+      lon: -102.5,
+      stormDate: "2026-10-14",
+      county: "Terrell",
+      state: "TX",
+      spotterIn: null,
+      radarIn: 3.47,
+      confidence: "mesh",
+    });
+    const payload = rankChaseWeek({ hits: [rural, wichita], places, now: NOW });
+    expect(payload.fresh.pdr.map((stop) => stop.name)).toEqual(["Wichita, KS"]);
+    expect(payload.fresh.pdr[0].vehicles).toBe(800);
+    expect(payload.fresh.pdr[0].density).toBe("measured");
+    expect(payload.version).toBe(3);
+  });
+
+  it("ranks an unconfirmed radar outlier below a confirmed town with more vehicles", () => {
+    const lisbon = hit({
+      lat: 44.7,
+      lon: -75.2,
+      stormDate: "2026-10-16",
+      occurredAt: "2026-10-16T22:00:00.000Z",
+      location: "Lisbon",
+      state: "NY",
+      spotterIn: null,
+      radarIn: 4.73,
+      confidence: "mesh",
+    });
+    const crowell = hit({
+      lat: 33.93,
+      lon: -99.75,
+      stormDate: "2026-10-14",
+      occurredAt: "2026-10-14T22:00:00.000Z",
+      location: "Crowell",
+      state: "TX",
+      spotterIn: 1.75,
+      radarIn: 2.42,
+      confidence: "spotter",
+    });
+    const payload = rankChaseWeek({
+      hits: [lisbon, crowell],
+      places: [
+        lot({ lat: 44.7, lon: -75.2, vehicles: 8, homes: 40 }),
+        lot({ lat: 33.93, lon: -99.75, vehicles: 400, homes: 80 }),
+      ],
+      now: NOW,
+    });
+    expect(payload.fresh.pdr.map((stop) => stop.name)).toEqual(["Crowell, TX", "Lisbon, NY"]);
+    const radar = payload.fresh.pdr[1];
+    expect(radar.source).toBe("mesh");
+    expect(radar.sourceLabel).toBe("Radar only");
+    expect(radar.vehicles).toBe(8);
+    expect(radar.spotterIn).toBeNull();
+  });
+
+  it("does not count a lot in the next radar cell as vehicles under an unconfirmed spike", () => {
+    const spike = hit({
+      lat: 44.7,
+      lon: -75.2,
+      stormDate: "2026-10-16",
+      location: "Lisbon",
+      state: "NY",
+      spotterIn: null,
+      radarIn: 4.73,
+      confidence: "mesh",
+    });
+    const confirmed = hit({
+      lat: 32.26,
+      lon: -107.76,
+      stormDate: "2026-10-19",
+      location: "Deming",
+      state: "NM",
+      spotterIn: 1.25,
+      radarIn: 2.24,
+      confidence: "spotter",
+    });
+    const payload = rankChaseWeek({
+      hits: [spike, confirmed],
+      places: [
+        lot({ lat: 44.746, lon: -75.1305, vehicles: 135, homes: 0, kind: "parking" }),
+        lot({ lat: 32.26, lon: -107.76, vehicles: 2000, homes: 700, kind: "dealership" }),
+      ],
+      now: NOW,
+    });
+    expect(payload.fresh.pdr.map((stop) => stop.name)).toEqual(["Deming, NM"]);
+    expect(payload.fresh.pdr[0].vehicles).toBe(2000);
+    expect(payload.fresh.pdr[0].source).not.toBe("mesh");
+  });
 });
 
 describe("real chase places", () => {
@@ -279,12 +371,42 @@ describe("real chase places", () => {
     const canada = placeChaseHit(hit({ lat: 52.2, lon: -102.6, stormDate: "2026-10-15", radarIn: 2.31, confidence: "mesh", spotterIn: null }));
     expect(canada).toBeNull();
     const named = placeChaseHit(hit({ lat: 33.93, lon: -99.75, stormDate: "2026-10-14", location: "4 SW Crowell", state: "TX", spotterIn: 1.75, radarIn: 2.42 }));
-    expect(named?.location).toBe("4 SW Crowell");
+    expect(named?.location).toBe("Crowell");
     expect(named?.state).toBe("TX");
     const zone = placeChaseHit(hit({ lat: 32.02, lon: -108.59, stormDate: "2026-10-20", location: "Grant, NM; Hidalgo, NM", spotterIn: 1, radarIn: null }));
     expect(zone?.location).toBeNull();
     expect(zone?.state).toBe("NM");
     expect(zone?.county).toBeTruthy();
+    expect(townFromLocation("1 W Deming")).toBe("Deming");
+    expect(townFromLocation("18 N Pirtleville")).toBe("Pirtleville");
+    expect(townFromLocation("Town of Lisbon")).toBe("Lisbon");
+    expect(townFromLocation("Hermon, St. Lawrence, NY")).toBe("Hermon");
+    expect(townFromLocation("Grant, NM; Hidalgo, NM")).toBeNull();
+    expect(townFromCensusGeographies({
+      result: {
+        geographies: {
+          "County Subdivisions": [{ NAME: "Deming South CCD", BASENAME: "Deming South", LSADC: "22" }],
+          "Incorporated Places": [{ NAME: "Deming city", BASENAME: "Deming", LSADC: "25" }],
+        },
+      },
+    })).toBe("Deming");
+    expect(townFromCensusGeographies({
+      result: { geographies: { "County Subdivisions": [{ NAME: "West Terrell CCD", BASENAME: "West Terrell", LSADC: "22" }] } },
+    })).toBeNull();
+    expect(townFromCensusGeographies({
+      result: { geographies: { "County Subdivisions": [{ NAME: "Lisbon town", BASENAME: "Lisbon", LSADC: "43" }] } },
+    })).toBe("Lisbon");
+    expect(townFromCensusGeographies({
+      result: { geographies: { "County Subdivisions": [{ NAME: "Crowell CCD", BASENAME: "Crowell", LSADC: "22" }] } },
+    })).toBe("Crowell");
+    expect(nearestTownName(
+      [
+        { lat: 30.14, lon: -102.4, tags: { place: "city", name: "Sanderson" } },
+        { lat: 30.9, lon: -101.4, tags: { place: "town", name: "Ozona" } },
+      ],
+      30.1,
+      -102.5,
+    )).toBe("Sanderson");
   });
 
   it("keeps the national map frame inside the United States", () => {
@@ -351,7 +473,7 @@ describe("chase list UI", () => {
       name: `City ${index + 1}, TX`,
       score: 90 - index,
     }));
-    stops[4] = { ...stops[4], spotterIn: null };
+    stops[4] = { ...stops[4], spotterIn: null, radarIn: 4.73, source: "mesh", sourceLabel: "Radar only", name: "Lisbon, NY" };
     const payload: ChasePayload = {
       ...samplePayload(false),
       fresh: { pdr: stops, roof: stops },
@@ -381,6 +503,9 @@ describe("chase list UI", () => {
     expect(html).toContain("Radar 1.75&quot;");
     expect(html).toContain("Spotter 2.00&quot;");
     expect(html).toContain("No spotter reports");
+    expect(html).toContain("Radar only");
+    expect(html).toContain("Lisbon, NY");
+    expect(html).not.toContain("loading");
     expect(html).toContain("800 vehicles");
     expect(html).toContain(">86<");
   });

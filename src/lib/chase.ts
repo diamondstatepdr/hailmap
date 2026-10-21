@@ -1,8 +1,6 @@
 import { haversineKm } from "@/lib/geo";
 import {
   MIN_HAIL_IN,
-  PDR_DENSITY_PIVOT,
-  ROOF_DENSITY_PIVOT,
   confidenceFor,
   inBounds,
   latestEvidenceMs,
@@ -174,11 +172,16 @@ function hitsToEvidence(hits: ChaseHit[]): HailEvidence[] {
   return evidence;
 }
 
+/** Same 0.1° MESH bin the history index uses. A lot in the next cell is not under that hail. */
+function sameMeshBin(lat: number, lon: number, hitLat: number, hitLon: number): boolean {
+  return Math.round(lat * 10) === Math.round(hitLat * 10) && Math.round(lon * 10) === Math.round(hitLon * 10);
+}
+
 function nearestRadar(lat: number, lon: number, hits: ChaseHit[]): number | null {
   let best: number | null = null;
   for (const hit of hits) {
     if (hit.radarIn == null || hit.radarIn < MIN_HAIL_IN) continue;
-    if (haversineKm(lat, lon, hit.lat, hit.lon) > 8) continue;
+    if (!sameMeshBin(lat, lon, hit.lat, hit.lon)) continue;
     best = best == null ? hit.radarIn : Math.max(best, hit.radarIn);
   }
   return best;
@@ -234,9 +237,12 @@ function scoreDay(
   const confidence = dayConfidence(dayHits);
   if (confidence.hailIn < MIN_HAIL_IN) return null;
   const totals = pathTotals(cluster.places, dayHits, now.getTime());
+  // An uncounted area is not ranked. The weekly build loads lots and homes first,
+  // so a published row always carries the count that produced its score.
+  if (!totals.measured) return null;
   const count = mode === "pdr" ? totals.vehicles : totals.homes;
-  if (totals.measured && count <= 0) return null;
-  const used = totals.measured ? count : mode === "pdr" ? PDR_DENSITY_PIVOT : ROOF_DENSITY_PIVOT;
+  if (count <= 0) return null;
+  const used = count;
   const occurred = dayHits.reduce<string | null>((latest, hit) => {
     if (!hit.occurredAt) return latest;
     if (!latest || hit.occurredAt > latest) return hit.occurredAt;
@@ -260,14 +266,14 @@ function scoreDay(
     bounds: cluster.bounds,
     radarIn: maxOrNull(dayHits.map((hit) => hit.radarIn)),
     spotterIn: maxOrNull(dayHits.map((hit) => hit.spotterIn)),
-    vehicles: totals.measured ? totals.vehicles : null,
-    homes: totals.measured ? totals.homes : null,
+    vehicles: totals.vehicles,
+    homes: totals.homes,
     score: scored.score,
     raw: Math.round(scored.raw * 1000) / 1000,
     level: scored.level,
     source: confidence.source,
     sourceLabel: sourceLabel(confidence.source),
-    density: totals.measured ? "measured" : "unknown",
+    density: "measured",
   };
 }
 
@@ -334,7 +340,7 @@ function assignPlaces(clusters: ChaseCluster[], places: HoneyPlace[]) {
  * Rank the last 7 days of hail areas with the Money Hole score.
  * A week with nothing at 1 inch is quiet and lists recent major storms instead.
  */
-export function rankChaseWeek(input: { hits: ChaseHit[]; places: HoneyPlace[]; now: Date }): ChasePayload {
+export function rankChaseWeek(input: { hits: ChaseHit[]; places: HoneyPlace[]; now: Date; partial?: boolean }): ChasePayload {
   const window = chaseWindow(input.now);
   const clusters = clusterChaseHits(input.hits);
   assignPlaces(clusters, input.places);
@@ -349,13 +355,13 @@ export function rankChaseWeek(input: { hits: ChaseHit[]; places: HoneyPlace[]; n
     ? [...pdr.fallback, ...roof.fallback]
     : [...pdr.fresh, ...roof.fresh];
   return {
-    version: 2,
+    version: 3,
     week: isoWeekKey(input.now),
     generatedAt: input.now.toISOString(),
     windowStart: window.start,
     windowEnd: window.end,
     quiet,
-    partial: listed.some((stop) => stop.density === "unknown"),
+    partial: input.partial === true,
     fresh: quiet ? { pdr: [], roof: [] } : { pdr: pdr.fresh, roof: roof.fresh },
     fallback: quiet ? { pdr: pdr.fallback, roof: roof.fallback } : { pdr: [], roof: [] },
   };

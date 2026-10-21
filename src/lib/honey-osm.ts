@@ -379,6 +379,7 @@ export function scheduleOsmFill(bounds: HoneyBounds, hailAtTile: (tile: HoneyBou
 export async function loadOsmTargets(
   bounds: HoneyBounds,
   hailAtTile: (tile: HoneyBounds) => number,
+  maxFresh = MAX_FRESH_TILES,
 ): Promise<OsmTileResult> {
   const tiles = gridTiles(bounds, TILE_STEP)
     .map((tile) => ({ tile, hail: hailAtTile(tile) }))
@@ -388,13 +389,14 @@ export async function loadOsmTargets(
   const elements: OverpassElement[] = [];
   let fresh = 0;
   let partial = false;
+  const freshLimit = Math.max(0, maxFresh);
   for (const tile of tiles) {
     const cached = readCache(tile);
     if (cached) {
       elements.push(...cached);
       continue;
     }
-    if (fresh >= MAX_FRESH_TILES) {
+    if (fresh >= freshLimit) {
       partial = true;
       continue;
     }

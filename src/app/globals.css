@@ -1044,6 +1044,33 @@ html.dark .honey-kicker {
   white-space: normal;
 }
 
+.chase-body .honey-name,
+.chase-section .honey-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.chase-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chase-radar {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  padding: 0.02rem 0.38rem;
+}
+
 /* Below the filter stack and the States chip, with a gap of map between them. */
 .chase-sheet-dock {
   top: calc(var(--chrome-offset) + var(--chase-map-gap, 13.5rem));

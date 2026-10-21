@@ -1,8 +1,10 @@
 import { listRecentReports } from "@/lib/db";
 import { haversineKm } from "@/lib/geo";
 import { CHASE_LOOKBACK_DAYS, chaseWindow, clusterChaseHits, rankChaseWeek, type ChaseHit, type ChasePayload } from "@/lib/chase";
-import type { HoneyPlace } from "@/lib/honey";
-import { cachedOsmTargets } from "@/lib/honey-osm";
+import { stampClusterTowns } from "@/lib/chase-town";
+import { inBounds, type HoneyPlace } from "@/lib/honey";
+import { loadRoofTracts } from "@/lib/honey-census";
+import { loadOsmTargets } from "@/lib/honey-osm";
 import { historyDb } from "@/lib/history-db";
 import { placeChaseHit } from "@/lib/chase-place";
 import { convectiveDay } from "@/lib/parsers";
@@ -167,33 +169,129 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
   });
 }
 
-function cachedPlaces(hits: ChaseHit[]): HoneyPlace[] {
-  const clusters = [...clusterChaseHits(hits)].sort((a, b) => {
-    const hail = (cluster: typeof a) => Math.max(...cluster.hits.map(hailOf));
-    return hail(b) - hail(a);
-  });
-  const places: HoneyPlace[] = [];
-  const seen = new Set<string>();
-  for (const cluster of clusters.slice(0, 24)) {
-    const hail = Math.max(...cluster.hits.map(hailOf));
-    if (hail < 0.75) continue;
-    try {
-      const cached = cachedOsmTargets(cluster.bounds, () => hail);
-      for (const place of cached.targets) {
-        if (seen.has(place.id)) continue;
-        seen.add(place.id);
-        places.push(place);
-      }
-    } catch (error) {
-      console.error("[hailmap] chase lots", error instanceof Error ? error.message : error);
-    }
+type ChaseCluster = ReturnType<typeof clusterChaseHits>[number];
+
+/** Enough tiles to finish one chase area. The map ranking path stays capped at two. */
+const CHASE_FRESH_TILES = 24;
+
+function qualifies(cluster: ChaseCluster, now: Date): "fresh" | "major" | null {
+  const window = chaseWindow(now);
+  let fresh = false;
+  let major = false;
+  for (const hit of cluster.hits) {
+    const hail = hailOf(hit);
+    if (hit.stormDate >= window.start && hit.stormDate <= window.end && hail >= 1) fresh = true;
+    else if (hit.stormDate >= window.lookback && hit.stormDate < window.start && hail >= 1.75) major = true;
   }
-  return places;
+  if (fresh) return "fresh";
+  if (major) return "major";
+  return null;
 }
 
-/** Build this week's chase list from stored hail, radar, and cached Money Hole lots. */
+function latestDate(cluster: ChaseCluster): string {
+  return cluster.hits.reduce((latest, hit) => (hit.stormDate > latest ? hit.stormDate : latest), "");
+}
+
+async function measureCluster(cluster: ChaseCluster): Promise<{ places: HoneyPlace[]; complete: boolean }> {
+  const hail = Math.max(0, ...cluster.hits.map(hailOf));
+  const [osm, census] = await Promise.all([
+    loadOsmTargets(cluster.bounds, () => hail, CHASE_FRESH_TILES).catch((error: unknown) => {
+      console.error("[hailmap] chase lots", error instanceof Error ? error.message : error);
+      return null;
+    }),
+    loadRoofTracts(cluster.bounds).catch((error: unknown) => {
+      console.error("[hailmap] chase homes", error instanceof Error ? error.message : error);
+      return null;
+    }),
+  ]);
+  const places: HoneyPlace[] = [];
+  let complete = true;
+  if (!osm || osm.partial) complete = false;
+  else places.push(...osm.targets);
+  if (census && !census.partial && !census.unavailable) {
+    for (const tract of census.tracts) {
+      if (tract.homes <= 0 || !inBounds(tract.lat, tract.lon, cluster.bounds)) continue;
+      places.push({
+        id: `tract/${tract.geoid}`,
+        kind: "homes",
+        name: tract.basename,
+        city: null,
+        neighborhood: null,
+        lat: tract.lat,
+        lon: tract.lon,
+        vehicles: 0,
+        homes: tract.homes,
+        vehicleBasis: "default",
+      });
+    }
+  } else if (!census) {
+    complete = false;
+  }
+  return { places, complete };
+}
+
+async function collectPlaces(clusters: ChaseCluster[]): Promise<{ places: HoneyPlace[]; partial: boolean }> {
+  const places: HoneyPlace[] = [];
+  const seen = new Set<string>();
+  let partial = false;
+  for (const cluster of clusters) {
+    const measured = await measureCluster(cluster);
+    if (!measured.complete) partial = true;
+    for (const place of measured.places) {
+      if (seen.has(place.id)) continue;
+      seen.add(place.id);
+      places.push(place);
+    }
+    console.log(
+      `[hailmap] chase count ${cluster.name} places=${measured.places.length} complete=${measured.complete}`,
+    );
+  }
+  return { places, partial };
+}
+
+/**
+ * Vehicle and home counts for every area that can make the list.
+ * Counts finish before rankChaseWeek, including a quiet week's fallback storms.
+ */
+async function loadMeasuredPlaces(hits: ChaseHit[], now: Date): Promise<{ places: HoneyPlace[]; partial: boolean; holdQuiet: boolean }> {
+  const clusters = clusterChaseHits(hits);
+  const fresh: ChaseCluster[] = [];
+  const major: ChaseCluster[] = [];
+  for (const cluster of clusters) {
+    const kind = qualifies(cluster, now);
+    if (kind === "fresh") fresh.push(cluster);
+    else if (kind === "major") major.push(cluster);
+  }
+  await stampClusterTowns(fresh);
+  const counted = await collectPlaces(fresh);
+  const preview = rankChaseWeek({ hits, places: counted.places, now });
+  if (preview.quiet && counted.partial) {
+    return { places: counted.places, partial: true, holdQuiet: true };
+  }
+  if (!preview.quiet) return { places: counted.places, partial: counted.partial, holdQuiet: false };
+  major.sort((a, b) => latestDate(b).localeCompare(latestDate(a)));
+  const fallback = major.slice(0, 16);
+  await stampClusterTowns(fallback);
+  const older = await collectPlaces(fallback);
+  return {
+    places: [...counted.places, ...older.places],
+    partial: counted.partial || older.partial,
+    holdQuiet: false,
+  };
+}
+
+/** Build this week's chase list from stored hail, with lots and homes counted first. */
 export async function computeChase(now = new Date()): Promise<ChasePayload> {
   const hits = loadChaseHits(now);
-  const places = cachedPlaces(hits);
-  return rankChaseWeek({ hits, places, now });
+  const measured = await loadMeasuredPlaces(hits, now);
+  const payload = rankChaseWeek({ hits, places: measured.places, now, partial: measured.partial });
+  if (measured.holdQuiet && payload.quiet) {
+    return {
+      ...payload,
+      quiet: false,
+      fresh: { pdr: [], roof: [] },
+      fallback: { pdr: [], roof: [] },
+    };
+  }
+  return payload;
 }

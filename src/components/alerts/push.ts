@@ -1,3 +1,5 @@
+import { iosSafariNeedsInstall } from "@/lib/pwa-policy";
+
 const DEVICE_KEY = "hailmap-device-key";
 
 export function storedDeviceKey(): string | null {
@@ -22,13 +24,15 @@ export function deviceHeaders(): HeadersInit {
 
 export function iosNeedsHomeScreen(): boolean {
   if (typeof navigator === "undefined" || typeof window === "undefined") return false;
-  const ua = navigator.userAgent;
-  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const safari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
   const standalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return iOS && safari && !standalone;
+  return iosSafariNeedsInstall({
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    maxTouchPoints: navigator.maxTouchPoints,
+    standalone,
+  });
 }
 
 function urlBase64ToUint8Array(value: string): Uint8Array {

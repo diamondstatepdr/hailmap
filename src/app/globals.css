@@ -2867,3 +2867,83 @@ html.dark .replay-range::-moz-range-thumb {
   stroke-linecap: round;
   filter: drop-shadow(0 0 6px var(--accent));
 }
+
+.install-offer {
+  position: fixed;
+  z-index: 40;
+  right: 0.75rem;
+  bottom: calc(4.85rem + env(safe-area-inset-bottom));
+  left: 0.75rem;
+  display: flex;
+  max-height: calc(100dvh - 16.5rem - env(safe-area-inset-bottom));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--ink) 18%, transparent);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+@media (min-width: 768px) {
+  .install-offer {
+    right: auto;
+    bottom: 1.25rem;
+    left: calc(248px + 1.25rem);
+    width: min(26rem, calc(100vw - 248px - 2.5rem));
+  }
+}
+
+.install-offer-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1rem 0.5rem;
+}
+
+.install-kicker {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.install-offer h2 {
+  margin-top: 0.15rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.install-offer h3 {
+  margin-top: 0.75rem;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.install-offer p,
+.install-offer li {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.install-offer ol {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.install-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.install-offer-actions .btn {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 15px;
+}

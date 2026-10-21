@@ -1,5 +1,5 @@
-const CACHE = "swathline-shell-v3";
-const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "swathline-shell-v4";
+const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -16,15 +16,29 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function isShellPath(pathname) {
+  return pathname === "/" || pathname === "/privacy" || pathname === "/manifest.webmanifest" || pathname.startsWith("/icons/") || pathname.startsWith("/brand/");
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/") || url.pathname === "/sw.js") return;
+  if (url.pathname === "/sw.js") return;
+  // Storm, radar, and history responses stay on the network. They are not stored here,
+  // so an offline phone never shows hail without an Updated time.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_next/data/")) return;
+  if (event.request.mode === "navigate" && !isShellPath(url.pathname)) {
+    event.respondWith(fetch(event.request).catch(() => caches.match("/")));
+    return;
+  }
+  if (!isShellPath(url.pathname)) return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),

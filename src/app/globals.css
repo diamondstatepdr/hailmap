@@ -192,6 +192,12 @@ html.dark .chase-open svg {
   }
 }
 
+@media (min-width: 768px) {
+  .map-state-jumps.is-honey {
+    padding-left: min(24.75rem, calc(100% - 9rem));
+  }
+}
+
 .map-banner {
   top: calc(max(0.5rem, env(safe-area-inset-top)) + var(--chrome-offset) + 2.35rem);
 }

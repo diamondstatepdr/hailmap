@@ -14,6 +14,7 @@ import {
   type ForecastQuery,
   type JobPrices,
 } from "@/lib/forecast";
+import { formatArea } from "@/lib/swath-measure";
 import {
   CREW_CAPTURE_LABEL,
   CREW_CAPTURE_NOTE,
@@ -171,7 +172,10 @@ export default function ForecastSheet({ label, query, onClose }: Props) {
                       <span className="font-semibold">{line.label}</span>
                       {tag ? <span className="forecast-tag">{tag}</span> : null}
                     </span>
-                    <span>{countLine(line)}</span>
+                    <span>
+                      {line.areaSqMi > 0 ? `${formatArea(line.areaSqMi)} · ` : ""}
+                      {countLine(line)}
+                    </span>
                     <span className="text-muted">{quiet ? "No expected damage" : [pdr ? `PDR ${pdr}` : null, `Roofing ${roof}`].filter(Boolean).join(" · ")}</span>
                   </li>
                 );

@@ -44,6 +44,7 @@ interface Props {
   zoomedOut?: boolean;
   /** Miles are only shown when they are measured from the tech or a searched address. */
   distanceFrom: "you" | "search" | null;
+  onForecast?: () => void;
 }
 
 export default function HoneyPanel(props: Props) {
@@ -92,6 +93,11 @@ export default function HoneyPanel(props: Props) {
         <span className="honey-switch" aria-hidden />
         Show on the map
       </button>
+      {props.onForecast ? (
+        <button type="button" className="btn btn-primary press" data-forecast-open disabled={!props.spots.length || props.needsDay} onClick={props.onForecast}>
+          Storm-to-cash estimate
+        </button>
+      ) : null}
       <div className="honey-body">
         {props.needsDay ? (
           <p className="honey-note">Pick the day the hail fell. Money spots are ranked one storm at a time.</p>

@@ -167,6 +167,14 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_action_limits ON action_limits(kind, ip_hash, created_at);
+    CREATE TABLE IF NOT EXISTS forecast_prices (
+      team_key TEXT PRIMARY KEY,
+      pdr_low INTEGER NOT NULL,
+      pdr_high INTEGER NOT NULL,
+      roof_low INTEGER NOT NULL,
+      roof_high INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

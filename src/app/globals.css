@@ -2679,7 +2679,8 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .map-topbar .plain-actions {
-  overflow-x: auto;
+  min-width: 0;
+  overflow: hidden;
   scrollbar-width: none;
 }
 
@@ -2698,6 +2699,13 @@ html.dark .replay-range::-moz-range-thumb {
   padding-inline: 0.75rem;
   font-size: 0.9375rem;
   white-space: nowrap;
+}
+
+.map-topbar .plain-actions .range-control {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .map-topbar .plain-actions .chase-open {

@@ -1436,8 +1436,8 @@ export default function HailApp() {
           nonce: Date.now(),
           maxZoom: 16,
           padding: phone
-            ? { top: 220, bottom: 500, left: 36, right: 48 }
-            : { top: 140, bottom: 340, left: 56, right: 56 },
+            ? { top: 280, bottom: 460, left: 48, right: 48 }
+            : { top: 160, bottom: 340, left: 72, right: 72 },
         });
       }
     } catch (error) {
@@ -2114,7 +2114,7 @@ export default function HailApp() {
                 </div>
               )}
             </div>
-            <div className={`map-chrome-rest ${!honeyOpen && (overlay || (historyMode.kind === "day" && !replay.active)) ? "" : "is-empty"}`}>
+            <div className={`map-chrome-rest ${!honeyOpen && !knock && (overlay || (historyMode.kind === "day" && !replay.active)) ? "" : "is-empty"}`}>
             {honeyOpen ? null : (
             <>
             {overlay === "range" && !replay.active ? (
@@ -2241,7 +2241,7 @@ export default function HailApp() {
                   <p className="mt-2 text-[11px] leading-snug text-muted">Tap a day, then Replay, to watch that storm move.</p>
                 )}
               </div>
-            ) : historyMode.kind === "day" && !replay.active ? (
+            ) : historyMode.kind === "day" && !replay.active && !knock ? (
               <div className="pointer-events-auto glass flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-xs">
                 <span className="font-semibold">{formatDay(historyMode.date)}</span>
                 <button type="button" className="btn btn-primary press px-2.5 py-1 text-xs" onClick={() => beginReplay(historyMode.date)}>
@@ -2292,7 +2292,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook) && !honeyOpen && !knock && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>

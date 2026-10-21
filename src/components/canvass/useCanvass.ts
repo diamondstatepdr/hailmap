@@ -1,24 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CanvassRepCount, CanvassStatus, CanvassStop } from "@/lib/canvass";
 
-interface Bounds {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-}
-
-export function useCanvass(enabled: boolean, bounds: Bounds | null) {
+export function useCanvass(enabled: boolean) {
   const [stops, setStops] = useState<CanvassStop[]>([]);
   const [counts, setCounts] = useState<CanvassRepCount[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const box = useMemo(() => {
-    if (!bounds) return "";
-    return [bounds.west, bounds.south, bounds.east, bounds.north].map((value) => value.toFixed(2)).join(",");
-  }, [bounds]);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
@@ -27,13 +16,6 @@ export function useCanvass(enabled: boolean, bounds: Bounds | null) {
       return;
     }
     const params = new URLSearchParams();
-    if (box) {
-      const [west, south, east, north] = box.split(",");
-      params.set("west", west);
-      params.set("south", south);
-      params.set("east", east);
-      params.set("north", north);
-    }
     const day = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     try {
@@ -57,7 +39,7 @@ export function useCanvass(enabled: boolean, bounds: Bounds | null) {
     } catch {
       // Polling can fail on a tunnel. The next pass retries.
     }
-  }, [box, enabled]);
+  }, [enabled]);
 
   useEffect(() => {
     void refresh();

@@ -21,7 +21,7 @@ import PropertyCard from "@/components/PropertyCard";
 import AlertHereSheet from "@/components/alerts/AlertHereSheet";
 import CanvassForm, { CanvassBoard } from "@/components/canvass/CanvassForm";
 import { useCanvass } from "@/components/canvass/useCanvass";
-import { CANVASS_COLORS, canvassStatusLabel } from "@/lib/canvass";
+import { CANVASS_COLORS, canvassFrame, canvassStatusLabel } from "@/lib/canvass";
 import FieldSheet from "@/components/panels/FieldSheet";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
@@ -296,7 +296,7 @@ export default function HailApp() {
   const [fieldPlace, setFieldPlace] = useState<PlaceHistory | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
-  const canvass = useCanvass(Boolean(user), viewBounds);
+  const canvass = useCanvass(Boolean(user));
   const [canvassBoard, setCanvassBoard] = useState(false);
   const [canvassId, setCanvassId] = useState<string | null>(null);
   const viewBoundsRef = useRef<ViewBounds | null>(null);
@@ -1842,6 +1842,26 @@ export default function HailApp() {
 
   const canvassSelection = canvass.stops.find((stop) => stop.id === canvassId) ?? null;
 
+  function frameCanvass(stop: { lat: number; lon: number }) {
+    const box = canvassFrame(stop, canvass.stops);
+    const mapHeight = mapStageRef.current?.clientHeight ?? window.innerHeight;
+    const chrome = Math.ceil(chromeRef.current?.getBoundingClientRect().height ?? 0);
+    let top = Math.max(mobile ? 168 : 132, chrome + 96);
+    let bottom = mobile ? 220 : 168;
+    if (top + bottom > mapHeight - 200) {
+      const room = Math.max(160, mapHeight - 200);
+      const scale = room / (top + bottom);
+      top = Math.round(top * scale);
+      bottom = Math.round(bottom * scale);
+    }
+    setFrame({
+      ...box,
+      nonce: Date.now(),
+      maxZoom: 13.2,
+      padding: { top, bottom, left: mobile ? 40 : 80, right: mobile ? 48 : 80 },
+    });
+  }
+
   return (
     <AppShell
       section={section}
@@ -1904,6 +1924,18 @@ export default function HailApp() {
             fieldPins={user ? fieldCollection : null}
             canvassPins={user ? canvassCollection : null}
             selectedCanvassId={canvassSelection?.id ?? null}
+            canvassCard={
+              canvassSelection && !canvassBoard && (section === "map" || section === "field") && !honeyOpen && !replay.active
+                ? {
+                    lat: canvassSelection.lat,
+                    lon: canvassSelection.lon,
+                    status: canvassSelection.status,
+                    repName: canvassSelection.repName,
+                    note: canvassSelection.note,
+                  }
+                : null
+            }
+            onCloseCanvassCard={() => setCanvassId(null)}
             selectedId={selectedId}
             focus={focus}
             frame={frame}
@@ -1939,7 +1971,7 @@ export default function HailApp() {
             onSelectCanvass={(id) => {
               setCanvassId(id);
               const stop = canvass.stops.find((item) => item.id === id);
-              if (stop) setFocus({ lat: stop.lat, lon: stop.lon, zoom: 14, nonce: Date.now() });
+              if (stop) frameCanvass(stop);
             }}
             onSelectCounty={(info) => {
               setCounty(info);
@@ -2256,20 +2288,22 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {canvassSelection && !canvassBoard && (section === "map" || section === "field") && !honeyOpen && !replay.active ? (
-            <div className="canvass-pin-card" data-canvass-card>
-              <div className="canvass-pin-card-top">
-                <p>{canvassStatusLabel(canvassSelection.status)}</p>
-                <button type="button" className="tap" onClick={() => setCanvassId(null)}>
-                  Close
-                </button>
-              </div>
-              <p className="canvass-pin-card-rep">{canvassSelection.repName}</p>
-              {canvassSelection.note ? <p>{canvassSelection.note}</p> : null}
-            </div>
-          ) : null}
           {(showMesh || showPoints || showOutlook || (user && canvass.stops.length > 0)) && !honeyOpen && !replay.active && !reportOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && section === "map" && !selected && !threat ? (
-            <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
+            <div className="map-legend pointer-events-none absolute z-20 flex flex-col items-start gap-1.5">
+              {user && canvass.stops.length > 0 ? (
+                <div className="canvass-key glass pointer-events-auto" data-canvass-key>
+                  <p className="canvass-key-title">Canvass</p>
+                  {(["knocked", "not_home", "interested", "signed"] as const).map((status) => (
+                    <span key={status} className="canvass-key-row">
+                      <i style={{ background: CANVASS_COLORS[status] }} />
+                      {canvassStatusLabel(status)}
+                    </span>
+                  ))}
+                  <button type="button" data-canvass-legend onClick={() => setCanvassBoard(true)}>
+                    Open list · {canvass.stops.length}
+                  </button>
+                </div>
+              ) : null}
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
                   <span className="map-key-dots" aria-hidden="true">
@@ -2316,20 +2350,6 @@ export default function HailApp() {
                           Significant
                         </span>
                       ) : null}
-                    </>
-                  ) : null}
-                  {user && canvass.stops.length > 0 ? (
-                    <>
-                      <span className="map-key-label">Canvass</span>
-                      {(["knocked", "not_home", "interested", "signed"] as const).map((status) => (
-                        <span key={status} className="map-key-item">
-                          <i className="is-round" style={{ background: CANVASS_COLORS[status] }} />
-                          {canvassStatusLabel(status)}
-                        </span>
-                      ))}
-                      <button type="button" className="map-key-back" data-canvass-legend onClick={() => setCanvassBoard(true)}>
-                        Open list · {canvass.stops.length}
-                      </button>
                     </>
                   ) : null}
                   {meshDate ? (
@@ -2577,7 +2597,7 @@ export default function HailApp() {
               onClose={() => setCanvassBoard(false)}
               onSelect={(stop) => {
                 setCanvassId(stop.id);
-                setFocus({ lat: stop.lat, lon: stop.lon, zoom: 16, nonce: Date.now() });
+                frameCanvass(stop);
               }}
               form={
                 canvassSelection

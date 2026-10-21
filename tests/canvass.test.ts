@@ -8,6 +8,7 @@ import { POST as signIn } from "@/app/api/auth/session/route";
 import {
   addressKey,
   CANVASS_COLORS,
+  canvassFrame,
   canvassStatusLabel,
   matchStop,
   summarizeReps,
@@ -47,6 +48,22 @@ describe("canvass keys and daily counts", () => {
     expect(addressKey("32.75000, -97.33000", 32.75119, -97.33084)).toBe("geo:32.7512,-97.3308");
     expect(canvassStatusLabel("not_home")).toBe("Not home");
     expect(CANVASS_COLORS.signed).toBe("#047857");
+  });
+
+  it("frames the selected neighborhood and leaves a distant city out", () => {
+    const frame = canvassFrame({ lat: 33.4152, lon: -111.8324 }, [
+      { lat: 33.4148, lon: -111.8648 },
+      { lat: 33.4082, lon: -111.7661 },
+      { lat: 33.4152, lon: -111.7937 },
+      { lat: 33.4152, lon: -111.8324 },
+      { lat: 32.75, lon: -97.33 },
+    ]);
+    expect(frame.west).toBeLessThan(-111.864);
+    expect(frame.east).toBeGreaterThan(-111.766);
+    expect(frame.south).toBeLessThan(33.408);
+    expect(frame.north).toBeGreaterThan(33.415);
+    expect(frame.west).toBeGreaterThan(-112.05);
+    expect(frame.east).toBeLessThan(-111.6);
   });
 
   it("treats the same porch as one house and leaves the next block alone", () => {

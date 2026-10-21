@@ -51,6 +51,25 @@ export function asCanvassStatus(value: unknown): CanvassStatus | null {
   return CANVASS_STATUSES.find((status) => status === value) ?? null;
 }
 
+/** Bounds that keep a selected house and the nearby marks on one screen, with room for the hail around them. */
+export function canvassFrame(
+  selected: { lat: number; lon: number },
+  stops: Array<{ lat: number; lon: number }>,
+): { west: number; south: number; east: number; north: number } {
+  const nearby = stops.filter((stop) => haversineKm(selected.lat, selected.lon, stop.lat, stop.lon) <= 12);
+  const group = nearby.length ? nearby : [selected];
+  const lats = group.map((stop) => stop.lat);
+  const lons = group.map((stop) => stop.lon);
+  const latPad = Math.max(0.018, (Math.max(...lats) - Math.min(...lats)) * 0.55);
+  const lonPad = Math.max(0.02, (Math.max(...lons) - Math.min(...lons)) * 0.42);
+  return {
+    west: Math.min(...lons) - lonPad,
+    east: Math.max(...lons) + lonPad,
+    south: Math.min(...lats) - latPad,
+    north: Math.max(...lats) + latPad,
+  };
+}
+
 export function canvassStatusLabel(status: CanvassStatus): string {
   if (status === "knocked") return "Knocked";
   if (status === "not_home") return "Not home";

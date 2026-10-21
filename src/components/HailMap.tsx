@@ -15,7 +15,7 @@ import Map, {
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
-import { CANVASS_COLORS } from "@/lib/canvass";
+import { CANVASS_COLORS, canvassStatusLabel, type CanvassStatus } from "@/lib/canvass";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
@@ -180,6 +180,15 @@ interface Props {
   fieldPins?: GeoJSON.FeatureCollection | null;
   canvassPins?: GeoJSON.FeatureCollection | null;
   selectedCanvassId?: string | null;
+  /** Compact card drawn on the selected canvass pin. */
+  canvassCard?: {
+    lat: number;
+    lon: number;
+    status: CanvassStatus;
+    repName: string;
+    note: string | null;
+  } | null;
+  onCloseCanvassCard?: () => void;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -263,6 +272,8 @@ export default function HailMap({
   fieldPins = null,
   canvassPins = null,
   selectedCanvassId = null,
+  canvassCard = null,
+  onCloseCanvassCard,
   selectedId,
   focus,
   frame,
@@ -347,7 +358,7 @@ export default function HailMap({
     if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
-    if (width < 768) {
+    if (width < 768 || next.padding) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
     const desktop = width >= 768;
@@ -1066,6 +1077,15 @@ export default function HailMap({
             paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
           />
           <Layer
+            id="canvass-halo"
+            type="circle"
+            paint={{
+              "circle-color": "#ffffff",
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 12, 12, 14, 15, 16],
+              "circle-opacity": 0.96,
+            }}
+          />
+          <Layer
             id="canvass-pins"
             type="circle"
             paint={{
@@ -1082,17 +1102,58 @@ export default function HailMap({
                 CANVASS_COLORS.signed,
                 "#64748b",
               ],
-              "circle-radius": [
-                "case",
-                ["==", ["get", "id"], selectedCanvassId ?? ""],
-                11,
-                ["interpolate", ["linear"], ["zoom"], 8, 6, 13, 8, 16, 10],
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 12, 9.5, 15, 11],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2.5,
+            }}
+          />
+          <Layer
+            id="canvass-selected-halo"
+            type="circle"
+            filter={["==", ["get", "id"], selectedCanvassId ?? ""]}
+            paint={{ "circle-color": "#102033", "circle-radius": 22, "circle-opacity": 1 }}
+          />
+          <Layer
+            id="canvass-selected"
+            type="circle"
+            filter={["==", ["get", "id"], selectedCanvassId ?? ""]}
+            paint={{
+              "circle-color": [
+                "match",
+                ["get", "status"],
+                "knocked",
+                CANVASS_COLORS.knocked,
+                "not_home",
+                CANVASS_COLORS.not_home,
+                "interested",
+                CANVASS_COLORS.interested,
+                "signed",
+                CANVASS_COLORS.signed,
+                "#64748b",
               ],
-              "circle-stroke-color": ["case", ["==", ["get", "id"], selectedCanvassId ?? ""], "#102033", "#ffffff"],
-              "circle-stroke-width": ["case", ["==", ["get", "id"], selectedCanvassId ?? ""], 3, 2],
+              "circle-radius": 14,
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 3,
             }}
           />
         </Source>
+      ) : null}
+      {canvassCard ? (
+        <Marker longitude={canvassCard.lon} latitude={canvassCard.lat} anchor="bottom" offset={[0, -28]}>
+          <div className="canvass-pin-card" data-canvass-card>
+            <div className="canvass-pin-card-top">
+              <p>
+                <i style={{ background: CANVASS_COLORS[canvassCard.status] }} />
+                {canvassStatusLabel(canvassCard.status)}
+              </p>
+              <button type="button" className="tap" onClick={() => onCloseCanvassCard?.()}>
+                Close
+              </button>
+            </div>
+            <p className="canvass-pin-card-rep">{canvassCard.repName}</p>
+            {canvassCard.note ? <p>{canvassCard.note}</p> : null}
+          </div>
+        </Marker>
       ) : null}
       {fieldPins?.features.length ? (
         <Source id="field-pins" type="geojson" data={fieldPins}>

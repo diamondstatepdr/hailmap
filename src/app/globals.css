@@ -2461,21 +2461,82 @@ html.dark .replay-range::-moz-range-thumb {
   font-size: 0.68rem;
 }
 
-.canvass-pin-card {
-  position: absolute;
-  z-index: 24;
-  right: 4.5rem;
-  bottom: 3.6rem;
-  left: 0.75rem;
+.canvass-key {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.16rem;
+  width: max-content;
+  max-width: 100%;
+  border-radius: 0.85rem;
+  padding: 0.38rem 0.55rem 0.42rem;
+  font-size: 11px;
+  line-height: 1.15;
+  pointer-events: auto;
+}
+
+.canvass-key-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.canvass-key-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.canvass-key-row i,
+.canvass-pin-card-top i {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(16, 32, 51, 0.45);
+}
+
+.canvass-key button {
+  margin-top: 0.1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.canvass-pin-card {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 0.12rem;
+  width: max-content;
+  max-width: min(13.5rem, 68vw);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: 0.85rem;
   background: var(--panel);
-  padding: 0.7rem 0.85rem 0.75rem;
+  padding: 0.45rem 0.6rem 0.5rem;
   color: var(--text);
   box-shadow: var(--shadow);
   pointer-events: auto;
+}
+
+.canvass-pin-card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .canvass-pin-card p {
@@ -2490,7 +2551,10 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .canvass-pin-card-top p {
-  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
   font-weight: 750;
 }
 

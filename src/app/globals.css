@@ -2335,6 +2335,33 @@ html.dark .replay-range::-moz-range-thumb {
   line-height: 1.35;
 }
 
+.leads-card {
+  margin: 0 0 1.25rem;
+  max-width: 48rem;
+  border: 1px solid var(--border);
+  border-radius: 1.1rem;
+  background: var(--panel);
+  padding: 0.9rem 1rem 1rem;
+}
+
+[data-tone="reports"] > .sheet-band {
+  margin-bottom: 0.7rem;
+}
+
+.leads-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leads-list li {
+  border-radius: 0.8rem;
+  background: var(--panel-2);
+  padding: 0.5rem 0.65rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2604,7 +2631,8 @@ html.dark .replay-range::-moz-range-thumb {
 }
 
 .map-topbar .plain-actions {
-  overflow-x: auto;
+  min-width: 0;
+  overflow: hidden;
   scrollbar-width: none;
 }
 
@@ -2628,6 +2656,13 @@ html.dark .replay-range::-moz-range-thumb {
 .map-topbar .plain-actions .chase-open {
   gap: 0.28rem;
   padding-inline: 0.45rem;
+}
+
+.map-topbar .plain-actions .range-control {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .help-chip {

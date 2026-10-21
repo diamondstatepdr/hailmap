@@ -1,6 +1,7 @@
 "use client";
 
 import { FileText, Map } from "lucide-react";
+import LeadsExport from "@/components/panels/LeadsExport";
 
 export interface SavedReport {
   id: string;
@@ -46,6 +47,7 @@ export default function ReportsPanel({
           A printable storm report with radar hail size, nearby warnings, a map snapshot, damage probability, and your field photos if you are signed in.
         </p>
       </header>
+      <LeadsExport signedIn={signedIn} onSignIn={onSignIn} />
       <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
         <button
           type="button"

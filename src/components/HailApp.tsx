@@ -2,11 +2,11 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { CloudHail, Play, Tornado, Wind } from "lucide-react";
+import { CloudHail, Gem, Play, Tornado, Wind } from "lucide-react";
 import AppMenu from "@/components/shell/AppMenu";
 import HelpGuide from "@/components/help/HelpGuide";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
-import { friendlyWhen, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
+import { chipWhen, friendlyWhen, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
@@ -1992,15 +1992,17 @@ export default function HailApp() {
                   {replay.active ? null : (
                     <button
                       type="button"
-                      className="range-control press"
-                      aria-expanded={overlay === "range"}
+                        className="range-control press"
+                        aria-label={friendlyWhen(stormControlLabel)}
+                        aria-expanded={overlay === "range"}
                       aria-controls="storm-range"
                       onClick={() => {
                         setCustomOpen(false);
                         setOverlay((current) => (current === "range" ? null : "range"));
                       }}
                     >
-                      {friendlyWhen(stormControlLabel)}
+                        <CloudHail size={16} aria-hidden />
+                        {chipWhen(stormControlLabel)}
                     </button>
                   )}
                   {section === "map" && !replay.active ? (
@@ -2010,8 +2012,9 @@ export default function HailApp() {
                     type="button"
                     data-honey-open
                     data-tone="money"
-                    aria-pressed={honeyOpen}
-                    className="plain-action press"
+                      aria-pressed={honeyOpen}
+                      aria-label="Money spots"
+                      className="plain-action press"
                     onClick={() => {
                       setOverlay(null);
                       setCustomOpen(false);
@@ -2020,7 +2023,8 @@ export default function HailApp() {
                       setHoneyOpen(true);
                     }}
                   >
-                    Money spots
+                      <Gem size={16} aria-hidden />
+                      Money
                   </button>
                   <button type="button" className="help-chip press" data-help-open aria-label="What do I do here?" onClick={() => setHelpOpen(true)}>
                     ?

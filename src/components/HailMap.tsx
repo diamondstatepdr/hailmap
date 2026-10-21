@@ -1254,8 +1254,6 @@ function SwathSource({
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
-  const halo = theme === "dark" ? "#f7fbff" : "#102033";
-  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1277,7 +1275,7 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": halo,
+            "line-color": swathColor as never,
             "line-width": lineWidth + 3.2,
             "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": Math.min(blur, 0.15),
@@ -1292,7 +1290,7 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": contour,
+            "line-color": swathColor as never,
             "line-width": lineWidth,
             "line-opacity": lineOpacity,
             "line-blur": 0,

@@ -96,5 +96,7 @@ describe("reportsToSwaths", () => {
     const outer = polygons.find((feature) => feature.properties?.minIn === 0.75);
     expect(outer?.geometry.type === "Polygon" ? outer.geometry.coordinates.length : 0).toBeGreaterThan(1);
     expect(collection.features.some((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true)).toBe(true);
+    const edge = collection.features.find((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true);
+    expect(edge?.properties?.color).toBe("#16a34a");
   });
 });

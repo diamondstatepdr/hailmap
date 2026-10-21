@@ -62,7 +62,7 @@ describe("map credit toggle", () => {
 describe("map credit while Money Holes is open", () => {
   it("lifts the phone credit above the bottom sheet", () => {
     const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
-    expect(css).toMatch(/div:has\(> \.honey-dock\) \.maplibregl-ctrl-bottom-right\s*\{[^}]*bottom:\s*calc\(var\(--honey-stack, calc\(min\(48dvh, 28rem\) \+ 0\.5rem\)\) \+ 1\.35rem\)/);
+    expect(css).toMatch(/div:has\(> \.honey-dock\) \.maplibregl-ctrl-bottom-right\s*\{[^}]*left:\s*0\.55rem;[^}]*bottom:\s*calc\(var\(--honey-stack, calc\(min\(48dvh, 28rem\) \+ 0\.5rem\)\) \+ 1\.35rem\)/);
     expect(css).toMatch(/@media \(min-width: 768px\)\s*\{\s*\.honey-dock\s*\{[^}]*top:/);
   });
 });

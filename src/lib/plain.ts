@@ -50,6 +50,13 @@ export function friendlyWhen(label: string): string {
   return label.replace(/^All storms · /, "Hail · ");
 }
 
+/** The map chip keeps the time, short enough to stay at 15px. */
+export function chipWhen(label: string): string {
+  const friendly = friendlyWhen(label);
+  const parts = friendly.split(" · ");
+  return parts[parts.length - 1] || friendly;
+}
+
 /** One readable money-spot line. 2.23" becomes 2.2"; quarter inches stay. */
 export function formatHoneyDetail(input: {
   radarIn?: number | null;

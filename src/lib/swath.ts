@@ -198,7 +198,7 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
       });
       features.push({
         type: "Feature",
-        properties: { halo: true, kind: "edge" },
+        properties: { halo: true, kind: "edge", color: "#64748b" },
         geometry: { type: "LineString", coordinates: ring.map((point) => [point.lon, point.lat]) },
       });
       return;

@@ -207,6 +207,8 @@ button {
 @media (max-width: 767px) {
   div:has(> .honey-dock) .maplibregl-ctrl-bottom-right {
     z-index: 34;
+    right: auto;
+    left: 0.55rem;
     bottom: calc(var(--honey-stack, calc(min(48dvh, 28rem) + 0.5rem)) + 1.35rem);
   }
 }
@@ -2601,16 +2603,25 @@ html.dark .replay-range::-moz-range-thumb {
   gap: 0.35rem;
 }
 
+.map-topbar .plain-actions {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.map-topbar .plain-actions::-webkit-scrollbar {
+  display: none;
+}
+
 .map-topbar .plain-actions .range-control,
 .map-topbar .plain-actions .plain-action,
 .map-topbar .plain-actions .chase-open {
   height: 44px;
   min-height: 44px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   justify-content: center;
-  min-width: 0;
-  padding-inline: 0.5rem;
-  font-size: 0.75rem;
+  gap: 0.35rem;
+  padding-inline: 0.75rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
 }
 

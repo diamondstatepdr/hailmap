@@ -90,24 +90,32 @@ async function install(page) {
 async function openSwath(page) {
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ timeout: 30000 });
-  await page.waitForTimeout(4000);
+  const holes = page.getByRole("dialog", { name: /Money Holes/i });
+  if (await holes.count()) {
+    const close = holes.getByRole("button", { name: "Close" });
+    if (await close.count()) await close.first().click();
+  }
+  await page.waitForTimeout(1500);
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no map");
   const points = [
+    [0.5, 0.34],
     [0.5, 0.5],
-    [0.46, 0.48],
-    [0.55, 0.52],
-    [0.42, 0.55],
-    [0.58, 0.42],
+    [0.4, 0.34],
+    [0.5, 0.64],
+    [0.42, 0.46],
   ];
   for (const [fx, fy] of points) {
-    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    await canvas.click({ position: { x: box.width * fx, y: box.height * fy }, force: true });
     const button = page.locator("[data-knock-route]");
     try {
-      await button.waitFor({ state: "visible", timeout: 2500 });
+      await button.waitFor({ state: "attached", timeout: 2500 });
+      await button.scrollIntoViewIfNeeded();
+      await button.waitFor({ state: "visible", timeout: 3000 });
       return;
     } catch {
-      /* the swath may still be painting */
+      const close = page.locator(".sheet-dock").getByRole("button", { name: "Close" });
+      if (await close.count()) await close.first().click();
     }
   }
   throw new Error("swath click did not open the area card");
@@ -128,8 +136,13 @@ async function shoot(browser, label, options, theme, name) {
   await page.screenshot({ path: card });
   console.log("wrote", card);
   await page.locator("[data-knock-route]").click();
-  await page.locator("[data-knock-sheet] .knock-list li").first().waitFor({ timeout: 45000 });
+  await page.locator("[data-knock-sheet] .knock-list li").first().waitFor({ timeout: 100000 });
   await page.waitForTimeout(2800);
+  const replay = page.getByRole("button", { name: "Replay" });
+  if ((await replay.count()) && (await replay.first().isVisible())) throw new Error("replay card still covers the route map");
+  const help = await page.locator("[data-help-open]").boundingBox();
+  const viewport = page.viewportSize();
+  if (!help || !viewport || help.x < 0 || help.x + help.width > viewport.width + 1) throw new Error("help chip is clipped");
   const route = `${outDir}/${label}-${name}-route.png`;
   await page.screenshot({ path: route });
   console.log("wrote", route);

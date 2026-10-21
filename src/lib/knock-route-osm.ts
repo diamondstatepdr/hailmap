@@ -15,21 +15,22 @@ import {
 } from "@/lib/knock-route";
 
 const MIRRORS = [
-  "https://overpass.openstreetmap.fr/api/interpreter",
-  "https://overpass.osm.ch/api/interpreter",
-  "https://lz4.overpass-api.de/api/interpreter",
   "https://overpass-api.de/api/interpreter",
+  "https://lz4.overpass-api.de/api/interpreter",
+  "https://overpass.osm.ch/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
 ];
 
 function overpassQuery(bounds: { west: number; south: number; east: number; north: number }): string {
   const box = `${bounds.south},${bounds.west},${bounds.north},${bounds.east}`;
-  return `[out:json][timeout:12];
+  return `[out:json][timeout:25];
 way["highway"~"^(residential|living_street|unclassified)$"]["name"](${box});
 out geom 100;`;
 }
 
 async function queryMirror(query: string): Promise<StreetWay[]> {
   let lastError = "Street search is busy";
+  let sawEmpty = false;
   for (const mirror of MIRRORS) {
     try {
       const response = await fetch(mirror, {
@@ -40,7 +41,7 @@ async function queryMirror(query: string): Promise<StreetWay[]> {
           Accept: "application/json",
         },
         body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(45000),
         cache: "no-store",
       });
       if (!response.ok) {
@@ -48,12 +49,18 @@ async function queryMirror(query: string): Promise<StreetWay[]> {
         continue;
       }
       const payload = (await response.json()) as { elements?: StreetWay[] };
-      return payload.elements ?? [];
+      const elements = payload.elements ?? [];
+      if (!elements.length) {
+        sawEmpty = true;
+        continue;
+      }
+      return elements;
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Street search failed";
       console.error("[hailmap] knock-route", mirror, lastError);
     }
   }
+  if (sawEmpty) return [];
   throw new Error(`Street search failed (${lastError}). Try again in a moment.`);
 }
 
@@ -82,8 +89,10 @@ export async function findKnockRoute(input: {
   }
   if (!elements) {
     elements = await queryMirror(overpassQuery(bounds));
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ at: Date.now(), elements }));
+    if (elements.length) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ at: Date.now(), elements }));
+    }
   }
   const ranked = streetsFromWays(elements, input.geometry, input.bands, input.focus, input.fallbackHail).filter((stop) =>
     pointInGeometry(stop.lon, stop.lat, work),

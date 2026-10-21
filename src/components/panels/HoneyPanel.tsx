@@ -47,6 +47,7 @@ interface Props {
   onRoute?: () => void;
   routeBusy?: boolean;
   routeError?: string | null;
+  onForecast?: () => void;
 }
 
 export default function HoneyPanel(props: Props) {
@@ -107,6 +108,11 @@ export default function HoneyPanel(props: Props) {
         </button>
       ) : null}
       {props.routeError ? <p className="honey-note">{props.routeError}</p> : null}
+      {props.onForecast ? (
+        <button type="button" className="btn btn-primary press" data-forecast-open disabled={!props.spots.length || props.needsDay} onClick={props.onForecast}>
+          Storm-to-cash
+        </button>
+      ) : null}
       <div className="honey-body">
         {props.needsDay ? (
           <p className="honey-note">Pick the day the hail fell. Money spots are ranked one storm at a time.</p>

@@ -34,6 +34,7 @@ import ChaseMapButton from "@/components/chase/ChaseMapButton";
 import ChasePopup from "@/components/chase/ChasePopup";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import KnockRouteSheet from "@/components/panels/KnockRouteSheet";
+import ForecastSheet from "@/components/panels/ForecastSheet";
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
@@ -76,6 +77,7 @@ import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBo
 import { showHoneyRanking } from "@/lib/honey";
 import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
+import { bandsFromFeatures, buildForecast, type ForecastLine } from "@/lib/forecast";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -218,6 +220,7 @@ export default function HailApp() {
   const [knock, setKnock] = useState<{ label: string; stops: KnockStop[]; mode: KnockMode; note: string | null } | null>(null);
   const [knockBusy, setKnockBusy] = useState(false);
   const [knockError, setKnockError] = useState<string | null>(null);
+  const [forecast, setForecast] = useState<{ label: string; lines: ForecastLine[] } | null>(null);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
@@ -2602,6 +2605,21 @@ export default function HailApp() {
               }}
               routeBusy={knockBusy}
               routeError={knockError}
+              onForecast={() => {
+                const spots = honey?.spots?.[honeyMode] ?? [];
+                const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
+                if (!spot) return;
+                setForecast({
+                  label: spot.name,
+                  lines: buildForecast({
+                    geometry: circlePolygon(spot.lat, spot.lon, 1.8),
+                    fallbackHail: spot.hailIn,
+                    vehicles: spot.vehicles,
+                    homes: spot.homes,
+                  }),
+                });
+                setHoneyOpen(false);
+              }}
               attribution={honey?.attribution ?? "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports."}
               updatedAt={honey?.updatedAt ?? chase?.generatedAt ?? null}
               onClose={() => setHoneyOpen(false)}
@@ -2749,7 +2767,7 @@ export default function HailApp() {
               onClose={replay.stop}
             />
           ) : null}
-          {section === "map" && !honeyOpen && !replay.active && area && !knock && !(placeCardOpen && place) ? (
+          {section === "map" && !honeyOpen && !replay.active && area && !knock && !forecast && !(placeCardOpen && place) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
               <MapDetailSheet label={sheetTitle || area.label} onClose={closeMapDetail} expandedMax="min(58dvh, 26rem)">
                 <h2 className="text-lg font-semibold tracking-tight" data-swath-title>
@@ -2831,6 +2849,23 @@ export default function HailApp() {
                   >
                     Open in field mode
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary press"
+                    data-forecast-open
+                    onClick={() =>
+                      setForecast({
+                        label: area.label,
+                        lines: buildForecast({
+                          geometry: area.geometry,
+                          fallbackHail: area.maxIn ?? area.minIn ?? 0.75,
+                          bands: bandsFromFeatures(meshCollection?.features),
+                        }),
+                      })
+                    }
+                  >
+                    Storm-to-cash
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -2863,6 +2898,9 @@ export default function HailApp() {
               onMode={(mode) => setKnock((current) => (current ? { ...current, mode } : current))}
               onClose={() => setKnock(null)}
             />
+          ) : null}
+          {section === "map" && !replay.active && forecast ? (
+            <ForecastSheet label={forecast.label} lines={forecast.lines} onClose={() => setForecast(null)} />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">

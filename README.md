@@ -63,6 +63,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
 - `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap. The swath card ranks them by hail size at the lot, with the OSM phone (tap to call) and Google / Apple directions. The field finder stays sorted by distance.
 - `POST /api/knock-route` — door-knock route for a Money Hole or selected swath. Named residential streets from OpenStreetMap, hardest hail first, ordered into one walk. Google Maps links keep 9 intermediate stops. Apple Maps links keep 12.
+- `GET /api/forecast/prices`, `POST /api/forecast/prices` — storm-to-cash per-job prices for the team. The estimate uses a Money Hole's vehicle and roof counts when it has them, otherwise 900 vehicles and 450 roofs per square mile of each hail band. It is labeled an estimate. Defaults live in code.
 - `GET /api/income` — county polygons with ACS median household income
 - `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway

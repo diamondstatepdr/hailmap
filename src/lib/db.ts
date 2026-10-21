@@ -218,6 +218,14 @@ function migrate(db: Database.Database) {
       phone TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS forecast_prices (
+      team_key TEXT PRIMARY KEY,
+      pdr_low INTEGER NOT NULL,
+      pdr_high INTEGER NOT NULL,
+      roof_low INTEGER NOT NULL,
+      roof_high INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   const crmColumns = db.prepare("PRAGMA table_info(crm_settings)").all() as { name: string }[];
   if (crmColumns.length && !crmColumns.some((column) => column.name === "last_sent_at")) {

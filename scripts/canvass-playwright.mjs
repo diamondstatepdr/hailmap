@@ -1,0 +1,119 @@
+import { mkdirSync } from "node:fs";
+import { chromium } from "playwright";
+
+const base = process.env.BASE_URL ?? "http://127.0.0.1:3210";
+const outDir = process.env.CANVASS_SHOTS ?? "/opt/cursor/artifacts/canvass";
+const phone = { viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const desktop = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 };
+const themes = [
+  ["a", "storm-core"],
+  ["b", "supercell"],
+  ["c", "ice-swath"],
+];
+const houses = [
+  ["East Main Street, Mesa, AZ", "knocked", "Left a card", /East Main Street, Mesa/i],
+  ["East Broadway Road, Mesa, AZ", "interested", "Wants a look at the hood", /Broadway/i],
+  ["West Main Street, Mesa, AZ", "signed", "Roof and hood", /Asian District/i],
+  ["West Main Street, Downtown Mesa, AZ", "not_home", "Nobody answered", /Downtown Mesa/i],
+];
+
+async function hideDev(page) {
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.textContent = "nextjs-portal{display:none!important}";
+    document.documentElement.appendChild(style);
+  });
+}
+
+async function searchAddress(page, query, match) {
+  const input = page.getByLabel("Search an address");
+  await input.click();
+  await input.fill("");
+  await input.fill(query);
+  const choice = page.locator("ul button").filter({ hasText: match }).first();
+  await choice.waitFor({ timeout: 20000 });
+  await choice.click();
+  const form = page.locator("[data-canvass-form]");
+  await form.waitFor({ timeout: 25000 });
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await page.locator("[data-canvass-form]").scrollIntoViewIfNeeded({ timeout: 4000 });
+      break;
+    } catch (error) {
+      if (attempt === 3) throw error;
+      await page.waitForTimeout(400);
+    }
+  }
+}
+
+async function markHouse(page, query, status, note, match, signIn) {
+  await searchAddress(page, query, match);
+  if (signIn) {
+    const signInButton = page.getByRole("button", { name: "Sign in to canvass" });
+    await signInButton.waitFor({ timeout: 15000 });
+    await page.waitForTimeout(400);
+    await signInButton.click();
+    await page.getByLabel("Name").fill("Alex");
+    await page.getByLabel("Team passcode").fill("team-pass");
+    await page.locator("form").getByRole("button", { name: "Sign in" }).click();
+    await page.locator(`[data-canvass-status="${status}"]`).waitFor({ timeout: 15000 });
+  }
+  const statusButton = page.locator(`[data-canvass-status="${status}"]`);
+  await statusButton.waitFor({ timeout: 15000 });
+  await statusButton.click();
+  await page.locator("[data-canvass-form] textarea").fill(note);
+  await page.getByRole("button", { name: /Save for the team|Update this house/ }).click();
+  await page.getByText(note).waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.locator("[data-canvass-form]").waitFor({ state: "hidden", timeout: 10000 }).catch(() => undefined);
+}
+
+async function shoot(browser, label, options, theme, name) {
+  const context = await browser.newContext({ ...options, serviceWorkers: "block" });
+  const page = await context.newPage();
+  await hideDev(page);
+  const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
+  await page.goto(`${base}/?lat=33.415&lon=-111.837&z=13&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.locator(".maplibregl-canvas").waitFor({ timeout: 30000 });
+  await meshReady;
+  await page.waitForTimeout(1200);
+  for (let index = 0; index < houses.length; index += 1) {
+    const [query, status, note, match] = houses[index];
+    await markHouse(page, query, status, note, match, index === 0);
+  }
+  await page.locator("[data-canvass-key]").waitFor({ timeout: 15000 });
+  await page.locator("[data-canvass-legend]").click();
+  const board = page.getByRole("dialog", { name: "Canvass" });
+  await board.getByRole("button", { name: /Roof and hood/i }).click();
+  await board.getByRole("button", { name: "Close" }).click();
+  await page.locator("[data-canvass-card]").waitFor({ timeout: 10000 });
+  await page.locator("[data-canvass-key]").waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => {
+    const zoom = Number(document.querySelector(".maplibregl-map")?.getAttribute("data-map-zoom"));
+    return zoom >= 10 && zoom <= 14;
+  }, { timeout: 15000 });
+  const card = await page.locator("[data-canvass-card]").boundingBox();
+  if (!card || card.width > 280 || card.y > options.viewport.height * 0.78) {
+    throw new Error(`canvass card is not anchored on the map (${JSON.stringify(card)})`);
+  }
+  await page.waitForTimeout(600);
+  const file = `${outDir}/${label}-${name}-map.png`;
+  await page.screenshot({ path: file });
+  console.log("wrote", file);
+  await context.close();
+}
+
+async function main() {
+  mkdirSync(outDir, { recursive: true });
+  const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
+  for (const [theme, name] of themes) {
+    await shoot(browser, "phone", phone, theme, name);
+    await shoot(browser, "desktop", desktop, theme, name);
+  }
+  await browser.close();
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

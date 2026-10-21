@@ -80,6 +80,8 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/alerts/health` — VAPID source, subscription counts, and the last alert-loop run.
 - `GET /api/alerts/replay?date=YYYY-MM-DD&lat=&lon=&radiusMi=&state=&minSizeIn=` — what the engine would have sent for a past convective day. It does not send pushes.
 - `GET /api/field/pins`, `POST /api/field/pins`, `PATCH /api/field/pins/[id]`, `DELETE /api/field/pins/[id]` — house pins (`damage`, `talked`, `away`, `lead`).
+- `GET /api/canvass`, `POST /api/canvass` — team canvass marks (`knocked`, `not_home`, `interested`, `signed`) with an optional note. Everyone on the team passcode sees the same houses. A repeat tap within about 40 meters updates that house.
+- `GET /api/canvass/stats?day=YYYY-MM-DD&tz=` — houses each rep marked that local day. A house counts once, under the last status that rep set.
 - `POST /api/field/pins/[id]/photos` — damage photo on a pin. Multipart `photo`, `damageType` (`hail`, `wind`, `roof`, `siding`, `vehicle`, `gutters`), optional `note` and `takenAt`. Same EXIF stripping and rate limits as community photos. Not shown as an official report.
 - `GET /api/storm-reports`, `POST /api/storm-reports` — printable storm report. `GET /reports/[id]` is the page. Print or save as PDF from the browser. Address reports include MRMS hail size by date, nearby NWS warnings, and a map snapshot. A body with `start` and `end` uses the multi-year archive: date-of-loss candidates are listed, and the damage score is the selected `scoreDate` or the strongest hail day.
 - `POST /api/import` — CSV or GeoJSON (`lat`, `lon`, optional `size`, `time`, `location`, `county`, `state`, `remark`, `confidence`)

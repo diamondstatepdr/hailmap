@@ -15,6 +15,7 @@ import Map, {
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
+import { CANVASS_COLORS, canvassStatusLabel, type CanvassStatus } from "@/lib/canvass";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
 import stateOverlay from "@/data/us-states.json";
@@ -177,6 +178,17 @@ interface Props {
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
+  canvassPins?: GeoJSON.FeatureCollection | null;
+  selectedCanvassId?: string | null;
+  /** Compact card drawn on the selected canvass pin. */
+  canvassCard?: {
+    lat: number;
+    lon: number;
+    status: CanvassStatus;
+    repName: string;
+    note: string | null;
+  } | null;
+  onCloseCanvassCard?: () => void;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -186,6 +198,7 @@ interface Props {
   onPickLocation: (lon: number, lat: number) => void;
   onSelectReport: (id: string) => void;
   onSelectFieldPin?: (id: string) => void;
+  onSelectCanvass?: (id: string) => void;
   onSelectCounty: (info: { fips?: string; income: number | null }) => void;
   onSelectThreat: (info: ThreatInfo) => void;
   onSelectArea?: (area: AreaSelection) => void;
@@ -257,6 +270,10 @@ export default function HailMap({
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
+  canvassPins = null,
+  selectedCanvassId = null,
+  canvassCard = null,
+  onCloseCanvassCard,
   selectedId,
   focus,
   frame,
@@ -266,6 +283,7 @@ export default function HailMap({
   onPickLocation,
   onSelectReport,
   onSelectFieldPin,
+  onSelectCanvass,
   onSelectCounty,
   onSelectThreat,
   onSelectArea,
@@ -307,6 +325,8 @@ export default function HailMap({
     showIncome ? "income-fill" : "",
     fieldPins?.features.length ? "field-pins" : "",
     fieldPins?.features.length ? "field-pin-hit" : "",
+    canvassPins?.features.length ? "canvass-pins" : "",
+    canvassPins?.features.length ? "canvass-hit" : "",
   ].filter(Boolean);
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
@@ -338,7 +358,7 @@ export default function HailMap({
     if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
-    if (width < 768) {
+    if (width < 768 || next.padding) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
     const desktop = width >= 768;
@@ -497,6 +517,13 @@ export default function HailMap({
       return;
     }
     if (blockSelection) return;
+    const canvassHit = (event.features ?? []).find(
+      (feature) => feature.layer?.id === "canvass-pins" || feature.layer?.id === "canvass-hit",
+    );
+    if (canvassHit?.properties?.id) {
+      onSelectCanvass?.(String(canvassHit.properties.id));
+      return;
+    }
     const honeyHit = (event.features ?? []).find(
       (feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat",
     );
@@ -1041,6 +1068,92 @@ export default function HailMap({
             }}
           />
         </Source>
+      ) : null}
+      {canvassPins?.features.length ? (
+        <Source id="canvass-pins" type="geojson" data={canvassPins}>
+          <Layer
+            id="canvass-hit"
+            type="circle"
+            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
+          />
+          <Layer
+            id="canvass-halo"
+            type="circle"
+            paint={{
+              "circle-color": "#ffffff",
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 12, 12, 14, 15, 16],
+              "circle-opacity": 0.96,
+            }}
+          />
+          <Layer
+            id="canvass-pins"
+            type="circle"
+            paint={{
+              "circle-color": [
+                "match",
+                ["get", "status"],
+                "knocked",
+                CANVASS_COLORS.knocked,
+                "not_home",
+                CANVASS_COLORS.not_home,
+                "interested",
+                CANVASS_COLORS.interested,
+                "signed",
+                CANVASS_COLORS.signed,
+                "#64748b",
+              ],
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 12, 9.5, 15, 11],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2.5,
+            }}
+          />
+          <Layer
+            id="canvass-selected-halo"
+            type="circle"
+            filter={["==", ["get", "id"], selectedCanvassId ?? ""]}
+            paint={{ "circle-color": "#102033", "circle-radius": 22, "circle-opacity": 1 }}
+          />
+          <Layer
+            id="canvass-selected"
+            type="circle"
+            filter={["==", ["get", "id"], selectedCanvassId ?? ""]}
+            paint={{
+              "circle-color": [
+                "match",
+                ["get", "status"],
+                "knocked",
+                CANVASS_COLORS.knocked,
+                "not_home",
+                CANVASS_COLORS.not_home,
+                "interested",
+                CANVASS_COLORS.interested,
+                "signed",
+                CANVASS_COLORS.signed,
+                "#64748b",
+              ],
+              "circle-radius": 14,
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 3,
+            }}
+          />
+        </Source>
+      ) : null}
+      {canvassCard ? (
+        <Marker longitude={canvassCard.lon} latitude={canvassCard.lat} anchor="bottom" offset={[0, -28]}>
+          <div className="canvass-pin-card" data-canvass-card>
+            <div className="canvass-pin-card-top">
+              <p>
+                <i style={{ background: CANVASS_COLORS[canvassCard.status] }} />
+                {canvassStatusLabel(canvassCard.status)}
+              </p>
+              <button type="button" className="tap" onClick={() => onCloseCanvassCard?.()}>
+                Close
+              </button>
+            </div>
+            <p className="canvass-pin-card-rep">{canvassCard.repName}</p>
+            {canvassCard.note ? <p>{canvassCard.note}</p> : null}
+          </div>
+        </Marker>
       ) : null}
       {fieldPins?.features.length ? (
         <Source id="field-pins" type="geojson" data={fieldPins}>

@@ -4,6 +4,7 @@ import { LogoMark } from "@/components/brand/Logo";
 import ProofActions from "@/components/hail-proof/ProofActions";
 import { proofFilename, proofMapSvg, proofSwathStat } from "@/lib/hail-proof";
 import { readHailProof } from "@/lib/hail-proof-store";
+import { proofStreetSvg } from "@/lib/proof-map";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
   if (!proof) notFound();
   const filename = proofFilename(proof.address);
   const dates = proof.storms.map((storm) => storm.label || storm.date);
+  const map = await proofStreetSvg(proof, proofMapSvg(proof));
+  const companyLine = [proof.company, proof.phone].filter(Boolean).join(" · ");
   return (
     <main className="proof-page">
       <div className="proof-toolbar">
@@ -31,6 +34,7 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
         </header>
         <div className="proof-body">
           <h2>{proof.address}</h2>
+          <p className="proof-company">{companyLine || "Company · phone"}</p>
           <p className="text-xs text-muted">
             {proof.lat.toFixed(5)}, {proof.lon.toFixed(5)}
           </p>
@@ -50,7 +54,8 @@ export default async function HailProofPage({ params }: { params: Promise<{ id: 
               <dd>{dates.length ? dates.join(", ") : "None in this view"}</dd>
             </div>
           </dl>
-          <div className="proof-map" dangerouslySetInnerHTML={{ __html: proofMapSvg(proof) }} />
+          <div className="proof-map" dangerouslySetInnerHTML={{ __html: map }} />
+          <p className="text-[11px] text-muted">Streets © OpenStreetMap contributors</p>
           {proofSwathStat(proof.rings) ? <p className="text-sm font-semibold">{proofSwathStat(proof.rings)}</p> : null}
           <h3>Nearby reports</h3>
           {proof.nearby.length ? (

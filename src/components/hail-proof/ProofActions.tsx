@@ -1,6 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+export function ProofLaunch({ busy, onProof }: { busy?: boolean; onProof: (company: string, phone: string) => void }) {
+  const [company, setCompany] = useState("");
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    try {
+      setCompany(localStorage.getItem("swathline-proof-company") ?? "");
+      setPhone(localStorage.getItem("swathline-proof-phone") ?? "");
+    } catch {
+      /* Private mode can block storage. The fields still work for this proof. */
+    }
+  }, []);
+  return (
+    <div className="proof-launch">
+      <label>
+        Company name
+        <input value={company} maxLength={80} autoComplete="organization" placeholder="Your company" onChange={(event) => setCompany(event.target.value)} />
+      </label>
+      <label>
+        Phone
+        <input value={phone} maxLength={40} inputMode="tel" autoComplete="tel" placeholder="Your phone" onChange={(event) => setPhone(event.target.value)} />
+      </label>
+      <button
+        type="button"
+        className="btn btn-secondary press"
+        data-hail-proof
+        disabled={busy}
+        onClick={() => {
+          const nextCompany = company.trim();
+          const nextPhone = phone.trim();
+          try {
+            localStorage.setItem("swathline-proof-company", nextCompany);
+            localStorage.setItem("swathline-proof-phone", nextPhone);
+          } catch {
+            /* Ignore storage failures. */
+          }
+          onProof(nextCompany, nextPhone);
+        }}
+      >
+        {busy ? "Making the PDF…" : "Hail proof PDF"}
+      </button>
+    </div>
+  );
+}
 
 export async function shareHailProof(draft: unknown): Promise<void> {
   const response = await fetch("/api/hail-proof", {

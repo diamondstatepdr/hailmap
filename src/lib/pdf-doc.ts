@@ -1,4 +1,12 @@
-/** A small PDF 1.4 writer for one branded page. Helvetica only, no embedded images. */
+/** A small PDF 1.4 writer for one branded page. Helvetica, plus one optional RGB map image. */
+
+import { deflateSync } from "node:zlib";
+
+export interface PdfImage {
+  width: number;
+  height: number;
+  rgb: Buffer;
+}
 
 function ascii(value: string): string {
   return value.replace(/[^\x20-\x7E]/g, " ");
@@ -25,26 +33,52 @@ export function wrapPdfText(value: string, width: number): string[] {
   return lines;
 }
 
-export function buildPdf(content: string): Buffer {
-  const stream = content.endsWith("\n") ? content : `${content}\n`;
-  const objects = [
+export function buildPdf(content: string, image?: PdfImage | null): Buffer {
+  const stream = Buffer.from(content.endsWith("\n") ? content : `${content}\n`);
+  const flate = image ? deflateSync(image.rgb) : null;
+  const resources = image
+    ? "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /XObject << /Im0 8 0 R >> /ExtGState << /GS1 7 0 R >> >> >>"
+    : "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ExtGState << /GS1 7 0 R >> >> >>";
+  const bodies: Array<Buffer | string> = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>",
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`,
+    resources,
+    Buffer.concat([Buffer.from(`<< /Length ${stream.length} >>\nstream\n`), stream, Buffer.from("endstream")]),
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    "<< /Type /ExtGState /ca 0.42 /CA 1 >>",
   ];
-  let out = "%PDF-1.4\n";
+  if (flate && image) {
+    bodies.push(
+      Buffer.concat([
+        Buffer.from(
+          `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${flate.length} >>\nstream\n`,
+        ),
+        flate,
+        Buffer.from("\nendstream"),
+      ]),
+    );
+  }
+  const chunks: Buffer[] = [Buffer.from("%PDF-1.4\n")];
+  let length = chunks[0].length;
   const offsets: number[] = [];
-  objects.forEach((body, index) => {
-    offsets.push(Buffer.byteLength(out));
-    out += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  bodies.forEach((body, index) => {
+    offsets.push(length);
+    const wrapped = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      typeof body === "string" ? Buffer.from(body) : body,
+      Buffer.from("\nendobj\n"),
+    ]);
+    chunks.push(wrapped);
+    length += wrapped.length;
   });
-  const xref = Buffer.byteLength(out);
-  out += `xref\n0 ${objects.length + 1}\n`;
-  out += "0000000000 65535 f \n";
-  for (const offset of offsets) out += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return Buffer.from(out);
+  const xref = length;
+  const tail = [
+    `xref\n0 ${bodies.length + 1}\n`,
+    "0000000000 65535 f \n",
+    ...offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`),
+    `trailer\n<< /Size ${bodies.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`,
+  ].join("");
+  chunks.push(Buffer.from(tail));
+  return Buffer.concat(chunks);
 }

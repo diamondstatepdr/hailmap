@@ -2997,6 +2997,42 @@ html.dark .replay-range::-moz-range-thumb {
   overflow-wrap: anywhere;
 }
 
+.proof-company {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.proof-launch {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  min-width: min(100%, 16rem);
+  flex: 1 1 16rem;
+}
+
+.proof-launch label {
+  display: grid;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proof-launch input {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.45rem 0.65rem;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 600;
+}
+
 .proof-map {
   overflow: hidden;
   border-radius: 0.9rem;

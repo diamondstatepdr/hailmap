@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const base = process.env.BASE_URL ?? "http://127.0.0.1:3210";
@@ -11,28 +11,62 @@ const themes = [
   ["c", "ice-swath"],
 ];
 
+const mesa = { lat: 33.415, lon: -111.837 };
+
+function contains(ring, lon, lat) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const crosses = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function mesaBands() {
+  const file = "/tmp/mesh-oct20.json";
+  if (!existsSync(file)) return { rings: [], colors: [] };
+  const doc = JSON.parse(readFileSync(file, "utf8"));
+  const features = doc.collection?.features ?? [];
+  const frame = { west: mesa.lon - 0.012, east: mesa.lon + 0.012, south: mesa.lat - 0.01, north: mesa.lat + 0.01 };
+  const corners = [
+    [frame.west, frame.south],
+    [frame.east, frame.south],
+    [frame.east, frame.north],
+    [frame.west, frame.north],
+  ];
+  const bands = [];
+  for (const feature of features) {
+    const ring = feature.geometry?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length < 4) continue;
+    const hit = contains(ring, mesa.lon, mesa.lat) || corners.some(([lon, lat]) => contains(ring, lon, lat));
+    if (!hit) continue;
+    const step = Math.max(1, Math.ceil(ring.length / 80));
+    const simplified = ring.filter((_, index) => index % step === 0).slice(0, 80);
+    bands.push({ ring: simplified, color: feature.properties?.color ?? "#f97316", minIn: feature.properties?.minIn ?? 0 });
+  }
+  bands.sort((a, b) => a.minIn - b.minIn);
+  return { rings: bands.map((band) => band.ring), colors: bands.map((band) => band.color) };
+}
+
+const meshBands = mesaBands();
 const draft = {
-  address: "3500 W 7th St, Fort Worth",
-  lat: 32.75,
-  lon: -97.33,
-  maxHailIn: 1.75,
-  score: 64,
+  address: "East Main Street, Mesa, AZ",
+  lat: mesa.lat,
+  lon: mesa.lon,
+  company: "Diamond State PDR",
+  phone: "480-800-0148",
+  maxHailIn: 2.53,
+  score: 72,
   level: "High",
-  summary: "1.75 in hail on Apr 25 sits inside a radar swath over this block. Treat the score as an estimate.",
-  storms: [{ date: "2026-04-25", label: "Apr 25, 2026", hailIn: 1.75 }],
-  nearby: [
-    { when: "Apr 25, 4:12 PM", where: "Fort Worth", detail: "1.75 in hail" },
-    { when: "Apr 25, 4:40 PM", where: "2.1 mi east", detail: "1.00 in hail" },
-  ],
-  rings: [
-    [
-      [-97.4, 32.7],
-      [-97.25, 32.7],
-      [-97.25, 32.8],
-      [-97.4, 32.8],
-      [-97.4, 32.7],
-    ],
-  ],
+  summary: "Radar hail on Oct 20, 2026 covers this Mesa block. Treat the score as an estimate.",
+  storms: [{ date: "2026-10-20", label: "Oct 20, 2026", hailIn: 2.53 }],
+  nearby: [{ when: "Oct 20, 2026", where: "3 ENE Mesa", detail: "2.00 in hail" }],
+  rings: meshBands.rings,
+  colors: meshBands.colors,
 };
 
 function placePayload(lat, lon) {
@@ -76,9 +110,11 @@ async function shootProof(browser, id) {
       const context = await browser.newContext(options);
       const page = await context.newPage();
       await hideDev(page);
-      await page.goto(`${base}/proof/${id}?theme=${theme}`, { waitUntil: "networkidle" });
+      await page.goto(`${base}/proof/${id}?scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
       await page.locator("[data-hail-proof-page]").waitFor();
-      await page.locator("h2", { hasText: "3500 W 7th St" }).waitFor();
+      await page.locator("h2", { hasText: "East Main Street, Mesa" }).waitFor();
+      await page.getByText("Diamond State PDR").waitFor();
+      await page.locator(".proof-map svg").waitFor();
       const file = `${outDir}/${label}-${name}-proof.png`;
       await page.screenshot({ path: file, fullPage: true });
       console.log("wrote", file);
@@ -103,7 +139,7 @@ async function shootField(browser) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ lat, lon, street: "W 7th St, Fort Worth", streetStatus: "ok" }),
+          body: JSON.stringify({ lat, lon, street: "East Main Street, Mesa, AZ", streetStatus: "ok" }),
         });
       });
       await page.route("**/api/place?**", async (route) => {
@@ -116,12 +152,14 @@ async function shootField(browser) {
           body: JSON.stringify(placePayload(lat, lon)),
         });
       });
-      await page.goto(`${base}/?lat=32.75&lon=-97.33&z=11&theme=${theme}`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${base}/?lat=33.415&lon=-111.837&z=14&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
       await page.locator(".maplibregl-canvas").waitFor({ timeout: 20000 });
       await page.getByRole("button", { name: /^Field/ }).click();
       await page.locator("[data-field-street]").waitFor({ timeout: 15000 });
-      await page.waitForFunction(() => document.querySelector("[data-field-street]")?.textContent?.includes("7th"), null, { timeout: 15000 });
+      await page.waitForFunction(() => /Main|Mesa/i.test(document.querySelector("[data-field-street]")?.textContent ?? ""), null, { timeout: 15000 });
       await page.getByText("Damage probability").waitFor({ timeout: 15000 });
+      await page.getByLabel("Company name").fill("Diamond State PDR");
+      await page.getByLabel("Phone").fill("480-800-0148");
       await page.locator("[data-hail-proof]").waitFor({ timeout: 15000 });
       await page.locator("[data-sheet-scroll]").evaluate((el) => {
         const button = el.querySelector("[data-hail-proof]");

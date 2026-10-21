@@ -10,11 +10,11 @@ import {
   proofFilename,
   proofMapSvg,
   proofSwathStat,
-  renderHailProofPdf,
   ringsNearPoint,
   stormsFromDaily,
 } from "@/lib/hail-proof";
 import { unproject } from "@/lib/geo";
+import { renderHailProofPdf } from "@/lib/hail-proof-pdf";
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "hailmap-proof-"));
 process.env.HAILMAP_DATA_DIR = dataDir;
@@ -79,6 +79,29 @@ describe("hail proof document", () => {
       -97.33,
     );
     expect(kept).toHaveLength(1);
+    expect(kept[0]?.color).toBe("#f97316");
+    const covering = ringsNearPoint(
+      [
+        {
+          properties: { minIn: 1.5, color: "#f97316" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-98.2, 32.0],
+                [-96.4, 32.0],
+                [-96.4, 33.5],
+                [-98.2, 33.5],
+              ],
+            ],
+          },
+        },
+      ],
+      32.75,
+      -97.33,
+    );
+    expect(covering).toHaveLength(1);
+    expect(covering[0]?.color).toBe("#f97316");
   });
 
   it("renders a branded PDF with the address, hail size, score, and swath map", () => {
@@ -94,6 +117,11 @@ describe("hail proof document", () => {
     expect(text).toContain("High");
     expect(text).toContain("Apr 25, 2026");
     expect(text).toContain("not a roof inspection");
+    expect(text).toContain("Company");
+    const named = normalizeProof({ ...draft, company: "Diamond State PDR", phone: "480-800-0148" }, "2026-04-26T12:00:00.000Z");
+    if ("error" in named) throw new Error(named.error);
+    expect(renderHailProofPdf(named).toString("latin1")).toContain("Diamond State PDR");
+    expect(renderHailProofPdf(named).toString("latin1")).toContain("480-800-0148");
     expect(text).toContain("sq mi");
     const rectangle = [
       [0, 0],
@@ -108,6 +136,8 @@ describe("hail proof document", () => {
     expect(proofSwathStat([rectangle])).toBe("2 mi long · 1 mi wide · 2 sq mi");
     expect(proofMapSvg(proof)).toContain("Swath map");
     expect(proofMapSvg(proof)).toContain("<path");
+    expect(proofMapSvg(proof)).toContain("#f97316");
+    expect(proofMapSvg(proof)).not.toContain("#9d174d");
   });
 
   it("rejects a proof with no address and serves a saved PDF", async () => {

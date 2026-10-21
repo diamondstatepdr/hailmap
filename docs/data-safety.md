@@ -1,6 +1,6 @@
-# Play Data safety — HailMap
+# Play Data safety — Swathline
 
-Answer the Data safety form from this sheet. The Android package `com.hailmap.app` is a WebView of the HTTPS HailMap site. It does not add a native location SDK, ad SDK, or a separate account SDK. Optional team sign-in and Field-mode location live in the website.
+Answer the Data safety form from this sheet. The Android package `com.hailmap.app` is a WebView of the HTTPS Swathline site. It does not add a native location SDK, ad SDK, or a separate account SDK. Optional team sign-in and Field-mode location live in the website.
 
 ## Overview
 
@@ -18,8 +18,8 @@ Answer the Data safety form from this sheet. The Android package `com.hailmap.ap
 | Financial info | No | No | County income is Census statistics, not the user's finances. |
 | Photos | Yes, optional | No | A community hail photo is public on the map. A Field-mode photo stays on that user’s pin and is not shown as an official report. Contacts, SMS, and calendar are not accessed. |
 | App activity / web history | No | No | No analytics SDK. |
-| Device or other IDs | Yes, optional | No | Turning on phone alerts stores the browser push endpoint and its keys so HailMap can deliver hail notifications. It is deleted when alerts are turned off or the push service reports the subscription is gone. No advertising ID. |
-| Files | No | No | A CSV/GeoJSON the user imports is uploaded to the HailMap server as hail observations. Treat the file contents as user-provided content, not as personal files stored on device. |
+| Device or other IDs | Yes, optional | No | Turning on phone alerts stores the browser push endpoint and its keys so Swathline can deliver hail notifications. It is deleted when alerts are turned off or the push service reports the subscription is gone. No advertising ID. |
+| Files | No | No | A CSV/GeoJSON the user imports is uploaded to the Swathline server as hail observations. Treat the file contents as user-provided content, not as personal files stored on device. |
 
 ## Data the server stores when someone submits a report
 

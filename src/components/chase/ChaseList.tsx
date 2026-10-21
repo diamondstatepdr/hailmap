@@ -98,7 +98,7 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
 
 export function ChaseSection({ mode, payload, preview, onMode, onSelect }: SectionProps) {
   return (
-    <section className="chase-section" data-chase-section aria-label="Chase List">
+    <section className="chase-section" data-chase-section data-tone="chase" aria-label="Chase List">
       <header className="chase-section-head">
         <p className="honey-kicker">
           <Gem size={13} />

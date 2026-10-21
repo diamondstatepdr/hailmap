@@ -7,6 +7,8 @@ import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
+import { BrandSplash } from "@/components/brand/Logo";
+import { applyScheme } from "@/lib/palette";
 import MapFilters from "@/components/MapFilters";
 import PhotoReportSheet from "@/components/PhotoReportSheet";
 import AddressHistoryCard, { type AddressHistoryView } from "@/components/AddressHistoryCard";
@@ -66,16 +68,7 @@ import type { HailReport, ReportsResponse, SourceStatus } from "@/lib/types";
 
 const HailMap = dynamic(() => import("@/components/HailMap"), {
   ssr: false,
-  loading: () => (
-    <div className="grid h-full place-items-center bg-app text-sm text-muted">
-      <div className="w-56 space-y-2" aria-busy="true">
-        <span className="sr-only">Loading map…</span>
-        <div className="skeleton mx-auto h-10 w-10 rounded-2xl" />
-        <div className="skeleton h-3" />
-        <div className="skeleton h-3 w-2/3" />
-      </div>
-    </div>
-  ),
+  loading: () => <BrandSplash label="Loading map" />,
 });
 
 interface WatchItem {
@@ -1060,11 +1053,8 @@ export default function HailApp() {
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    document.documentElement.style.colorScheme = next;
+    applyScheme(next);
     localStorage.setItem("hailmap-theme", next);
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", next === "dark" ? "#0b111a" : "#eef3f8");
   }
 
   function frameFilter(next: typeof filter) {
@@ -1801,7 +1791,7 @@ export default function HailApp() {
               setPlaceExpanded(false);
             }}
           />
-          <div ref={chromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <div ref={chromeRef} data-tone="map" className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <div className="pointer-events-auto flex items-start gap-2">
               <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
@@ -1818,6 +1808,7 @@ export default function HailApp() {
               <button
                 type="button"
                 data-honey-open
+                data-tone="money"
                 aria-pressed={honeyOpen}
                 aria-label="Money Hole"
                 title="Money Hole"
@@ -2041,7 +2032,7 @@ export default function HailApp() {
             )}
           </div>
           {section === "map" ? (
-            <div className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
+            <div data-tone="map" className={`map-state-jumps pointer-events-none absolute inset-x-0 z-20 px-3 pr-16 ${calendarOpen ? "is-covered" : ""} ${honeyOpen ? "is-honey" : ""}`}>
               <div className="state-strip">
                 <div className="map-quick-row">
                   {!honeyOpen && !replay.active && stateCounts.length ? (
@@ -2166,7 +2157,7 @@ export default function HailApp() {
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && placeCardOpen && placeLabel && placePoint ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-              <BottomSheet label="Address" onClose={() => setPlaceCardOpen(false)} expandedMax="min(72dvh, 36rem)">
+              <BottomSheet label="Address" tone="addresses" onClose={() => setPlaceCardOpen(false)} expandedMax="min(72dvh, 36rem)">
                 {addressHistory ? (
                   <AddressHistoryCard
                     bare
@@ -2455,7 +2446,7 @@ export default function HailApp() {
           ) : null}
         </div>
       {section === "storms" ? (
-        <MobileOrPage label="Storms" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Storms" tone="storms" mobile={mobile} onClose={() => setSection("map")}>
         <StormsPanel
           loading={loading}
           error={error}
@@ -2478,7 +2469,7 @@ export default function HailApp() {
         </MobileOrPage>
       ) : null}
       {section === "properties" ? (
-        <MobileOrPage label="Addresses" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Addresses" tone="addresses" mobile={mobile} onClose={() => setSection("map")}>
         <PropertiesPanel
           radiusMi={radiusMi}
           hours={filter.hours}
@@ -2514,12 +2505,12 @@ export default function HailApp() {
         </MobileOrPage>
       ) : null}
       {section === "alerts" ? (
-        <MobileOrPage label="Alerts" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Alerts" tone="alerts" mobile={mobile} onClose={() => setSection("map")}>
           <AlertsPanel onOpenAlert={followAlertLink} />
         </MobileOrPage>
       ) : null}
       {section === "reports" ? (
-        <MobileOrPage label="Reports" mobile={mobile} onClose={() => setSection("map")}>
+        <MobileOrPage label="Reports" tone="reports" mobile={mobile} onClose={() => setSection("map")}>
         <ReportsPanel
           canUseView={Boolean(viewBounds)}
           hasPlace={Boolean(placePoint && placeLabel)}
@@ -2564,11 +2555,13 @@ export default function HailApp() {
 
 function MobileOrPage({
   label,
+  tone,
   mobile,
   onClose,
   children,
 }: {
   label: string;
+  tone: string;
   mobile: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -2576,7 +2569,7 @@ function MobileOrPage({
   if (!mobile) return children;
   return (
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
-      <BottomSheet label={label} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
+      <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax="min(78dvh, 44rem)" peekHeight={108}>
         {children}
       </BottomSheet>
     </div>

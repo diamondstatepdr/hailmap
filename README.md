@@ -1,12 +1,12 @@
-# HailMap
+# Swathline
 
 Nationwide live map of United States hail, wind, and tornado reports. Reports come from the National Weather Service, the Storm Prediction Center, and Iowa Environmental Mesonet local storm reports. Nearby reports of the same hazard are fused, with confidence ordered **NWS > spotter > MESH > community**. Hail size colors hail markers. Wind markers use a wind glyph and a speed color. Tornado markers use a funnel glyph and an EF color when the office published one. Clusters of hail within about 45 km and 3 hours become a buffered report swath. Wind and tornado reports do not become swaths. A separate radar layer draws NOAA MRMS MESH swaths (estimated hail size) for the last hour, the last 24 hours, the last 3 or 7 days, or a selected past date. Counties can be shaded by Census ACS median household income.
 
 The map opens on the last 7 days. SPC and IEM local storm reports are stored as NWS or spotter confidence, including public and mPING reports that an NWS office published. Community confidence is for file import, the community webhook, and in-app photo reports. SPC files used are `*_rpts_hail.csv`, `*_rpts_wind.csv`, and `*_rpts_torn.csv`. IEM local storm reports keep hail, thunderstorm and non-thunderstorm wind, and tornado types. Other LSR types are ignored.
 
-Phone alerts use the Web Push API. A service worker asks the browser for a subscription, and the server checks radar hail, spotter reports, and NWS warnings every few minutes. Watch areas belong to that subscription, not to a team account. Add HailMap to the iPhone Home Screen (iOS 16.4 or newer) before turning alerts on. The same worker and VAPID keys work in Android Chrome and inside a Play Store Trusted Web Activity.
+Phone alerts use the Web Push API. A service worker asks the browser for a subscription, and the server checks radar hail, spotter reports, and NWS warnings every few minutes. Watch areas belong to that subscription, not to a team account. Add Swathline to the iPhone Home Screen (iOS 16.4 or newer) before turning alerts on. The same worker and VAPID keys work in Android Chrome and inside a Play Store Trusted Web Activity.
 
-HailMap does not scrape social networks. Spotter observations arrive through the spotter webhook. Community observations arrive through the community webhook, CSV/GeoJSON import, or a photo report submitted in the app.
+Swathline does not scrape social networks. Spotter observations arrive through the spotter webhook. Community observations arrive through the community webhook, CSV/GeoJSON import, or a photo report submitted in the app.
 
 ## Local run
 
@@ -87,11 +87,11 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 
 Imports are stored as community reports, or spotter when the file says so. They cannot claim NWS or MESH confidence. Official SPC and IEM reports cannot be stored as community. Photo reports are community only, even if the form asks for another rank.
 
-The map pin is the latitude and longitude the user confirms. HailMap does not read GPS from the photo. JPEG, PNG, and WebP location metadata is removed before the file is saved under `$HAILMAP_DATA_DIR/photos/<uuid>.<ext>`. HEIC is stored as uploaded. Nearby official reports are not replaced: a photo stays on its own pin.
+The map pin is the latitude and longitude the user confirms. Swathline does not read GPS from the photo. JPEG, PNG, and WebP location metadata is removed before the file is saved under `$HAILMAP_DATA_DIR/photos/<uuid>.<ext>`. HEIC is stored as uploaded. Nearby official reports are not replaced: a photo stays on its own pin.
 
 ## Railway
 
-The Railway project **HailMap** already exists for diamondstatepdr. Point a service at this repository.
+The Railway project **HailMap** already exists for diamondstatepdr. Point a service at this repository. The product name is Swathline.
 
 1. Builder: Dockerfile (`railway.toml`). `nixpacks.toml` is included if you switch builders.
 2. Attach a volume with mount path **`/data`**.
@@ -145,7 +145,7 @@ On a multi-year address history, the score is only the selected storm (the stron
 
 ## Address search
 
-Search uses the US Census geocoder. If that returns no match, HailMap asks Nominatim with `HAILMAP_USER_AGENT`, at most about one request per second, and caches the result. There is no paid geocoder key.
+Search uses the US Census geocoder. If that returns no match, Swathline asks Nominatim with `HAILMAP_USER_AGENT`, at most about one request per second, and caches the result. There is no paid geocoder key.
 
 ## Later phase
 
@@ -163,7 +163,7 @@ Field mode can list car dealerships and named auto lots inside a tapped hail swa
 
 ## Radar hail
 
-MRMS MESH is the free NOAA estimate of maximum hail size. HailMap reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address. Archive swaths start on 2019-09-28. See [docs/history-coverage.md](docs/history-coverage.md).
+MRMS MESH is the free NOAA estimate of maximum hail size. Swathline reads the latest 60-minute and 24-hour GRIB2 products from `mrms.ncep.noaa.gov` and older days from the Iowa Environmental Mesonet archive. No API key is required. Grids are decoded on the server, binned, contoured, and cached so the map does not call NOAA on every pan. A listed past date is the 24-hour maximum ending at 12:00 UTC the next day, which covers that afternoon and evening in the United States. The same radar size is included in the damage score for that address. Archive swaths start on 2019-09-28. See [docs/history-coverage.md](docs/history-coverage.md).
 
 ## Storm history
 

@@ -50,8 +50,8 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
 
   if (mobile) {
     return (
-      <div className="sheet-dock chase-sheet-dock pointer-events-none absolute inset-x-0 bottom-0" data-chase-popup>
-        <BottomSheet label="This week's Money Holes" onClose={onClose} expandedMax="100%" peekHeight={148}>
+      <div className="sheet-dock chase-sheet-dock pointer-events-none absolute inset-x-0 bottom-0" data-chase-popup data-tone="chase">
+        <BottomSheet label="This week's Money Holes" tone="chase" onClose={onClose} expandedMax="100%" peekHeight={148}>
           {body}
         </BottomSheet>
       </div>
@@ -59,7 +59,7 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
   }
 
   return (
-    <div className="chase-pop-dock" data-chase-popup>
+    <div className="chase-pop-dock" data-chase-popup data-tone="chase">
       <section className="chase-pop glass" role="dialog" aria-label="This week's Money Holes" onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.stopPropagation();

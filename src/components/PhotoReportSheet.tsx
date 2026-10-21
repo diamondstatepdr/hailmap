@@ -153,7 +153,7 @@ export default function PhotoReportSheet({
       }
       onSubmitted(payload.report);
     } catch {
-      setError("Could not reach HailMap. Try again.");
+      setError("Could not reach Swathline. Try again.");
       setSubmitting(false);
     }
   }
@@ -165,6 +165,7 @@ export default function PhotoReportSheet({
     <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30">
       <BottomSheet
         label="Report hail"
+        tone="reports"
         onClose={onClose}
         expandedMax={step === "pin" ? "min(42dvh, 22rem)" : "min(70dvh, 40rem)"}
         className="mx-auto max-w-3xl"

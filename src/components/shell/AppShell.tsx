@@ -7,13 +7,13 @@ import { LogoMark, Wordmark } from "@/components/brand/Logo";
 
 export type AppSection = "map" | "storms" | "properties" | "field" | "reports" | "alerts";
 
-const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map }> = [
-  { id: "map", label: "Map", hint: "Live map", icon: Map },
-  { id: "storms", label: "Storms", hint: "Report list", icon: CloudHail },
-  { id: "properties", label: "Addresses", hint: "Property history", icon: House },
-  { id: "field", label: "Field", hint: "Drive mode", icon: Navigation },
-  { id: "reports", label: "Reports", hint: "Shareable reports", icon: FileText },
-  { id: "alerts", label: "Alerts", hint: "Phone alerts", icon: Bell },
+const NAV: Array<{ id: AppSection; label: string; hint: string; icon: typeof Map; tone: string }> = [
+  { id: "map", label: "Map", hint: "Live map", icon: Map, tone: "map" },
+  { id: "storms", label: "Storms", hint: "Report list", icon: CloudHail, tone: "storms" },
+  { id: "properties", label: "Addresses", hint: "Property history", icon: House, tone: "addresses" },
+  { id: "field", label: "Field", hint: "Drive mode", icon: Navigation, tone: "field" },
+  { id: "reports", label: "Reports", hint: "Shareable reports", icon: FileText, tone: "reports" },
+  { id: "alerts", label: "Alerts", hint: "Phone alerts", icon: Bell, tone: "alerts" },
 ];
 
 interface Props {
@@ -59,6 +59,7 @@ export default function AppShell({
                 type="button"
                 aria-current={on ? "page" : undefined}
                 onClick={() => onSection(item.id)}
+                data-tone={item.tone}
                 className={`nav-item press ${on ? "nav-item-active" : ""}`}
               >
                 <span className="nav-icon">
@@ -118,6 +119,7 @@ export default function AppShell({
                 type="button"
                 aria-current={on ? "page" : undefined}
                 onClick={() => onSection(item.id)}
+                data-tone={item.tone}
                 className="tab-item"
               >
                 <span className="tab-icon">

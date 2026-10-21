@@ -56,6 +56,7 @@ export default function HoneyPanel(props: Props) {
   return (
     <aside
       className="honey-dock glass"
+      data-tone="money"
       data-honey-panel
       data-mode={props.mode}
       data-honey-status={props.loading && !props.needsDay ? "loading" : props.spots.length ? "ready" : "empty"}

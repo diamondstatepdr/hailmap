@@ -42,7 +42,7 @@ function clip(value: string | null, max: number): string | null {
   return trimmed.slice(0, max);
 }
 
-/** IEM LSR type text/code to a hazard HailMap stores. Other LSR types are ignored. */
+/** IEM LSR type text/code to a hazard Swathline stores. Other LSR types are ignored. */
 export function iemHazard(typeText: string, typeCode: string): Hazard | null {
   const text = typeText.toUpperCase();
   const code = typeCode.toUpperCase();

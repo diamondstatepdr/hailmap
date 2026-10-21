@@ -1,0 +1,357 @@
+/* Storm Core (A), Supercell (B), Ice Swath (C). Hail-size legend tokens stay in globals.css. */
+
+:root {
+  color-scheme: light;
+  --bg: #e7eefb;
+  --bg-2: #dce6f6;
+  --panel: #ffffff;
+  --panel-2: #f4f7fd;
+  --text: #0b1224;
+  --muted: #3e4c66;
+  --border: rgba(12, 22, 48, 0.12);
+  --accent: #1d4ed8;
+  --accent-ink: #f8fbff;
+  --accent-soft: #e7edff;
+  --mark: #0c5f78;
+  --swath: #9d174d;
+  --shadow: 0 12px 32px rgba(8, 16, 40, 0.12), 0 1px 2px rgba(8, 16, 40, 0.06);
+  --shadow-lg: 0 22px 50px rgba(8, 16, 40, 0.18);
+  --glass: color-mix(in srgb, #ffffff 84%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.74);
+  --ring: rgba(29, 78, 216, 0.5);
+  --glow: rgba(14, 165, 233, 0.22);
+  --glow-2: rgba(157, 23, 77, 0.14);
+  --cluster: #1d4ed8;
+  --cluster-stroke: #ffffff;
+  --cluster-halo: #38bdf8;
+  --tone-map: #1d4ed8;
+  --tone-map-ink: #f8fbff;
+  --tone-map-soft: #e7edff;
+  --tone-storms: #9d174d;
+  --tone-storms-ink: #fff5f8;
+  --tone-storms-soft: #fce7f1;
+  --tone-addresses: #312e81;
+  --tone-addresses-ink: #f5f3ff;
+  --tone-addresses-soft: #e8e7ff;
+  --tone-field: #0f766e;
+  --tone-field-ink: #f0fdfa;
+  --tone-field-soft: #d9f5f1;
+  --tone-reports: #5b21b6;
+  --tone-reports-ink: #f5f3ff;
+  --tone-reports-soft: #ede9fe;
+  --tone-alerts: #9f1239;
+  --tone-alerts-ink: #fff1f2;
+  --tone-alerts-soft: #ffe4e6;
+  --tone-money: #a21caf;
+  --tone-money-ink: #fdf4ff;
+  --tone-money-soft: #fae8ff;
+  --tone-chase: #0c5f78;
+  --tone-chase-ink: #f4feff;
+  --tone-chase-soft: #e5f6f8;
+}
+
+html[data-palette="b"] {
+  color-scheme: light;
+  --bg: #f6f1e8;
+  --bg-2: #efe6d8;
+  --panel: #fffdfb;
+  --panel-2: #faf4ea;
+  --text: #1c140e;
+  --muted: #5c4e42;
+  --border: rgba(48, 28, 12, 0.12);
+  --accent: #9a3412;
+  --accent-ink: #fffaf5;
+  --accent-soft: #ffedd5;
+  --mark: #9a3412;
+  --swath: #c2410c;
+  --shadow: 0 12px 32px rgba(48, 24, 8, 0.12), 0 1px 2px rgba(48, 24, 8, 0.05);
+  --shadow-lg: 0 22px 50px rgba(48, 24, 8, 0.18);
+  --glass: color-mix(in srgb, #fffdfb 86%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.72);
+  --ring: rgba(154, 52, 18, 0.45);
+  --glow: rgba(234, 88, 12, 0.24);
+  --glow-2: rgba(245, 158, 11, 0.18);
+  --cluster: #9a3412;
+  --cluster-stroke: #ffffff;
+  --cluster-halo: #c2410c;
+  --tone-map: #c2410c;
+  --tone-map-ink: #fff7ed;
+  --tone-map-soft: #ffedd5;
+  --tone-storms: #9a3412;
+  --tone-storms-ink: #fff7ed;
+  --tone-storms-soft: #ffedd5;
+  --tone-addresses: #78350f;
+  --tone-addresses-ink: #fff7ed;
+  --tone-addresses-soft: #fef3c7;
+  --tone-field: #854d0e;
+  --tone-field-ink: #fffbeb;
+  --tone-field-soft: #fef3c7;
+  --tone-reports: #7c2d12;
+  --tone-reports-ink: #fff7ed;
+  --tone-reports-soft: #ffedd5;
+  --tone-alerts: #991b1b;
+  --tone-alerts-ink: #fef2f2;
+  --tone-alerts-soft: #fee2e2;
+  --tone-money: #a16207;
+  --tone-money-ink: #fffbeb;
+  --tone-money-soft: #fef3c7;
+  --tone-chase: #b45309;
+  --tone-chase-ink: #fffbeb;
+  --tone-chase-soft: #ffedd5;
+}
+
+html[data-palette="c"] {
+  color-scheme: light;
+  --bg: #eef3f6;
+  --bg-2: #e3ecef;
+  --panel: #ffffff;
+  --panel-2: #f4f8f9;
+  --text: #0f1720;
+  --muted: #3f5160;
+  --border: rgba(15, 35, 48, 0.12);
+  --accent: #0f766e;
+  --accent-ink: #f3fffc;
+  --accent-soft: #e6f7f4;
+  --mark: #5b21b6;
+  --swath: #6d28d9;
+  --shadow: 0 12px 32px rgba(12, 28, 36, 0.12), 0 1px 2px rgba(12, 28, 36, 0.05);
+  --shadow-lg: 0 22px 50px rgba(12, 28, 36, 0.16);
+  --glass: color-mix(in srgb, #ffffff 84%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.74);
+  --ring: rgba(15, 118, 110, 0.45);
+  --glow: rgba(13, 148, 136, 0.2);
+  --glow-2: rgba(109, 40, 217, 0.16);
+  --cluster: #0f766e;
+  --cluster-stroke: #ffffff;
+  --cluster-halo: #6d28d9;
+  --tone-map: #0f766e;
+  --tone-map-ink: #f0fdfa;
+  --tone-map-soft: #d9f5f1;
+  --tone-storms: #6d28d9;
+  --tone-storms-ink: #f5f3ff;
+  --tone-storms-soft: #ede9fe;
+  --tone-addresses: #155e75;
+  --tone-addresses-ink: #ecfeff;
+  --tone-addresses-soft: #cffafe;
+  --tone-field: #115e59;
+  --tone-field-ink: #f0fdfa;
+  --tone-field-soft: #ccfbf1;
+  --tone-reports: #5b21b6;
+  --tone-reports-ink: #f5f3ff;
+  --tone-reports-soft: #ede9fe;
+  --tone-alerts: #9f1239;
+  --tone-alerts-ink: #fff1f2;
+  --tone-alerts-soft: #ffe4e6;
+  --tone-money: #7e22ce;
+  --tone-money-ink: #faf5ff;
+  --tone-money-soft: #f3e8ff;
+  --tone-chase: #0369a1;
+  --tone-chase-ink: #f0f9ff;
+  --tone-chase-soft: #e0f2fe;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg: #070b16;
+  --bg-2: #0d1426;
+  --panel: #12182a;
+  --panel-2: #1a2340;
+  --text: #f4f7ff;
+  --muted: #b7c3da;
+  --border: rgba(228, 236, 255, 0.12);
+  --accent: #38bdf8;
+  --accent-ink: #042033;
+  --accent-soft: rgba(56, 189, 248, 0.16);
+  --mark: #7dd3fc;
+  --swath: #f9a8d4;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --glass: color-mix(in srgb, #10182c 82%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --ring: rgba(125, 211, 252, 0.55);
+  --glow: rgba(56, 189, 248, 0.2);
+  --glow-2: rgba(244, 114, 182, 0.16);
+  --cluster: #1d4ed8;
+  --cluster-stroke: #e0f2fe;
+  --cluster-halo: #38bdf8;
+  --tone-map: #67e8f9;
+  --tone-map-ink: #042028;
+  --tone-map-soft: rgba(103, 232, 249, 0.16);
+  --tone-storms: #f9a8d4;
+  --tone-storms-ink: #4a0430;
+  --tone-storms-soft: rgba(249, 168, 212, 0.16);
+  --tone-addresses: #c7d2fe;
+  --tone-addresses-ink: #1e1b4b;
+  --tone-addresses-soft: rgba(199, 210, 254, 0.18);
+  --tone-field: #5eead4;
+  --tone-field-ink: #04221e;
+  --tone-field-soft: rgba(94, 234, 212, 0.16);
+  --tone-reports: #ddd6fe;
+  --tone-reports-ink: #2e1065;
+  --tone-reports-soft: rgba(221, 214, 254, 0.16);
+  --tone-alerts: #fda4af;
+  --tone-alerts-ink: #4c0519;
+  --tone-alerts-soft: rgba(253, 164, 175, 0.16);
+  --tone-money: #f0abfc;
+  --tone-money-ink: #4a044e;
+  --tone-money-soft: rgba(240, 171, 252, 0.16);
+  --tone-chase: #93c5fd;
+  --tone-chase-ink: #172554;
+  --tone-chase-soft: rgba(147, 197, 253, 0.16);
+}
+
+html.dark[data-palette="b"] {
+  color-scheme: dark;
+  --bg: #100e0c;
+  --bg-2: #1a1612;
+  --panel: #1c1814;
+  --panel-2: #28221c;
+  --text: #faf6f1;
+  --muted: #d6c4b0;
+  --border: rgba(255, 236, 214, 0.12);
+  --accent: #fbbf24;
+  --accent-ink: #1c1408;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+  --mark: #fde68a;
+  --swath: #fb923c;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.48);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.58);
+  --glass: color-mix(in srgb, #1c1814 84%, transparent);
+  --glass-border: rgba(255, 244, 230, 0.12);
+  --ring: rgba(251, 191, 36, 0.5);
+  --glow: rgba(251, 146, 60, 0.22);
+  --glow-2: rgba(251, 191, 36, 0.14);
+  --cluster: #c2410c;
+  --cluster-stroke: #fff7ed;
+  --cluster-halo: #fb923c;
+  --tone-map: #fdba74;
+  --tone-map-ink: #1c1408;
+  --tone-map-soft: rgba(253, 186, 116, 0.16);
+  --tone-storms: #fb923c;
+  --tone-storms-ink: #1c1408;
+  --tone-storms-soft: rgba(251, 146, 60, 0.16);
+  --tone-addresses: #fcd34d;
+  --tone-addresses-ink: #1c1408;
+  --tone-addresses-soft: rgba(252, 211, 77, 0.16);
+  --tone-field: #fde68a;
+  --tone-field-ink: #1c1408;
+  --tone-field-soft: rgba(253, 230, 138, 0.16);
+  --tone-reports: #f59e0b;
+  --tone-reports-ink: #1c1408;
+  --tone-reports-soft: rgba(245, 158, 11, 0.16);
+  --tone-alerts: #fca5a5;
+  --tone-alerts-ink: #450a0a;
+  --tone-alerts-soft: rgba(252, 165, 165, 0.16);
+  --tone-money: #fbbf24;
+  --tone-money-ink: #1c1408;
+  --tone-money-soft: rgba(251, 191, 36, 0.18);
+  --tone-chase: #fb7185;
+  --tone-chase-ink: #4c0519;
+  --tone-chase-soft: rgba(251, 113, 133, 0.16);
+}
+
+html.dark[data-palette="c"] {
+  color-scheme: dark;
+  --bg: #0c1216;
+  --bg-2: #121b21;
+  --panel: #152026;
+  --panel-2: #1c2c34;
+  --text: #f3f7f8;
+  --muted: #c5d4dc;
+  --border: rgba(226, 242, 246, 0.12);
+  --accent: #5eead4;
+  --accent-ink: #04221e;
+  --accent-soft: rgba(94, 234, 212, 0.16);
+  --mark: #c4b5fd;
+  --swath: #d8b4fe;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.48);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.58);
+  --glass: color-mix(in srgb, #152026 84%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --ring: rgba(196, 181, 253, 0.5);
+  --glow: rgba(45, 212, 191, 0.18);
+  --glow-2: rgba(167, 139, 250, 0.18);
+  --cluster: #0f766e;
+  --cluster-stroke: #ecfeff;
+  --cluster-halo: #5eead4;
+  --tone-map: #5eead4;
+  --tone-map-ink: #04221e;
+  --tone-map-soft: rgba(94, 234, 212, 0.16);
+  --tone-storms: #c4b5fd;
+  --tone-storms-ink: #2e1065;
+  --tone-storms-soft: rgba(196, 181, 253, 0.16);
+  --tone-addresses: #7dd3fc;
+  --tone-addresses-ink: #082f49;
+  --tone-addresses-soft: rgba(125, 211, 252, 0.16);
+  --tone-field: #2dd4bf;
+  --tone-field-ink: #04221e;
+  --tone-field-soft: rgba(45, 212, 191, 0.16);
+  --tone-reports: #ddd6fe;
+  --tone-reports-ink: #2e1065;
+  --tone-reports-soft: rgba(221, 214, 254, 0.16);
+  --tone-alerts: #fda4af;
+  --tone-alerts-ink: #4c0519;
+  --tone-alerts-soft: rgba(253, 164, 175, 0.16);
+  --tone-money: #d8b4fe;
+  --tone-money-ink: #3b0764;
+  --tone-money-soft: rgba(216, 180, 254, 0.16);
+  --tone-chase: #38bdf8;
+  --tone-chase-ink: #082f49;
+  --tone-chase-soft: rgba(56, 189, 248, 0.16);
+}
+
+[data-tone="map"] {
+  --accent: var(--tone-map);
+  --accent-ink: var(--tone-map-ink);
+  --accent-soft: var(--tone-map-soft);
+  --mark: var(--tone-map);
+}
+
+[data-tone="storms"] {
+  --accent: var(--tone-storms);
+  --accent-ink: var(--tone-storms-ink);
+  --accent-soft: var(--tone-storms-soft);
+  --mark: var(--tone-storms);
+}
+
+[data-tone="addresses"] {
+  --accent: var(--tone-addresses);
+  --accent-ink: var(--tone-addresses-ink);
+  --accent-soft: var(--tone-addresses-soft);
+  --mark: var(--tone-addresses);
+}
+
+[data-tone="field"] {
+  --accent: var(--tone-field);
+  --accent-ink: var(--tone-field-ink);
+  --accent-soft: var(--tone-field-soft);
+  --mark: var(--tone-field);
+}
+
+[data-tone="reports"] {
+  --accent: var(--tone-reports);
+  --accent-ink: var(--tone-reports-ink);
+  --accent-soft: var(--tone-reports-soft);
+  --mark: var(--tone-reports);
+}
+
+[data-tone="alerts"] {
+  --accent: var(--tone-alerts);
+  --accent-ink: var(--tone-alerts-ink);
+  --accent-soft: var(--tone-alerts-soft);
+  --mark: var(--tone-alerts);
+}
+
+[data-tone="money"] {
+  --accent: var(--tone-money);
+  --accent-ink: var(--tone-money-ink);
+  --accent-soft: var(--tone-money-soft);
+  --mark: var(--tone-money);
+}
+
+[data-tone="chase"] {
+  --accent: var(--tone-chase);
+  --accent-ink: var(--tone-chase-ink);
+  --accent-soft: var(--tone-chase-soft);
+  --mark: var(--tone-chase);
+}

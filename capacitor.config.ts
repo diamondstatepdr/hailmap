@@ -17,7 +17,7 @@ const serverUrl = releaseServerUrl();
 
 const config: CapacitorConfig = {
   appId: "com.hailmap.app",
-  appName: "HailMap",
+  appName: "Swathline",
   webDir: "www",
   android: {
     allowMixedContent: false,

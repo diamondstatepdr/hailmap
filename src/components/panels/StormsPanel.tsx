@@ -26,7 +26,7 @@ interface Props {
 
 export default function StormsPanel({ loading, error, reports, filter, status, syncedAt, onSelect, chase, chaseLoading, chaseMode, onChaseMode, onOpenChase }: Props) {
   return (
-    <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8">
+    <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8" data-tone="storms">
       <header className="mb-5 max-w-3xl">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Live window</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Storms</h1>
@@ -42,7 +42,7 @@ export default function StormsPanel({ loading, error, reports, filter, status, s
           <div className="skeleton h-28" />
         </div>
       ) : (
-        <section className="chase-section" data-chase-section aria-label="Chase List">
+        <section className="chase-section" data-chase-section data-tone="chase" aria-label="Chase List">
           <p className="honey-kicker">Money Hole</p>
           <h2 className="text-xl font-semibold tracking-tight">Chase List</h2>
           <p className="honey-note">This week&apos;s Money Holes are unavailable right now.</p>

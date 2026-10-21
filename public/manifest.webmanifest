@@ -1,15 +1,15 @@
 {
   "id": "/",
-  "name": "HailMap",
-  "short_name": "HailMap",
+  "name": "Swathline",
+  "short_name": "Swathline",
   "description": "Live US hail, wind, and tornado reports, with phone alerts for the areas you watch.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "browser"],
   "orientation": "any",
-  "background_color": "#062833",
-  "theme_color": "#eef3f8",
+  "background_color": "#070b16",
+  "theme_color": "#e7eefb",
   "categories": ["weather"],
   "icons": [
     {

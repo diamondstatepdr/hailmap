@@ -209,6 +209,30 @@ function readMapBounds(map: { getBounds: () => { getWest: () => number; getSouth
   }
 }
 
+function useBrandPaint(theme: "light" | "dark") {
+  const fallback = theme === "dark"
+    ? { cluster: "#1d4ed8", stroke: "#e0f2fe", halo: "#38bdf8", select: "#7dd3fc" }
+    : { cluster: "#1d4ed8", stroke: "#ffffff", halo: "#38bdf8", select: "#0c5f78" };
+  const [paint, setPaint] = useState(fallback);
+  useEffect(() => {
+    const read = () => {
+      const style = getComputedStyle(document.documentElement);
+      const pick = (name: string, backup: string) => style.getPropertyValue(name).trim() || backup;
+      setPaint({
+        cluster: pick("--cluster", fallback.cluster),
+        stroke: pick("--cluster-stroke", fallback.stroke),
+        halo: pick("--cluster-halo", fallback.halo),
+        select: pick("--mark", fallback.select),
+      });
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-palette"] });
+    return () => observer.disconnect();
+  }, [theme, fallback.cluster, fallback.stroke, fallback.halo, fallback.select]);
+  return paint;
+}
+
 export default function HailMap({
   theme,
   points,
@@ -254,6 +278,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const brand = useBrandPaint(theme);
   const iconsBound = useRef(false);
   const frameRef = useRef(frame);
   const frameWait = useRef(false);
@@ -852,7 +877,7 @@ export default function HailMap({
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": theme === "dark" ? "#67e8f9" : "#0c6278",
+              "circle-color": brand.halo,
               "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 22, 8, 30, 20, 40, 40, 48],
               "circle-opacity": 0.22,
             }}
@@ -862,9 +887,9 @@ export default function HailMap({
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": theme === "dark" ? "#14687c" : "#0c6278",
+              "circle-color": brand.cluster,
               "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 15, 8, 21, 20, 28, 40, 34],
-              "circle-stroke-color": theme === "dark" ? "#e8fbff" : "#ffffff",
+              "circle-stroke-color": brand.stroke,
               "circle-stroke-width": 2.5,
               "circle-opacity": 0.96,
             }}
@@ -921,9 +946,9 @@ export default function HailMap({
               "circle-stroke-color": [
                 "case",
                 ["==", ["get", "id"], selectedId ?? ""],
-                theme === "dark" ? "#67e8f9" : "#0c6278",
+                brand.select,
                 ["==", ["get", "hasPhoto"], 1],
-                theme === "dark" ? "#67e8f9" : "#0c6278",
+                brand.select,
                 "#ffffff",
               ] as never,
               "circle-stroke-width": [

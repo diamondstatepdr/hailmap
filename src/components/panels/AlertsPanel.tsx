@@ -273,7 +273,7 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
   const quietZone = timeZoneName(settings?.timeZone);
 
   return (
-    <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8">
+    <div className="page-enter h-full overflow-y-auto px-4 py-5 md:px-8" data-tone="alerts">
       <header className="mb-5 max-w-3xl">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Phone alerts</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Alerts</h1>
@@ -284,7 +284,7 @@ export default function AlertsPanel({ onOpenAlert }: Props) {
       <div className="max-w-3xl space-y-4">
         {iosHint ? (
           <p className="rounded-2xl border border-line bg-panel px-4 py-3 text-sm leading-relaxed">
-            Add to Home Screen to get alerts. In Safari, tap Share, then Add to Home Screen, and open HailMap from that icon.
+            Add to Home Screen to get alerts. In Safari, tap Share, then Add to Home Screen, and open Swathline from that icon.
           </p>
         ) : null}
         {error ? <p className="rounded-2xl border border-line bg-panel px-3 py-2 text-sm text-muted">{error}</p> : null}

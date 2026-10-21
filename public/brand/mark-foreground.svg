@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="swath" x1="22" y1="78" x2="86" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9d174d"/>
+      <stop offset="0.46" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#f8feff"/>
+    </linearGradient>
+    <linearGradient id="stone" x1="42" y1="40" x2="66" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#c8f7ff"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <path d="M26 74 H46 L78 34 H58 Z" fill="url(#swath)"/>
+  <path d="M70 33.5 L84 30 L76 46 Z" fill="#f9a8d4"/>
+  <path d="M46 48 L54 43.2 L62 48 L62 57 L54 61.8 L46 57 Z" fill="url(#stone)"/>
+  <path d="M46 48 L54 43.2 L62 48 L54 52 Z" fill="#ffffff" fill-opacity="0.78"/>
+</svg>

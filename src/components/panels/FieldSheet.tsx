@@ -106,7 +106,7 @@ export default function FieldSheet({
   }
 
   return (
-    <BottomSheet label="Field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
+    <BottomSheet label="Field" tone="field" onClose={onClose} expandedMax="min(62dvh, 36rem)" peekHeight={120}>
       <div className="px-4 pb-3">
       <div className="mt-1 flex items-center gap-2">
         <span className="hazard-badge h-8 w-8 hazard-wind">

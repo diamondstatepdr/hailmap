@@ -37,7 +37,7 @@ export default function MapFilters(props: Props) {
   return (
     <div className="absolute inset-0 z-40 flex items-end bg-black/40 backdrop-blur-[2px]" onClick={props.onClose}>
       <div className="sheet-dock w-full" onClick={(event) => event.stopPropagation()}>
-        <BottomSheet label="Filters and layers" onClose={props.onClose} expandedMax="min(80dvh, 44rem)">
+        <BottomSheet label="Filters and layers" tone="map" onClose={props.onClose} expandedMax="min(80dvh, 44rem)">
         <div className="px-4 pb-5">
         <div className="mb-3 mt-1 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Filters and layers</h2>
@@ -161,7 +161,7 @@ export default function MapFilters(props: Props) {
           Weather service {props.status?.spc ?? "checking"} · Reports {props.status?.iem ?? "checking"} · Alerts {props.status?.nws ?? "checking"} · Radar{" "}
           {props.status?.mesh ?? "checking"}
           {props.syncedAt ? ` · Updated ${formatWhen(props.syncedAt)}` : ""}
-          {props.folded > 0 ? ` · ${props.folded} nearby reports were combined.` : ""} Published local storm reports stay Official or Spotter. HailMap does not scrape social networks.
+          {props.folded > 0 ? ` · ${props.folded} nearby reports were combined.` : ""} Published local storm reports stay Official or Spotter. Swathline does not scrape social networks.
         </p>
         </div>
         </BottomSheet>

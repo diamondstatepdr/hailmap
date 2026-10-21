@@ -45,14 +45,7 @@ export function rankDealersByHail(
     .sort((a, b) => b.hailIn - a.hailIn || a.distanceKm - b.distanceKm || a.name.localeCompare(b.name));
 }
 
-function simplifyRing(ring: number[][]): number[][] {
-  const step = Math.max(1, Math.ceil(ring.length / 40));
-  const next = ring.filter((_, index) => index % step === 0).slice(0, 40);
-  if (next.length && (next[0][0] !== next[next.length - 1][0] || next[0][1] !== next[next.length - 1][1])) next.push(next[0]);
-  return next.length >= 4 ? next : [];
-}
-
-/** Hail bands on the map, kept small enough to score lots in the browser. */
+/** Hail bands on the map, scored from the real polygons so a lot is not pulled into a neighboring size. */
 export function lotBands(
   features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }>,
 ): LotBand[] {
@@ -62,19 +55,8 @@ export function lotBands(
     const geometry = feature.geometry;
     if (!Number.isFinite(minIn) || minIn <= 0 || !geometry) continue;
     if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") continue;
-    const simplified =
-      geometry.type === "Polygon"
-        ? { type: "Polygon" as const, coordinates: geometry.coordinates.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4) }
-        : {
-            type: "MultiPolygon" as const,
-            coordinates: geometry.coordinates
-              .slice(0, 2)
-              .map((polygon) => polygon.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4))
-              .filter((polygon) => polygon.length),
-          };
-    if (!simplified.coordinates.length) continue;
-    bands.push({ minIn, geometry: simplified });
-    if (bands.length >= 8) break;
+    bands.push({ minIn, geometry });
+    if (bands.length >= 80) break;
   }
   return bands;
 }

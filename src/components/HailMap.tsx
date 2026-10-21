@@ -13,6 +13,7 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
+import { swathTitle } from "@/lib/swath-measure";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
@@ -158,6 +159,7 @@ interface Props {
   mesh?: GeoJSON.FeatureCollection | null;
   meshPulse?: GeoJSON.FeatureCollection | null;
   dealers?: GeoJSON.FeatureCollection | null;
+  selectedDealerId?: string | null;
   income: GeoJSON.FeatureCollection | null;
   threats: GeoJSON.FeatureCollection | null;
   showPoints: boolean;
@@ -243,6 +245,7 @@ export default function HailMap({
   mesh = null,
   meshPulse = null,
   dealers = null,
+  selectedDealerId = null,
   income,
   threats,
   showPoints,
@@ -570,17 +573,20 @@ export default function HailMap({
         const minIn = numberProp(props.minIn);
         const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
         const radar = isRadarLayer(feature.layer.id);
+        const source = radar ? "mesh" : "reports";
         onSelectArea?.({
           id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
-          label: radar
-            ? `Radar hail ${props.label ?? ""}`.trim()
-            : maxIn != null
-              ? `Report swath · ${maxIn.toFixed(2)} in`
-              : "Report swath",
-          source: radar ? "mesh" : "reports",
+          label: swathTitle({ source, minIn, maxIn, label: props.label ? String(props.label) : undefined }),
+          source,
           minIn,
           maxIn,
           geometry,
+          startedAt: typeof props.startedAt === "string" ? props.startedAt : null,
+          endedAt: typeof props.endedAt === "string" ? props.endedAt : null,
+          startLat: numberProp(props.startLat),
+          startLon: numberProp(props.startLon),
+          endLat: numberProp(props.endLat),
+          endLon: numberProp(props.endLon),
         });
         return;
       }
@@ -1047,7 +1053,7 @@ export default function HailMap({
             paint={{
               "circle-color": brand.halo,
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 5, 6, 7, 10, 10],
-              "circle-opacity": 0.28,
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.22, 12, 0.1, 15, 0.04] as never,
             }}
           />
           <Layer
@@ -1083,7 +1089,8 @@ export default function HailMap({
                 1.8,
                 1,
               ] as never,
-              "circle-opacity": 0.94,
+              "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.95, 12, 0.45, 15, 0.16] as never,
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.94, 12, 0.55, 15, 0.22] as never,
             }}
           />
           <Layer
@@ -1123,13 +1130,32 @@ export default function HailMap({
             paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
           />
           <Layer
+            id="dealer-pin-halo"
+            type="circle"
+            paint={{
+              "circle-color": "#ffffff",
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 8, 10, 12, 14, 16],
+              "circle-opacity": 0.94,
+            }}
+          />
+          <Layer
             id="dealer-pins"
             type="circle"
             paint={{
-              "circle-color": "#0c6278",
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 8, 14, 11],
+              "circle-color": ["case", ["==", ["get", "id"], selectedDealerId ?? ""], "#d97706", "#0c6278"] as never,
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5,
+                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 7, 5],
+                10,
+                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 10, 8],
+                14,
+                ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 13, 11],
+              ] as never,
               "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 2,
+              "circle-stroke-width": ["case", ["==", ["get", "id"], selectedDealerId ?? ""], 3, 2] as never,
             }}
           />
         </Source>
@@ -1265,6 +1291,30 @@ function numberProp(value: unknown): number | null {
 const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const SWATH_FADE_MS = 420;
 
+/** Regional zoom keeps the swath readable. Street zoom drops the fill so roads show, and the contour stays. */
+function zoomFill(fill: number): number | unknown[] {
+  if (fill <= 0) return 0;
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    5,
+    fill,
+    9.5,
+    fill * 0.7,
+    11.5,
+    Math.min(0.28, fill * 0.48),
+    13,
+    Math.min(0.14, fill * 0.24),
+    15.5,
+    Math.min(0.07, fill * 0.12),
+  ];
+}
+
+function zoomLine(width: number): unknown[] {
+  return ["interpolate", ["linear"], ["zoom"], 6, Math.max(1.2, width * 0.85), 12, width, 15.5, width + 1.15];
+}
+
 function isRadarLayer(id?: string): boolean {
   if (!id || id.endsWith("-line")) return false;
   return id === "mesh-fill" || id === "mesh-pulse-fill" || id.startsWith("mesh-a") || id.startsWith("mesh-b") || id.startsWith("mesh-pulse-");
@@ -1376,6 +1426,8 @@ function SwathSource({
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
+  const halo = theme === "dark" ? "#f7fbff" : "#102033";
+  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1385,7 +1437,7 @@ function SwathSource({
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": fill,
+            "fill-opacity": zoomFill(fill) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }
@@ -1397,8 +1449,8 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": swathColor as never,
-            "line-width": lineWidth + 3.2,
+            "line-color": halo,
+            "line-width": zoomLine(lineWidth + 2.4) as never,
             "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
@@ -1412,8 +1464,8 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": swathColor as never,
-            "line-width": lineWidth,
+            "line-color": contour,
+            "line-width": zoomLine(lineWidth) as never,
             "line-opacity": lineOpacity,
             "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),

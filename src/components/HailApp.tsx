@@ -50,6 +50,7 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { fieldFallbackPoint, FIELD_LOOKUP_MS } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
+import { chaseFrameResult, describeOpening } from "@/lib/chase-frame";
 import { chaseListIsNew, chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
@@ -297,7 +298,9 @@ export default function HailApp() {
   const meshFrameKey = useRef<string | null>(null);
   const lockFrame = useRef(true);
   const chaseFly = useRef(false);
-  const holdNationalFrame = useRef(true);
+  const requestedView = useRef(false);
+  const userMoved = useRef(false);
+  const nationalShown = useRef(false);
   const historyActive = historyMode.kind !== "window";
   const historyActiveRef = useRef(false);
   historyActiveRef.current = historyActive;
@@ -365,6 +368,7 @@ export default function HailApp() {
 
   function followAlertLink(href: string) {
     const target = parseAlertLink(href);
+    if (target.focus || target.card) userMoved.current = true;
     if (target.focus) {
       setFocus({ lat: target.focus.lat, lon: target.focus.lon, zoom: target.focus.zoom, nonce: Date.now() });
       setSection("map");
@@ -391,6 +395,14 @@ export default function HailApp() {
   useEffect(() => {
     followAlertLink(window.location.href);
     const params = new URL(window.location.href).searchParams;
+    const savedView = readSavedView();
+    const opening = describeOpening(params, savedView);
+    requestedView.current = opening.requestsView;
+    if (opening.day) {
+      setHistoryMode({ kind: "day", date: opening.day });
+      setMeshDate(opening.day);
+      setScoreDate(opening.day);
+    }
     if (params.get("theme") === "dark") {
       document.documentElement.classList.add("dark");
       document.documentElement.style.colorScheme = "dark";
@@ -401,12 +413,6 @@ export default function HailApp() {
       localStorage.setItem("hailmap-theme", "light");
     }
     if (params.get("honey") === "1") {
-      const day = params.get("day");
-      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
-        setHistoryMode({ kind: "day", date: day });
-        setMeshDate(day);
-        setScoreDate(day);
-      }
       const west = Number(params.get("west"));
       const south = Number(params.get("south"));
       const east = Number(params.get("east"));
@@ -427,10 +433,9 @@ export default function HailApp() {
       lockFrame.current = true;
       setFocus({ lat: mapLink.lat, lon: mapLink.lon, zoom: mapLink.zoom, nonce: Date.now() });
     } else if (!params.get("focusLat") && params.get("honey") !== "1") {
-      const saved = readSavedView();
-      if (saved) {
+      if (savedView) {
         lockFrame.current = true;
-        setFocus({ lat: saved.lat, lon: saved.lon, zoom: saved.zoom, nonce: Date.now() });
+        setFocus({ lat: savedView.lat, lon: savedView.lon, zoom: savedView.zoom, nonce: Date.now() });
       } else if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
@@ -1042,6 +1047,7 @@ export default function HailApp() {
   function frameFilter(next: typeof filter) {
     const bounds = boundsOf(applyReportFilter(reports, next));
     if (!bounds) return;
+    userMoved.current = true;
     setFrame({ ...bounds, nonce: Date.now() });
   }
 
@@ -1114,6 +1120,7 @@ export default function HailApp() {
 
   function openChaseStop(stop: ChaseStop) {
     chaseFly.current = true;
+    userMoved.current = true;
     dismissChase();
     setSection("map");
     setHoneyOpen(false);
@@ -1134,6 +1141,7 @@ export default function HailApp() {
   }
 
   function pickStormDay(date: string) {
+    userMoved.current = true;
     setHistoryMode({ kind: "day", date });
     setMeshDate(date);
     setCustomOpen(false);
@@ -1154,6 +1162,7 @@ export default function HailApp() {
   }
 
   function beginReplay(date: string, center?: { lat: number; lon: number } | null) {
+    userMoved.current = true;
     const view = viewBoundsRef.current ?? viewBounds;
     const viewUsable = Boolean(view && [view.west, view.south, view.east, view.north].every((value) => Number.isFinite(value)));
     const anchor = center ?? (viewUsable ? null : placePoint);
@@ -1206,6 +1215,7 @@ export default function HailApp() {
   }
 
   function chooseAddress(hit: AddressHit) {
+    userMoved.current = true;
     const next = beginAddressSelection(hit, radiusMi, filter.hours);
     setPlaceLabel(next.label);
     setPlacePoint({ lat: next.lat, lon: next.lon });
@@ -1545,26 +1555,32 @@ export default function HailApp() {
   const showMap = section === "map" || section === "field" || mobile;
 
   useEffect(() => {
-    if (chaseLoading && !chase) return;
+    if (!chase) return;
+    let autoOpen = false;
+    if (section === "map" && !replay.active) {
+      try {
+        autoOpen = shouldShowWeeklyChase(localStorage.getItem(chasePopupKey(chase.week)));
+      } catch {
+        autoOpen = true;
+      }
+    }
+    const decision = chaseFrameResult({
+      chaseReady: true,
+      popupOpen: chasePopup,
+      autoOpen,
+      requestedView: requestedView.current,
+      userMoved: userMoved.current,
+      replayActive: replay.active,
+      flyingToStop: chaseFly.current,
+      nationalShown: nationalShown.current,
+    });
+    lockFrame.current = decision.lockFrame;
+    if (!decision.frameUnitedStates) return;
+    nationalShown.current = true;
     const mapHeight = Math.round(document.querySelector(".maplibregl-map")?.clientHeight || window.innerHeight);
-    if (chasePopup) {
-      chaseFly.current = false;
-      lockFrame.current = true;
-      holdNationalFrame.current = true;
-      const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: mobile });
-      setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.2 : 4.6, padding });
-      return;
-    }
-    if (chaseFly.current) {
-      holdNationalFrame.current = false;
-      return;
-    }
-    if (!holdNationalFrame.current) return;
-    holdNationalFrame.current = false;
-    lockFrame.current = false;
-    const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: false });
-    setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.4 : 4.8, padding });
-  }, [chasePopup, chaseLoading, chase, mobile, chromePx]);
+    const padding = chaseMapPadding({ mobile, chromePx, mapHeight, sheet: mobile });
+    setFrame({ ...UNITED_STATES_FRAME, nonce: Date.now(), maxZoom: mobile ? 4.2 : 4.6, padding });
+  }, [chasePopup, chase, mobile, chromePx, replay.active, section]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
   const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
 
@@ -1736,6 +1752,9 @@ export default function HailApp() {
             }}
             onPreviewBounds={(bounds) => {
               viewBoundsRef.current = bounds;
+            }}
+            onUserMove={() => {
+              userMoved.current = true;
             }}
             onViewChange={(bounds) => {
               viewBoundsRef.current = bounds;

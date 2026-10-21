@@ -2867,3 +2867,144 @@ html.dark .replay-range::-moz-range-thumb {
   stroke-linecap: round;
   filter: drop-shadow(0 0 6px var(--accent));
 }
+
+body:has([data-install-prompt]) .map-legend,
+body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.install-offer {
+  position: fixed;
+  z-index: 40;
+  right: 0.75rem;
+  bottom: calc(4.85rem + env(safe-area-inset-bottom));
+  left: 0.75rem;
+  display: flex;
+  max-height: calc(100dvh - 16.5rem - env(safe-area-inset-bottom));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.35rem;
+  background:
+    radial-gradient(120% 80% at 50% -20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 55%),
+    var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+@media (min-width: 768px) {
+  .install-offer {
+    right: auto;
+    bottom: 1.25rem;
+    left: calc(248px + 1.25rem);
+    width: min(26rem, calc(100vw - 248px - 2.5rem));
+  }
+}
+
+.install-offer-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1rem 0.5rem;
+}
+
+.install-app-icon {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0.15rem auto 0.7rem;
+  border-radius: 18px;
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--accent) 32%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.install-offer h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.install-offer h3 {
+  margin-top: 0.75rem;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.install-offer p,
+.install-offer li {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.install-offer-body > p {
+  margin-top: 0.35rem;
+  text-align: center;
+}
+
+.install-steps {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-steps li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.install-num {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.install-glyph {
+  display: inline-flex;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0 0.12rem;
+  vertical-align: -0.22rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.install-glyph svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.install-offer-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.install-offer-actions .btn {
+  min-height: 48px;
+  min-width: 44px;
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.install-offer-actions .install-go {
+  flex: 1.35;
+  font-weight: 750;
+}

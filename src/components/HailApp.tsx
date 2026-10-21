@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CloudHail, Gem, Play, Tornado, Wind } from "lucide-react";
+import InstallPrompt from "@/components/InstallPrompt";
 import AppMenu from "@/components/shell/AppMenu";
 import HelpGuide from "@/components/help/HelpGuide";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
@@ -2729,6 +2730,19 @@ export default function HailApp() {
           }}
         />
       ) : null}
+      <InstallPrompt
+        hidden={
+          welcomeOpen ||
+          chasePopup ||
+          menuOpen ||
+          pickerOpen ||
+          filtersOpen ||
+          helpOpen ||
+          honeyOpen ||
+          authOpen ||
+          Boolean(overlay)
+        }
+      />
       {welcomeOpen ? <WelcomeFlow onDone={finishWelcome} /> : null}
       {helpOpen ? <HelpGuide onClose={() => setHelpOpen(false)} /> : null}
       {pickerOpen ? (

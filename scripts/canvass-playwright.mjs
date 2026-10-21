@@ -32,9 +32,17 @@ async function searchAddress(page, query) {
   const choice = page.locator("ul button").filter({ hasText: /Mesa/i }).first();
   await choice.waitFor({ timeout: 20000 });
   await choice.click();
-  // History replaces the loading card. Wait for that swap so the form stays mounted.
-  await page.getByRole("button", { name: "Show history" }).waitFor({ timeout: 25000 });
-  await page.locator("[data-canvass-form]").waitFor({ timeout: 10000 });
+  const form = page.locator("[data-canvass-form]");
+  await form.waitFor({ timeout: 25000 });
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await page.locator("[data-canvass-form]").scrollIntoViewIfNeeded({ timeout: 4000 });
+      break;
+    } catch (error) {
+      if (attempt === 3) throw error;
+      await page.waitForTimeout(400);
+    }
+  }
 }
 
 async function markHouse(page, query, status, note, signIn) {
@@ -75,8 +83,8 @@ async function shoot(browser, label, options, theme, name) {
   await page.locator(".map-key summary").click();
   await page.locator("[data-canvass-legend]").click();
   await page.getByRole("button", { name: /Main Street/i }).first().click();
-  await page.locator("[data-canvass-card]").waitFor({ timeout: 10000 });
   await page.getByRole("dialog", { name: "Canvass" }).getByRole("button", { name: "Close" }).click();
+  await page.locator("[data-canvass-card]").waitFor({ timeout: 10000 });
   await page.locator(".map-key").evaluate((el) => el.removeAttribute("open"));
   await page.waitForTimeout(400);
   const file = `${outDir}/${label}-${name}-map.png`;

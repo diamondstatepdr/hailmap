@@ -142,6 +142,7 @@ export default function AddressHistoryCard({
             Show history
           </button>
         ) : null}
+        {canvass}
       </article>
     );
   }

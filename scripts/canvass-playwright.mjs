@@ -11,9 +11,9 @@ const themes = [
   ["c", "ice-swath"],
 ];
 const houses = [
-  ["South Gold Avenue, Deming, NM", "knocked", "Left a card"],
-  ["North Gold Avenue, Deming, NM", "interested", "Wants a look at the hood"],
-  ["South Silver Avenue, Deming, NM", "signed", "Roof and hood"],
+  ["East Main Street, Mesa, AZ", "knocked", "Left a card"],
+  ["East Broadway Road, Mesa, AZ", "interested", "Wants a look at the hood"],
+  ["West Main Street, Mesa, AZ", "signed", "Roof and hood"],
 ];
 
 async function hideDev(page) {
@@ -29,16 +29,21 @@ async function searchAddress(page, query) {
   await input.click();
   await input.fill("");
   await input.fill(query);
-  const choice = page.locator("ul button").filter({ hasText: /Deming/i }).first();
+  const choice = page.locator("ul button").filter({ hasText: /Mesa/i }).first();
   await choice.waitFor({ timeout: 20000 });
   await choice.click();
-  await page.locator("[data-canvass-form]").waitFor({ timeout: 20000 });
+  // History replaces the loading card. Wait for that swap so the form stays mounted.
+  await page.getByRole("button", { name: "Show history" }).waitFor({ timeout: 25000 });
+  await page.locator("[data-canvass-form]").waitFor({ timeout: 10000 });
 }
 
 async function markHouse(page, query, status, note, signIn) {
   await searchAddress(page, query);
   if (signIn) {
-    await page.getByRole("button", { name: "Sign in to canvass" }).click();
+    const signInButton = page.getByRole("button", { name: "Sign in to canvass" });
+    await signInButton.waitFor({ timeout: 15000 });
+    await page.waitForTimeout(400);
+    await signInButton.click();
     await page.getByLabel("Name").fill("Alex");
     await page.getByLabel("Team passcode").fill("team-pass");
     await page.locator("form").getByRole("button", { name: "Sign in" }).click();
@@ -59,7 +64,7 @@ async function shoot(browser, label, options, theme, name) {
   const page = await context.newPage();
   await hideDev(page);
   const meshReady = page.waitForResponse((response) => response.url().includes("/api/mesh?") && response.ok(), { timeout: 180000 });
-  await page.goto(`${base}/?lat=32.2687&lon=-107.7586&z=13&day=2026-10-20&theme=${theme}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${base}/?lat=33.415&lon=-111.837&z=13&day=2026-10-20&scheme=light&theme=${theme}`, { waitUntil: "domcontentloaded" });
   await page.locator(".maplibregl-canvas").waitFor({ timeout: 30000 });
   await meshReady;
   await page.waitForTimeout(1200);
@@ -68,7 +73,7 @@ async function shoot(browser, label, options, theme, name) {
     await markHouse(page, query, status, note, index === 0);
   }
   await page.locator("[data-canvass-legend]").click();
-  await page.getByRole("button", { name: /South Gold/i }).click();
+  await page.getByRole("button", { name: /Main Street/i }).first().click();
   await page.locator(".canvass-popup").waitFor({ timeout: 10000 });
   await page.getByRole("dialog", { name: "Canvass" }).getByRole("button", { name: "Close" }).click();
   await page.waitForTimeout(600);

@@ -2269,7 +2269,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook || (user && canvass.stops.length > 0)) && !honeyOpen && !replay.active && !reportOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && section === "map" && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
@@ -2339,7 +2339,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && !canvassBoard && !chasePopup && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && !canvassBoard && !chasePopup && !area && !placeCardOpen && !selected && !threat && !overlay && !filtersOpen && !alertDraft && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading

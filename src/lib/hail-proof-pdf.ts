@@ -58,7 +58,7 @@ function confirmBlock(proof: HailProof): string {
   const confirm = proof.confirm;
   if (!confirm) return "";
   const lines: string[] = [];
-  const width = confirm.seal ? 72 : 105;
+  const width = confirm.seal ? 100 : 105;
   if (confirm.seal) {
     const date = proof.storms[0]?.label || "";
     lines.push(sealBadge(date));

@@ -179,8 +179,23 @@ describe("Swathline palettes", () => {
     expect(new Set(motorways).size).toBe(3);
     expect(motorways[0]).toContain("#1ba2ba");
     expect(motorways[0]).not.toContain("#22d3ee");
-    expect(motorways[1]).toContain("#c1941f");
+    expect(motorways[1]).toContain("#8a7344");
     expect(motorways[1]).not.toContain("#fbbf24");
+    expect(motorways[1]).not.toContain("#c1941f");
+    const ember = read("night-b.json");
+    const chroma = (hex: string) => {
+      const value = Number.parseInt(hex.slice(1), 16);
+      const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+      return Math.max(...channels) - Math.min(...channels);
+    };
+    for (const id of ["background", "water", "landuse_residential", "landuse_park", "landcover_wood", "building"]) {
+      const layer = ember.layers.find((item: { id: string }) => item.id === id);
+      const color = layer.paint["background-color"] ?? layer.paint["fill-color"];
+      expect(chroma(color), `${id} stays charcoal`).toBeLessThanOrEqual(18);
+    }
+    const water = ember.layers.find((item: { id: string }) => item.id === "water").paint["fill-color"];
+    const waterValue = Number.parseInt(water.slice(1), 16);
+    expect((waterValue & 255) >= ((waterValue >> 16) & 255), "water is not brown").toBe(true);
     expect(motorways[2]).toContain("#4ab5a5");
     expect(motorways[2]).not.toContain("#5eead4");
   });

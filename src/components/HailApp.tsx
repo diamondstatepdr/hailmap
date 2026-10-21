@@ -2107,7 +2107,7 @@ export default function HailApp() {
             </p>
           ) : null}
           {(showOutlook || showPoints) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
-            <div className="map-legend pointer-events-none absolute inset-x-3 z-20 flex justify-start">
+            <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <div className="glass pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl px-3 py-2 text-[11px]">
                 {showPoints ? (
                   <span className="inline-flex items-center gap-1.5">

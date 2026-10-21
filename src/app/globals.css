@@ -165,7 +165,10 @@ button {
 }
 
 .map-legend {
-  bottom: 0.75rem;
+  bottom: 0.7rem;
+  left: 0.75rem;
+  /* Leave the info button a clear corner so the hail legend cannot cover it. */
+  right: 4.4rem;
 }
 
 .maplibregl-ctrl-top-right {
@@ -190,26 +193,71 @@ button {
   filter: invert(1);
 }
 
-.maplibregl-ctrl-attrib {
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82) !important;
-  font-size: 12px !important;
-  backdrop-filter: blur(8px);
+.maplibregl-ctrl-bottom-right {
+  right: 0.5rem;
+  bottom: 0.4rem;
+  z-index: 3;
 }
 
-.maplibregl-ctrl-attrib-inner,
-.maplibregl-ctrl-attrib a {
-  display: inline-flex;
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  margin: 0 !important;
   min-height: 44px;
-  align-items: center;
+  padding: 0 !important;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 6px 16px rgba(8, 12, 20, 0.22);
 }
 
-html.dark .maplibregl-ctrl-attrib {
-  background: color-mix(in srgb, var(--bg) 82%, transparent) !important;
-  color: var(--text) !important;
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button {
+  position: relative !important;
+  display: block !important;
+  width: 44px !important;
+  height: 44px !important;
+  right: auto !important;
+  top: auto !important;
+  background-color: transparent !important;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 22px 22px;
 }
 
-html.dark .maplibregl-ctrl-attrib a {
+/* MapLibre opens the credit on load. Keep it in the info button until that button is used. */
+.maplibregl-ctrl-attrib.maplibregl-compact:not([data-tucked]) .maplibregl-ctrl-attrib-inner,
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) .maplibregl-ctrl-attrib-inner {
+  display: none !important;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+  display: block !important;
+  position: absolute;
+  right: 0;
+  /* Percentage offsets collapse on this control, so clear the button and the legend row directly. */
+  bottom: 7rem;
+  width: max-content;
+  max-width: min(18.5rem, calc(100vw - 1.5rem));
+  min-height: 0 !important;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #142033;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  box-shadow: 0 8px 20px rgba(8, 12, 20, 0.28);
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner a {
+  display: inline;
+  min-height: 0;
+  color: #1d4ed8;
+}
+
+html.dark .maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+  background: color-mix(in srgb, var(--bg) 94%, white);
+  color: var(--text);
+}
+
+html.dark .maplibregl-ctrl-attrib.maplibregl-compact[data-tucked].maplibregl-compact-show .maplibregl-ctrl-attrib-inner a {
   color: var(--mark) !important;
 }
 

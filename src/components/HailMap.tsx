@@ -421,6 +421,19 @@ export default function HailMap({
     applyFrame(frame);
   }, [frame]);
 
+  useEffect(() => {
+    const started = performance.now();
+    let raf = 0;
+    const tick = () => {
+      tuckAttribution();
+      const root = mapRef.current?.getMap()?.getContainer()?.querySelector(".maplibregl-ctrl-attrib");
+      const tucked = root?.getAttribute("data-tucked") === "1" && !root.classList.contains("maplibregl-compact-show");
+      if (!tucked && performance.now() - started < 4000) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mapStyle]);
+
   function installIcons() {
     const map = mapRef.current?.getMap();
     if (!map?.isStyleLoaded()) return;
@@ -430,6 +443,18 @@ export default function HailMap({
     } catch {
       /* Style swaps drop images; the next style event adds them again. */
     }
+  }
+
+  function tuckAttribution() {
+    const map = mapRef.current?.getMap();
+    const root = map?.getContainer()?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
+    if (!root?.classList.contains("maplibregl-compact")) return;
+    root.classList.remove("maplibregl-compact-show");
+    if (root.dataset.tucked === "1") return;
+    root.dataset.tucked = "1";
+    root.querySelector("summary")?.addEventListener("click", (event) => {
+      event.preventDefault();
+    });
   }
 
   function quietBaseStateLayers() {
@@ -554,6 +579,7 @@ export default function HailMap({
         }
         installIcons();
         quietBaseStateLayers();
+        tuckAttribution();
         applyFrame();
         const raw = mapRef.current?.getMap();
         const bounds = raw ? readMapBounds(raw) : null;
@@ -693,11 +719,12 @@ export default function HailMap({
           <Layer
             id="swath-glow"
             type="line"
+            layout={{ "line-join": "round", "line-cap": "round" }}
             paint={{
-              "line-color": swathColor as never,
-              "line-width": 6,
-              "line-opacity": 0.28,
-              "line-blur": 1.2,
+              "line-color": theme === "dark" ? "#f7fbff" : "#102033",
+              "line-width": 5.4,
+              "line-opacity": theme === "dark" ? 0.9 : 0.82,
+              "line-blur": 0.35,
             }}
           />
           <Layer
@@ -1193,8 +1220,8 @@ function MeshContours({
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} />
-        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0.4} theme={theme} />
+        <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={1.6} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
   }
@@ -1210,6 +1237,7 @@ function MeshContours({
           lineOpacity={meshFade.current === index ? lineOpacity : 0}
           blur={0.2}
           fade
+          theme={theme}
         />
       ))}
       {pulseFade.items.map((collection, index) => (
@@ -1222,6 +1250,7 @@ function MeshContours({
           lineOpacity={pulseFade.current === index ? 0.95 : 0}
           blur={0}
           fade
+          theme={theme}
         />
       ))}
     </>
@@ -1236,6 +1265,7 @@ function SwathSource({
   lineOpacity,
   blur,
   fade = false,
+  theme,
 }: {
   id: string;
   data: GeoJSON.FeatureCollection | null;
@@ -1244,9 +1274,11 @@ function SwathSource({
   lineOpacity: number;
   blur: number;
   fade?: boolean;
+  theme: "light" | "dark";
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
+  const halo = theme === "dark" ? "#f7fbff" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1257,6 +1289,20 @@ function SwathSource({
             "fill-color": ["get", "color"],
             "fill-opacity": fill,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
+          } as never
+        }
+      />
+      <Layer
+        id={`${id}-halo`}
+        type="line"
+        layout={{ "line-join": "round", "line-cap": "round" }}
+        paint={
+          {
+            "line-color": halo,
+            "line-width": lineWidth + 3.1,
+            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity + 0.22) : 0,
+            "line-blur": 0.45,
+            ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
       />

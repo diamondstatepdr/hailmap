@@ -59,7 +59,7 @@ describe("miles", () => {
 
   it("labels radar and spotter sizes with the radius", () => {
     expect(formatHailSources({ radarIn: 2.86, spotterIn: 2.75, radiusKm: 15 })).toBe(
-      "2.86 in radar · 2.75 in spotter within 9.3 mi",
+      "2.86 in from radar · 2.75 in from a spotter within 9.3 mi",
     );
     expect(formatHailSources({ radarIn: null, spotterIn: null })).toBe("No hail size in this range");
   });

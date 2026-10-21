@@ -515,10 +515,10 @@ describe("chase list UI", () => {
     expect(html).toContain('data-chase-see-all');
     expect(html).toContain("City 1, TX");
     expect(html).not.toContain("City 6, TX");
-    expect(html).toContain("Radar 1.75&quot;");
-    expect(html).toContain("Spotter 2.00&quot;");
-    expect(html).toContain("No spotter reports");
-    expect(html).toContain("Radar only");
+    expect(html).toContain("Radar size 1.75&quot;");
+    expect(html).toContain("Spotter size 2.00&quot;");
+    expect(html).toContain("No spotter report");
+    expect(html).toContain("Radar size only");
     expect(html).toContain("Lisbon, NY");
     expect(html).not.toContain("loading");
     expect(html).toContain("800 vehicles");
@@ -550,12 +550,12 @@ describe("chase list UI", () => {
     expect(html).toContain("Deming, NM");
     expect(html).toContain("Oct 20, 2026");
     expect(html).toContain("Oct 19, 2026");
-    expect(html).toContain("Radar —");
-    expect(html).toContain("Spotter 2.00&quot;");
-    expect(html).toContain("233,409 vehicles in path");
-    expect(html).toContain("Radar 2.24&quot;");
-    expect(html).toContain("Spotter 1.25&quot;");
-    expect(html).toContain("3,912 vehicles in path");
+    expect(html).toContain("Radar size —");
+    expect(html).toContain("Spotter size 2.00&quot;");
+    expect(html).toContain("233,409 vehicles in the hail path");
+    expect(html).toContain("Radar size 2.24&quot;");
+    expect(html).toContain("Spotter size 1.25&quot;");
+    expect(html).toContain("3,912 vehicles in the hail path");
     expect(html.match(/data-chase-stop/g)).toHaveLength(2);
   });
 
@@ -570,8 +570,7 @@ describe("chase list UI", () => {
       }),
     );
     expect(html).toContain('data-chase-empty');
-    expect(html).toContain("Quiet week");
-    expect(html).toContain("No fresh Money Holes");
+    expect(html).toContain("No hail here this week");
     expect(html).toContain("Recent major storms");
     expect(html).toContain("100 homes");
     expect(html).toContain("Wichita, KS");

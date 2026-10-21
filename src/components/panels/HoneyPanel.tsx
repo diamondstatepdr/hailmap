@@ -1,7 +1,9 @@
 "use client";
 
 import { Gem, X } from "lucide-react";
+import Explain from "@/components/ui/Explain";
 import UpdatedLine from "@/components/ui/UpdatedLine";
+import { RADAR_TIP, SCORE_TIP } from "@/lib/plain";
 import { formatHailSources, formatMiles } from "@/lib/units";
 
 export type HoneyMode = "pdr" | "roof";
@@ -69,9 +71,10 @@ export default function HoneyPanel(props: Props) {
           <p className="honey-kicker">
             <Gem size={13} />
             Money Hole score
+            <Explain label="What the score and hail sizes mean?">{`${SCORE_TIP} ${RADAR_TIP}`}</Explain>
           </p>
-          <h2>Money Holes</h2>
-          <p className="truncate text-xs text-muted">{props.label}</p>
+          <h2>Money spots</h2>
+          <p className="truncate text-muted">{props.label}</p>
           <UpdatedLine at={props.updatedAt} />
         </div>
         <button type="button" className="honey-close press" onClick={props.onClose} aria-label="Close Money Hole">
@@ -88,6 +91,7 @@ export default function HoneyPanel(props: Props) {
           <small>Homes</small>
         </button>
       </div>
+      <p className="honey-note">PDR follows cars. Roofing follows homes.</p>
       <button
         type="button"
         className="honey-heat press"
@@ -96,17 +100,17 @@ export default function HoneyPanel(props: Props) {
         onClick={props.onToggleHeat}
       >
         <span className="honey-switch" aria-hidden />
-        Heat layer
+        Show on the map
       </button>
       <div className="honey-body">
         {props.needsDay ? (
-          <p className="honey-note">Pick a storm day, or use Live through 24 hours. Money Hole ranks one storm day.</p>
+          <p className="honey-note">Pick the day the hail fell. Money spots are ranked one storm at a time.</p>
         ) : null}
         {props.error ? <p className="honey-note">{props.error}</p> : null}
         {props.note && !props.error ? <p className="honey-note">{props.note}</p> : null}
         {props.loading && !props.needsDay ? (
           <div aria-busy="true" className="space-y-2 px-1" data-honey-loading>
-            <p className="honey-note">Ranking Money Holes… lots and neighborhoods take a few seconds.</p>
+            <p className="honey-note">Finding the best lots and neighborhoods…</p>
             <div className="honey-progress" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
@@ -114,10 +118,10 @@ export default function HoneyPanel(props: Props) {
           </div>
         ) : null}
         {props.zoomedOut && !props.loading ? (
-          <p className="honey-note">Zoom in to a city and Money Hole will rank the hail-hit stops.</p>
+          <p className="honey-note">Zoom in to a city to see the best stops.</p>
         ) : null}
         {!props.needsDay && !props.zoomedOut && !props.loading && !props.spots.length && !props.error ? (
-          <p className="honey-note">Pan over a hail swath to rank stops, or pick another storm day.</p>
+          <p className="honey-note">No hail here on this day. Move the map onto a hail path, or pick another storm day.</p>
         ) : null}
         {props.loading ? null : <ol className="honey-list">
           {props.spots.map((spot, index) => {

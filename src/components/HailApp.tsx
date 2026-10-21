@@ -2,7 +2,11 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { CloudHail, Gem, Moon, Palette, Play, SlidersHorizontal, SunMedium, Tornado, Wind } from "lucide-react";
+import { CloudHail, Play, Tornado, Wind } from "lucide-react";
+import AppMenu from "@/components/shell/AppMenu";
+import HelpGuide from "@/components/help/HelpGuide";
+import WelcomeFlow from "@/components/welcome/WelcomeFlow";
+import { friendlyWhen, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
@@ -29,7 +33,6 @@ import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import {
   applyReportFilter,
-  emptyWindowMessage,
   formatWhen,
   LIVE_WINDOW_HOURS,
   placeLabel,
@@ -195,6 +198,9 @@ export default function HailApp() {
   const [showOutlook, setShowOutlook] = useState(true);
   const [showHeat, setShowHeat] = useState(false);
   const [honeyOpen, setHoneyOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
@@ -482,7 +488,25 @@ export default function HailApp() {
   }, []);
 
   useEffect(() => {
+    try {
+      setWelcomeOpen(shouldShowWelcome(localStorage.getItem(WELCOME_KEY), window.location.search));
+    } catch {
+      setWelcomeOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!chase || chaseAutoDecided.current || section !== "map") return;
+    let sessionDone: string | null = null;
+    try {
+      sessionDone = sessionStorage.getItem(WELCOME_SESSION_KEY);
+    } catch {
+      sessionDone = null;
+    }
+    if (welcomeBlocksChase(welcomeOpen, sessionDone)) {
+      if (!welcomeOpen) chaseAutoDecided.current = true;
+      return;
+    }
     chaseAutoDecided.current = true;
     let pending = true;
     try {
@@ -493,7 +517,7 @@ export default function HailApp() {
     if (weeklyChaseShouldAutoOpen({ pending, deepLink: deepLink.current, sheetOpen: chaseSheetBlocked, onMap: true })) {
       setChasePopup(true);
     }
-  }, [chase, section, chaseSheetBlocked]);
+  }, [chase, section, chaseSheetBlocked, welcomeOpen]);
 
   useEffect(() => {
     if (!chaseSheetBlocked) return;
@@ -757,7 +781,7 @@ export default function HailApp() {
     if (historyMode.kind === "days" || historyMode.kind === "custom") {
       setMeshCollection({ type: "FeatureCollection", features: [] });
       setMeshLabel("Pick a hail day");
-      setMeshNote("Radar swaths load one convective day at a time. Open Hail days and tap a date.");
+      setMeshNote("Hail paths load one storm day at a time. Open Hail days and tap a date.");
       setMeshLoading(false);
       return;
     }
@@ -1131,6 +1155,16 @@ export default function HailApp() {
     }
     setCustomOpen(false);
     setOverlay((current) => (current === "calendar" ? null : "calendar"));
+  }
+
+  function finishWelcome() {
+    try {
+      localStorage.setItem(WELCOME_KEY, "1");
+      sessionStorage.setItem(WELCOME_SESSION_KEY, "1");
+    } catch {
+      // The intro still closes for this visit.
+    }
+    setWelcomeOpen(false);
   }
 
   function dismissChase() {
@@ -1684,7 +1718,7 @@ export default function HailApp() {
     });
   }, [chasePopup, chase, mobile, chromePx, replay.active, section]);
   const hasSignificant = Boolean(threats?.features.some((feature) => feature.properties?.kind === "significant"));
-  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Radar hail");
+  const radarCaption = historyMode.kind === "day" ? formatDay(historyMode.date) : meshLoading ? "Loading…" : (meshLabel && !/mesh/i.test(meshLabel) ? meshLabel : "Hail size");
 
   useEffect(() => {
     if (!replay.active || !replay.manifest || !replay.launch || replayFitReports.current) return;
@@ -1923,65 +1957,91 @@ export default function HailApp() {
           <div ref={chromeRef} data-tone="map" className="map-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
             <div className="map-topbar pointer-events-auto">
               <div className="map-brand-row">
-                <button type="button" className="map-brand press" aria-label="Swathline appearance" onClick={() => setPickerOpen(true)}>
+                <div className="map-brand">
                   <LogoMark size={30} title="Swathline" />
                   <Wordmark subtitle={null} />
-                </button>
-                <button type="button" className="icon-btn press" aria-label="Appearance" onClick={() => setPickerOpen(true)}>
-                  <Palette size={18} />
+                </div>
+                <button
+                  type="button"
+                  className="menu-open press"
+                  aria-expanded={menuOpen}
+                  aria-controls="app-menu"
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  Menu
                 </button>
               </div>
+              {menuOpen ? (
+                <AppMenu
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  onAppearance={() => setPickerOpen(true)}
+                  onFilters={() => setFiltersOpen(true)}
+                  onHelp={() => setHelpOpen(true)}
+                  onClose={() => setMenuOpen(false)}
+                />
+              ) : null}
               <div className="map-controls">
-              <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
-              <button type="button" onClick={() => setFiltersOpen(true)} className="icon-btn press" aria-label="Filters">
-                <SlidersHorizontal size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="icon-btn press md:hidden"
-                aria-label={theme === "dark" ? "Switch to light map" : "Switch to dark map"}
-              >
-                {theme === "dark" ? <SunMedium size={18} /> : <Moon size={18} />}
-              </button>
-              <button
-                type="button"
-                data-honey-open
-                data-tone="money"
-                aria-pressed={honeyOpen}
-                aria-label="Money Hole"
-                title="Money Hole"
-                className="icon-btn press"
-                onClick={() => {
-                  setOverlay(null);
-                  setCustomOpen(false);
-                  if (!honeyOpen && replay.active) replay.stop();
-                  setHoneyOpen((open) => !open);
-                }}
-              >
-                <Gem size={18} />
-              </button>
+                <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
               </div>
+              {honeyOpen ? null : (
+                <>
+                  <div className="plain-actions">
+                    {replay.active ? null : (
+                      <button
+                        type="button"
+                        className="range-control press"
+                        aria-expanded={overlay === "range"}
+                        aria-controls="storm-range"
+                        onClick={() => {
+                          setCustomOpen(false);
+                          setOverlay((current) => (current === "range" ? null : "range"));
+                        }}
+                      >
+                        {friendlyWhen(stormControlLabel)}
+                      </button>
+                    )}
+                    <button type="button" className="plain-action press" onClick={() => setSection("storms")}>
+                      Chase list
+                    </button>
+                    <button
+                      type="button"
+                      data-honey-open
+                      data-tone="money"
+                      aria-pressed={honeyOpen}
+                      className="plain-action press"
+                      onClick={() => {
+                        setOverlay(null);
+                        setCustomOpen(false);
+                        setMenuOpen(false);
+                        if (!honeyOpen && replay.active) replay.stop();
+                        setHoneyOpen(true);
+                      }}
+                    >
+                      Money spots
+                    </button>
+                  </div>
+                  <button type="button" className="help-open press" data-help-open onClick={() => setHelpOpen(true)}>
+                    What do I do here?
+                  </button>
+                </>
+              )}
+              {honeyOpen ? (
+                <button
+                  type="button"
+                  data-honey-open
+                  data-tone="money"
+                  aria-pressed="true"
+                  className="plain-action press"
+                  onClick={() => setHoneyOpen(false)}
+                >
+                  Close money spots
+                </button>
+              ) : null}
             </div>
             <div className="map-chrome-rest">
             {honeyOpen ? null : (
             <>
-            {replay.active ? null : (
-              <div className="pointer-events-auto">
-                <button
-                  type="button"
-                  className="range-control press"
-                  aria-expanded={overlay === "range"}
-                  aria-controls="storm-range"
-                  onClick={() => {
-                    setCustomOpen(false);
-                    setOverlay((current) => (current === "range" ? null : "range"));
-                  }}
-                >
-                  {stormControlLabel}
-                </button>
-              </div>
-            )}
             {overlay === "range" && !replay.active ? (
               <div id="storm-range" className="pointer-events-auto glass w-[min(24rem,100%)] space-y-2 rounded-2xl p-3">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Hazards">
@@ -2011,7 +2071,7 @@ export default function HailApp() {
                       onClick={() => showLiveWindow(item.hours)}
                       className={`tap press rounded-full px-3 text-sm ${!historyActive && filter.hours === item.hours ? "chip-on" : "chip"}`}
                     >
-                      {item.hours === LIVE_WINDOW_HOURS ? "Live" : item.label}
+                      {item.hours === LIVE_WINDOW_HOURS ? "Right now" : item.label}
                     </button>
                   ))}
                 </div>
@@ -2090,7 +2150,7 @@ export default function HailApp() {
                   selected={historyMode.kind === "day" ? historyMode.date : null}
                   marks={calendarMarks}
                   loading={calendarLoading}
-                  caption={`${viewScopeLabel(viewBounds, filter.state)}. Dots show the largest hail in this map view. Tap a day to load that storm and its radar swath.`}
+                  caption={`${viewScopeLabel(viewBounds, filter.state)}. Dots show the largest hail in this map view. Tap a day to load that storm and its hail path.`}
                   onViewChange={(year, month) => {
                     setCalendarYear(year);
                     setCalendarMonth(month);
@@ -2150,7 +2210,7 @@ export default function HailApp() {
             ) : null}
             {showMesh ? (
               <div className="map-chip pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-1.5 text-[11px]" title={meshNote ?? undefined}>
-                <span className="shrink-0 font-semibold">{replay.active ? "Hail size" : "Radar"}</span>
+                <span className="shrink-0 font-semibold">Hail size</span>
                 {replay.active ? null : (
                   <span className="shrink-0 font-semibold" data-radar-label>
                     {radarCaption}
@@ -2258,15 +2318,20 @@ export default function HailApp() {
             </div>
           ) : null}
           {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
-            <p className="map-empty glass pointer-events-none absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm text-muted">
-              {historyLoading
-                ? "Loading storm history…"
-                : historyActive
-                  ? historyNote ?? "No reports in this range for the current map view."
-                  : hazards.length === 1 && hazards[0] === "hail"
-                    ? emptyWindowMessage(filter.hours)
-                    : `No reports in ${windowPhrase(filter.hours).toLowerCase()}.`}
-            </p>
+            <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
+              <p>
+                {historyLoading
+                  ? "Loading storm history…"
+                  : historyActive
+                    ? historyNote ?? "No hail in this map view."
+                    : "No hail here this week."}
+              </p>
+              {historyLoading ? null : (
+                <button type="button" className="btn btn-primary empty-next" onClick={() => setSection("storms")}>
+                  See this week&apos;s biggest storms
+                </button>
+              )}
+            </div>
           ) : null}
           {section === "map" && honeyOpen ? (
             <HoneyPanel
@@ -2393,10 +2458,10 @@ export default function HailApp() {
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && area && !(placeCardOpen && place) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-              <MapDetailSheet label={area.source === "mesh" ? "Radar hail" : "Map area"} onClose={closeMapDetail}>
+              <MapDetailSheet label={area.source === "mesh" ? "Hail size" : "Map area"} onClose={closeMapDetail}>
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-                    {area.source === "mesh" ? "Radar hail swath" : area.source === "view" ? "Map area" : "Report swath"}
+                    {area.source === "mesh" ? "Hail path from radar" : area.source === "view" ? "Map area" : "Hail path from reports"}
                   </p>
                   <p className="mt-1 text-lg font-semibold tracking-tight">{area.label}</p>
                   {area.maxIn != null ? <p className="text-sm text-muted">Peak about {area.maxIn.toFixed(2)} in</p> : null}
@@ -2712,6 +2777,8 @@ export default function HailApp() {
           }}
         />
       ) : null}
+      {welcomeOpen ? <WelcomeFlow onDone={finishWelcome} /> : null}
+      {helpOpen ? <HelpGuide onClose={() => setHelpOpen(false)} /> : null}
       {pickerOpen ? (
         <ThemePicker
           palette={palette}

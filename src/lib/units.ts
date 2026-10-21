@@ -49,8 +49,8 @@ export function formatHailSources(input: {
   radiusKm?: number | null;
 }): string {
   const parts: string[] = [];
-  if (input.radarIn != null && input.radarIn > 0) parts.push(`${formatInches(input.radarIn)} radar`);
-  if (input.spotterIn != null && input.spotterIn > 0) parts.push(`${formatInches(input.spotterIn)} spotter`);
+  if (input.radarIn != null && input.radarIn > 0) parts.push(`${formatInches(input.radarIn)} from radar`);
+  if (input.spotterIn != null && input.spotterIn > 0) parts.push(`${formatInches(input.spotterIn)} from a spotter`);
   if (!parts.length) return "No hail size in this range";
   const where = input.radiusKm != null && input.radiusKm > 0 ? ` within ${formatMiles(input.radiusKm)}` : "";
   return `${parts.join(" · ")}${where}`;

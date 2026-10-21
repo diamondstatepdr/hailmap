@@ -1,4 +1,5 @@
 import { pointInGeometry } from "@/lib/geo";
+import { measureGeometry } from "@/lib/swath-measure";
 import {
   BACKTESTS,
   CREW_CAPTURE_RATE,
@@ -55,6 +56,8 @@ export interface ExposureLine {
   roofBasis: RateBasis;
   vehicleSource: ExposureSource;
   roofSource: ExposureSource;
+  /** Exclusive square miles of this hail band, from the swath geometry. */
+  areaSqMi: number;
 }
 
 export interface ForecastResult {
@@ -176,7 +179,28 @@ export function circlePolygon(lat: number, lon: number, radiusKm: number, steps 
   return { type: "Polygon", coordinates: [ring] };
 }
 
-function lineFromBucket(bucket: Bucket, source: "census" | "counted"): ExposureLine {
+/**
+ * Square miles of each damage band. A band polygon's own holes are already
+ * removed, so a nested core is counted on its own line and not again here.
+ */
+export function bandAreas(query: ForecastQuery): Map<number, number> {
+  const parts = query.selectionIsBand
+    ? [...query.bands, { minIn: query.selectionHail, geometry: query.selection }]
+    : [...query.bands];
+  const areas = new Map<number, number>();
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const stats = measureGeometry(part.geometry);
+    const fingerprint = `${bandForHail(part.minIn).minIn}|${stats.areaSqMi.toFixed(3)}|${stats.lengthMi.toFixed(3)}|${stats.widthMi.toFixed(3)}`;
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    const key = bandForHail(part.minIn).minIn;
+    areas.set(key, (areas.get(key) ?? 0) + stats.areaSqMi);
+  }
+  return areas;
+}
+
+function lineFromBucket(bucket: Bucket, source: "census" | "counted", areaSqMi: number): ExposureLine {
   const vehicles = bucket.vehiclesKnown ? Math.max(0, Math.round(bucket.vehicles)) : null;
   const roofs = Math.max(0, Math.round(bucket.roofs));
   return {
@@ -192,6 +216,7 @@ function lineFromBucket(bucket: Bucket, source: "census" | "counted"): ExposureL
     roofBasis: bucket.band.roofBasis,
     vehicleSource: vehicles == null ? "unavailable" : source,
     roofSource: source,
+    areaSqMi,
   };
 }
 
@@ -219,10 +244,11 @@ export function assignExposure(query: ForecastQuery, tracts: ExposureTract[]): E
     }
     buckets.set(damage.minIn, bucket);
   }
+  const areas = bandAreas(query);
   return [...buckets.values()]
     .filter((bucket) => bucket.roofs > 0 || bucket.vehicles > 0)
     .sort((a, b) => b.band.minIn - a.band.minIn)
-    .map((bucket) => lineFromBucket(bucket, "census"));
+    .map((bucket) => lineFromBucket(bucket, "census", areas.get(bucket.band.minIn) ?? 0));
 }
 
 function countedLine(query: ForecastQuery): ExposureLine | null {
@@ -230,6 +256,7 @@ function countedLine(query: ForecastQuery): ExposureLine | null {
   const homes = query.homes != null && query.homes > 0 ? Math.round(query.homes) : null;
   if (vehicles == null && homes == null) return null;
   const band = bandForHail(query.selectionHail);
+  const areaSqMi = bandAreas(query).get(band.minIn) ?? measureGeometry(query.selection).areaSqMi;
   return lineFromBucket(
     {
       band,
@@ -238,6 +265,7 @@ function countedLine(query: ForecastQuery): ExposureLine | null {
       vehiclesKnown: vehicles != null,
     },
     "counted",
+    areaSqMi,
   );
 }
 

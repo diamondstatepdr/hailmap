@@ -103,6 +103,11 @@ describe("storm-to-cash estimate", () => {
     expect(lines[0]).toMatchObject({ roofs: 50, vehicles: 80, roofSource: "census" });
     expect(lines[1]).toMatchObject({ roofs: 100, vehicles: 200 });
     expect(lines.reduce((sum, line) => sum + line.roofs, 0)).toBe(150);
+    expect(lines[0].areaSqMi).toBeGreaterThan(0);
+    expect(lines[1].areaSqMi).toBeGreaterThan(lines[0].areaSqMi);
+    const outerOnly = lines[1].areaSqMi + lines[0].areaSqMi;
+    expect(outerOnly).toBeLessThan(180);
+    expect(outerOnly).toBeGreaterThan(lines[1].areaSqMi);
     const heavy = lines[0];
     expect(heavy.damagedRoofs).toBe(Math.round(50 * heavy.roofRate));
     expect(heavy.damagedVehicles).toBe(Math.round(80 * (heavy.vehicleRate)));

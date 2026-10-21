@@ -1514,6 +1514,8 @@ export default function HailApp() {
     address: string;
     lat: number;
     lon: number;
+    company: string;
+    phone: string;
     maxHailIn: number | null;
     score: { score: number; level: string; summary: string } | null;
     storms: Array<{ date: string; label: string; meshMaxIn?: number | null; spotterMaxIn?: number | null }>;
@@ -1521,17 +1523,21 @@ export default function HailApp() {
   }) {
     setProofBusy(true);
     try {
+      const bands = ringsNearPoint(meshCollection?.features ?? [], input.lat, input.lon);
       await shareHailProof({
         address: input.address,
         lat: input.lat,
         lon: input.lon,
+        company: input.company,
+        phone: input.phone,
         maxHailIn: input.maxHailIn,
         score: input.score?.score ?? 0,
         level: input.score?.level ?? "Low",
         summary: input.score?.summary ?? "",
         storms: stormsFromDaily(input.storms),
         nearby: nearbyLines(input.nearby),
-        rings: ringsNearPoint(meshCollection?.features ?? [], input.lat, input.lon),
+        rings: bands.map((band) => band.ring),
+        colors: bands.map((band) => band.color),
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -2381,8 +2387,10 @@ export default function HailApp() {
                       void generateReport("address");
                     }}
                     proofBusy={proofBusy}
-                    onProof={() =>
+                    onProof={(company, phone) =>
                       void makeHailProof({
+                        company,
+                        phone,
                         address: placeLabel,
                         lat: placePoint.lat,
                         lon: placePoint.lon,
@@ -2415,8 +2423,10 @@ export default function HailApp() {
                       void generateReport("address");
                     }}
                     proofBusy={proofBusy}
-                    onProof={() =>
+                    onProof={(company, phone) =>
                       void makeHailProof({
+                        company,
+                        phone,
                         address: placeLabel,
                         lat: placePoint.lat,
                         lon: placePoint.lon,
@@ -2614,8 +2624,10 @@ export default function HailApp() {
                 proofBusy={proofBusy}
                 onProof={
                   fieldLat != null && fieldLon != null
-                    ? () =>
+                    ? (company, phone) =>
                         void makeHailProof({
+                          company,
+                          phone,
                           address: streetStatus === "ok" && street ? street : `${fieldLat.toFixed(5)}, ${fieldLon.toFixed(5)}`,
                           lat: fieldLat,
                           lon: fieldLon,

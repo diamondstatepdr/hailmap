@@ -7,6 +7,7 @@ import { hazardLabel, hazardOf, magnitudeLabel } from "@/lib/hazard";
 import type { PlaceHistory } from "@/lib/place";
 import { topScoreFactors } from "@/lib/probability";
 import { formatHailSources, formatMiles } from "@/lib/units";
+import { ProofLaunch } from "@/components/hail-proof/ProofActions";
 import ScoreRing from "@/components/ui/ScoreRing";
 import Sparkline from "@/components/ui/Sparkline";
 
@@ -18,7 +19,7 @@ interface Props {
   radarLoading?: boolean;
   onSave?: () => void;
   onReport?: () => void;
-  onProof?: () => void;
+  onProof?: (company: string, phone: string) => void;
   proofBusy?: boolean;
   onAlert?: () => void;
   onClose?: () => void;
@@ -159,11 +160,7 @@ export default function PropertyCard({ label, history, mesh, radar, radarLoading
             Storm report
           </button>
         ) : null}
-        {onProof ? (
-          <button type="button" onClick={onProof} disabled={proofBusy} className="btn btn-secondary press" data-hail-proof>
-            {proofBusy ? "Making the PDF…" : "Hail proof PDF"}
-          </button>
-        ) : null}
+        {onProof ? <ProofLaunch busy={proofBusy} onProof={onProof} /> : null}
       </div>
     </article>
   );

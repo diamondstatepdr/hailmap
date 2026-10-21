@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
-import { normalizeProof, proofFilename, renderHailProofPdf } from "@/lib/hail-proof";
+import { normalizeProof, proofFilename } from "@/lib/hail-proof";
 import { saveHailProof } from "@/lib/hail-proof-store";
 import { clientIp } from "@/lib/photos";
 

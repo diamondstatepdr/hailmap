@@ -62,6 +62,7 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/replay/frame?date=&at=&west=&south=&east=&north=` — radar for one replay time. The swath is MRMS `MESH_Max_1440min` minus the 12:00 UTC baseline, so hail builds through the day. A brighter pulse is the instantaneous MESH scan nearest that time. Scans are cached under `$HAILMAP_DATA_DIR/mesh/replay`.
 - `GET /api/mesh/at?lat=&lon=&hours=` — radar-estimated maximum hail at a point for each storm date in the window
 - `POST /api/dealers` — car dealerships and named auto lots inside a swath polygon, from OpenStreetMap
+- `POST /api/knock-route` — door-knock route for a Money Hole or selected swath. Named residential streets from OpenStreetMap, hardest hail first, ordered into one walk. Google Maps links keep 9 intermediate stops. Apple Maps links keep 12.
 - `GET /api/income` — county polygons with ACS median household income
 - `GET /api/threats` — active NWS severe watches and warnings, plus the SPC Day 1 categorical outlook and significant-severe areas. Cached for about 10 minutes.
 - `GET /api/health` — process check for Railway

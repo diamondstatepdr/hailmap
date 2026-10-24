@@ -28,6 +28,7 @@ import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel
 import ChaseMapButton from "@/components/chase/ChaseMapButton";
 import ChasePopup from "@/components/chase/ChasePopup";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
+import KnockRouteSheet from "@/components/panels/KnockRouteSheet";
 import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
@@ -66,6 +67,7 @@ import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
+import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -205,6 +207,9 @@ export default function HailApp() {
   const [fieldSendMessage, setFieldSendMessage] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [knock, setKnock] = useState<{ label: string; stops: KnockStop[]; mode: KnockMode; note: string | null } | null>(null);
+  const [knockBusy, setKnockBusy] = useState(false);
+  const [knockError, setKnockError] = useState<string | null>(null);
   const [honeyStackPx, setHoneyStackPx] = useState<number | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const [honeyMode, setHoneyMode] = useState<HoneyMode>("pdr");
@@ -1081,6 +1086,11 @@ export default function HailApp() {
     }),
     [dealers],
   );
+  const knockLine = useMemo(() => (knock ? routeLine(knock.stops) : null), [knock]);
+  const knockStops = useMemo(
+    () => knock?.stops.map((stop, index) => ({ id: stop.id, lat: stop.lat, lon: stop.lon, n: index + 1 })) ?? null,
+    [knock],
+  );
 
   const fieldCollection = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -1388,6 +1398,72 @@ export default function HailApp() {
         ],
       },
     });
+  }
+
+  async function buildKnockRoute(input: {
+    label: string;
+    geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+    focus: { lat: number; lon: number };
+    fallbackHail: number;
+  }) {
+    setKnockBusy(true);
+    setKnockError(null);
+    try {
+      const response = await fetch("/api/knock-route", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          geometry: input.geometry,
+          focus: input.focus,
+          fallbackHail: input.fallbackHail,
+          bands: compactBands(meshCollection?.features ?? [], input.focus),
+        }),
+      });
+      const payload = (await response.json()) as { stops?: KnockStop[]; note?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not build that route");
+      const stops = hailAlongStops(payload.stops ?? [], meshCollection?.features ?? []);
+      const countNote = stops.length === 1 ? "1 stop, hardest hail first." : `${stops.length} stops, hardest hail first.`;
+      setKnock({
+        label: stops.length ? knockHailLabel(stops) : input.label,
+        stops,
+        mode: "walk",
+        note: stops.length ? countNote : (payload.note ?? null),
+      });
+      setHoneyOpen(false);
+      if (stops.length) {
+        const lons = stops.map((stop) => stop.lon);
+        const lats = stops.map((stop) => stop.lat);
+        const phone = window.innerWidth < 768;
+        const mapHeight = mapStageRef.current?.clientHeight ?? window.innerHeight;
+        const mapWidth = mapStageRef.current?.clientWidth ?? window.innerWidth;
+        const chrome = Math.ceil(chromeRef.current?.getBoundingClientRect().height ?? 0);
+        const sheet = Math.round(window.innerHeight * 0.45);
+        // applyFrame shrinks padding that exceeds this room, which was pulling
+        // the southern stop under the sheet. Fit inside the room and keep the
+        // sheet clearance even when the header is tall.
+        const roomY = Math.max(160, mapHeight - 150);
+        const roomX = Math.max(80, mapWidth - 72);
+        let bottom = sheet + 32;
+        let top = Math.max(chrome + 56, phone ? 156 : chrome + 56);
+        if (top + bottom > roomY) top = Math.max(chrome + 12, roomY - bottom);
+        if (top + bottom > roomY) bottom = Math.max(sheet + 20, roomY - top);
+        let side = phone ? 112 : 128;
+        if (side * 2 > roomX) side = Math.max(48, Math.floor(roomX / 2));
+        setFrame({
+          west: Math.min(...lons),
+          south: Math.min(...lats),
+          east: Math.max(...lons),
+          north: Math.max(...lats),
+          nonce: Date.now(),
+          maxZoom: 16,
+          padding: { top, bottom, left: side, right: side },
+        });
+      }
+    } catch (error) {
+      setKnockError(error instanceof Error ? error.message : "Could not build that route");
+    } finally {
+      setKnockBusy(false);
+    }
   }
 
   async function saveWatch() {
@@ -1855,6 +1931,8 @@ export default function HailApp() {
             meshPulse={replay.active ? replay.radar.pulse : null}
             emphasizeMesh={replay.active}
             dealers={dealerCollection}
+            knockLine={knockLine}
+            knockStops={knockStops}
             income={income}
             threats={replay.active ? (replayWarnings ?? { type: "FeatureCollection", features: [] }) : threats}
             showPoints={showPoints}
@@ -2055,7 +2133,7 @@ export default function HailApp() {
                 </div>
               )}
             </div>
-            <div className={`map-chrome-rest ${!honeyOpen && (overlay || (historyMode.kind === "day" && !replay.active)) ? "" : "is-empty"}`}>
+            <div className={`map-chrome-rest ${!honeyOpen && !knock && (overlay || (historyMode.kind === "day" && !replay.active)) ? "" : "is-empty"}`}>
             {honeyOpen ? null : (
             <>
             {overlay === "range" && !replay.active ? (
@@ -2182,7 +2260,7 @@ export default function HailApp() {
                   <p className="mt-2 text-[11px] leading-snug text-muted">Tap a day, then Replay, to watch that storm move.</p>
                 )}
               </div>
-            ) : historyMode.kind === "day" && !replay.active ? (
+            ) : historyMode.kind === "day" && !replay.active && !knock ? (
               <div className="pointer-events-auto glass flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-xs">
                 <span className="font-semibold">{formatDay(historyMode.date)}</span>
                 <button type="button" className="btn btn-primary press px-2.5 py-1 text-xs" onClick={() => beginReplay(historyMode.date)}>
@@ -2233,7 +2311,7 @@ export default function HailApp() {
               {error}
             </p>
           ) : null}
-          {(showMesh || showPoints || showOutlook) && !honeyOpen && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
+          {(showMesh || showPoints || showOutlook) && !honeyOpen && !knock && !replay.active && !reportOpen && section === "map" && !place && !selected && !threat ? (
             <div className="map-legend pointer-events-none absolute z-20 flex justify-start">
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
@@ -2292,7 +2370,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && filtered.length === 0 && !reportOpen ? (
+          {!loading && !replay.active && !honeyOpen && !knock && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && filtered.length === 0 && !reportOpen ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading
@@ -2330,6 +2408,19 @@ export default function HailApp() {
               selectedId={selectedHoneyId}
               needsDay={!honeyQuery}
               distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
+              onRoute={() => {
+                const spots = honey?.spots?.[honeyMode] ?? [];
+                const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
+                if (!spot) return;
+                void buildKnockRoute({
+                  label: spot.name,
+                  geometry: circlePolygon(spot.lat, spot.lon, 1.8),
+                  focus: { lat: spot.lat, lon: spot.lon },
+                  fallbackHail: spot.hailIn,
+                });
+              }}
+              routeBusy={knockBusy}
+              routeError={knockError}
               attribution={honey?.attribution ?? "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports."}
               updatedAt={honey?.updatedAt ?? chase?.generatedAt ?? null}
               onClose={() => setHoneyOpen(false)}
@@ -2431,7 +2522,7 @@ export default function HailApp() {
               onClose={replay.stop}
             />
           ) : null}
-          {section === "map" && !honeyOpen && !replay.active && area && !(placeCardOpen && place) ? (
+          {section === "map" && !honeyOpen && !replay.active && area && !knock && !(placeCardOpen && place) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
               <MapDetailSheet label={area.source === "mesh" ? "Hail size" : "Map area"} onClose={closeMapDetail}>
                 <div>
@@ -2472,8 +2563,37 @@ export default function HailApp() {
                     Open in field mode
                   </button>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary press mt-2 w-full"
+                  data-knock-route
+                  disabled={knockBusy}
+                  onClick={() => {
+                    const center = ringCenter(area.geometry);
+                    if (!center) return;
+                    void buildKnockRoute({
+                      label: area.label,
+                      geometry: area.geometry,
+                      focus: center,
+                      fallbackHail: area.maxIn ?? area.minIn ?? 0.75,
+                    });
+                  }}
+                >
+                  {knockBusy ? "Building the route…" : "Door-knock route"}
+                </button>
+                {knockError ? <p className="mt-2 text-sm text-muted">{knockError}</p> : null}
               </MapDetailSheet>
             </div>
+          ) : null}
+          {section === "map" && !replay.active && knock ? (
+            <KnockRouteSheet
+              label={knock.label}
+              stops={knock.stops}
+              mode={knock.mode}
+              note={knock.note}
+              onMode={(mode) => setKnock((current) => (current ? { ...current, mode } : current))}
+              onClose={() => setKnock(null)}
+            />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && !(placeCardOpen && place) && !area && (selected || threat || county) ? (
             <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">

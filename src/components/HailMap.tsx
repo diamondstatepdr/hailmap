@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
@@ -14,6 +14,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
+import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
@@ -177,6 +178,8 @@ interface Props {
   emphasizeMesh?: boolean;
   userLocation?: { lat: number; lon: number } | null;
   fieldPins?: GeoJSON.FeatureCollection | null;
+  knockLine?: GeoJSON.FeatureCollection | null;
+  knockStops?: Array<{ id: string; lat: number; lon: number; n: number }> | null;
   selectedId: string | null;
   focus: MapFocus | null;
   frame: MapFrame | null;
@@ -257,6 +260,8 @@ export default function HailMap({
   emphasizeMesh = false,
   userLocation = null,
   fieldPins = null,
+  knockLine = null,
+  knockStops = null,
   selectedId,
   focus,
   frame,
@@ -278,6 +283,7 @@ export default function HailMap({
   clusterPoints = true,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const [cameraTick, setCameraTick] = useState(0);
   const flownNonce = useRef<number | null>(null);
   const mapStyle = useMapStyle(theme);
   const brand = useBrandPaint(theme);
@@ -338,7 +344,7 @@ export default function HailMap({
     if (!safe) return;
     // A search flyTo leaves padding on the camera. fitBounds adds that padding
     // again, which on a phone shrinks the storm to a statewide view.
-    if (width < 768) {
+    if (width < 768 || next.padding) {
       raw.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     }
     const desktop = width >= 768;
@@ -364,6 +370,19 @@ export default function HailMap({
             sheet: true,
           })
         : (next.padding ?? { top: 124, bottom: 232, left: 36, right: 48 });
+    const roomY = Math.max(120, height - 150);
+    const roomX = Math.max(80, width - 72);
+    const ySum = padding.top + padding.bottom;
+    const xSum = padding.left + padding.right;
+    const fitted =
+      ySum > roomY || xSum > roomX
+        ? {
+            top: Math.round(padding.top * (ySum > roomY ? roomY / ySum : 1)),
+            bottom: Math.round(padding.bottom * (ySum > roomY ? roomY / ySum : 1)),
+            left: Math.round(padding.left * (xSum > roomX ? roomX / xSum : 1)),
+            right: Math.round(padding.right * (xSum > roomX ? roomX / xSum : 1)),
+          }
+        : padding;
     try {
       map.fitBounds(
         [
@@ -371,7 +390,7 @@ export default function HailMap({
           [safe.east, safe.north],
         ],
         {
-          padding,
+          padding: fitted,
           duration: 0,
           maxZoom: next.maxZoom ?? 8.2,
         },
@@ -417,6 +436,18 @@ export default function HailMap({
   }, [frame]);
 
   useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !knockLine?.features.length) return;
+    const raise = () => raiseKnockRoute(map);
+    const frameId = window.requestAnimationFrame(raise);
+    map.on("idle", raise);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      map.off("idle", raise);
+    };
+  }, [knockLine, mesh]);
+
+  useEffect(() => {
     const started = performance.now();
     let raf = 0;
     const tick = () => {
@@ -445,7 +476,9 @@ export default function HailMap({
     if (!map) return;
     const center = map.getCenter();
     const root = map.getContainer();
-    root.dataset.mapZoom = map.getZoom().toFixed(2);
+    const zoom = map.getZoom();
+    setCameraTick((current) => current + 1);
+    root.dataset.mapZoom = zoom.toFixed(2);
     root.dataset.mapLat = center.lat.toFixed(5);
     root.dataset.mapLon = center.lng.toFixed(5);
   }
@@ -567,6 +600,65 @@ export default function HailMap({
     }
     onBackgroundClick?.();
   }
+
+  const projectedOffsets = useMemo(() => {
+    if (!knockStops?.length) return [] as Array<[number, number]>;
+    const map = mapRef.current?.getMap();
+    if (!map) return knockStops.map(() => [0, 0] as [number, number]);
+    const points = knockStops.map((stop) => {
+      const projected = map.project([stop.lon, stop.lat]);
+      return { x: projected.x, y: projected.y };
+    });
+    return spreadPixelOffsets(points, KNOCK_PIN_GAP);
+  }, [knockStops, cameraTick]);
+  const projectionKey = projectedOffsets.map((pair) => pair.join(",")).join("|");
+  const [knockRepair, setKnockRepair] = useState<{ key: string; shifts: Array<[number, number]>; passes: number }>({
+    key: "",
+    shifts: [],
+    passes: 0,
+  });
+  const repair = knockRepair.key === projectionKey ? knockRepair.shifts : [];
+  const knockShift = projectedOffsets.map(
+    (pair, index) => [pair[0] + (repair[index]?.[0] ?? 0), pair[1] + (repair[index]?.[1] ?? 0)] as [number, number],
+  );
+  const shiftKey = knockShift.map((pair) => pair.join(",")).join("|");
+  const [pinSeen, setPinSeen] = useState(0);
+
+  useEffect(() => {
+    if (!knockStops?.length) return;
+    const id = window.requestAnimationFrame(() => setPinSeen((value) => value + 1));
+    return () => window.cancelAnimationFrame(id);
+  }, [knockStops, projectionKey]);
+
+  useLayoutEffect(() => {
+    if (!knockStops?.length || (knockRepair.key === projectionKey && knockRepair.passes > 4)) return;
+    const nodes = [...document.querySelectorAll<HTMLElement>(".maplibregl-marker [data-knock-pin]")];
+    if (nodes.length < 2) return;
+    const mapRect = mapRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
+    const sheet = document.querySelector("[data-bottom-sheet]")?.getBoundingClientRect();
+    const header = document.querySelector(".map-chrome")?.getBoundingClientRect();
+    const bounds =
+      mapRect && (sheet?.top ?? mapRect.bottom) - (header?.bottom ?? mapRect.top) > 80
+        ? {
+            left: mapRect.left + 6,
+            top: (header?.bottom ?? mapRect.top) + 6,
+            right: mapRect.right - 6,
+            bottom: (sheet?.top ?? mapRect.bottom) - 6,
+          }
+        : undefined;
+    const boxes = nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+    });
+    const extra = separateScreenPins(boxes, 6, bounds);
+    if (extra.every(([x, y]) => x === 0 && y === 0)) return;
+    const base = knockRepair.key === projectionKey ? knockRepair.shifts : [];
+    setKnockRepair({
+      key: projectionKey,
+      passes: (knockRepair.key === projectionKey ? knockRepair.passes : 0) + 1,
+      shifts: extra.map((pair, index) => [(base[index]?.[0] ?? 0) + pair[0], (base[index]?.[1] ?? 0) + pair[1]]),
+    });
+  }, [knockStops, projectionKey, shiftKey, knockRepair, pinSeen]);
 
   return (
     <Map
@@ -1071,6 +1163,36 @@ export default function HailMap({
           />
         </Source>
       ) : null}
+      {knockLine?.features.length ? (
+        <Source id="knock-route" type="geojson" data={knockLine}>
+          <Layer
+            id="knock-casing"
+            type="line"
+            layout={{ "line-cap": "round", "line-join": "round" }}
+            paint={{ "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.95 }}
+          />
+          <Layer
+            id="knock-line"
+            type="line"
+            layout={{ "line-cap": "round", "line-join": "round" }}
+            paint={{ "line-color": "#1d4ed8", "line-width": 5, "line-opacity": 1 }}
+          />
+        </Source>
+      ) : null}
+      {knockStops?.map((stop, index) => {
+        const shift = knockShift[index] ?? [0, 0];
+        return (
+          <Marker key={`${stop.n}-${stop.id}`} longitude={stop.lon} latitude={stop.lat} anchor="center" style={{ zIndex: stop.n }}>
+            <span
+              className="knock-pin knock-map-pin"
+              data-knock-pin={stop.n}
+              style={{ transform: `translate(${shift[0]}px, ${shift[1]}px)` }}
+            >
+              {stop.n}
+            </span>
+          </Marker>
+        );
+      })}
       {userLocation ? (
         <Marker longitude={userLocation.lon} latitude={userLocation.lat} anchor="center">
           <span className="user-dot-hit">

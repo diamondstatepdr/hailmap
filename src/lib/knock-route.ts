@@ -212,11 +212,54 @@ export function appleMapsHref(stops: KnockStop[], mode: KnockMode): { url: strin
   };
 }
 
-/** Sheet title from the hail on the stops, not the polygon that was tapped. */
+/** Sheet title from the hail under the stops, not the polygon that was tapped. */
 export function knockHailLabel(stops: Array<{ hailIn: number }>): string {
-  const max = stops.reduce((best, stop) => Math.max(best, stop.hailIn), 0);
-  if (!(max > 0)) return "Door-knock route";
-  return `Up to ${formatInches(max)}" hail`;
+  const values = stops.map((stop) => stop.hailIn).filter((value) => value > 0);
+  if (!values.length) return "Door-knock route";
+  const low = formatInches(Math.min(...values));
+  const high = formatInches(Math.max(...values));
+  if (low === high) return `${high}" hail`;
+  return `${low}–${high}" hail`;
+}
+
+/** Hail size of the band the pin actually sits in. Holes in a lower band do not count. */
+export function meshHailAt(
+  lon: number,
+  lat: number,
+  features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }>,
+  fallback: number,
+): number {
+  let best = 0;
+  for (const feature of features) {
+    const minIn = Number(feature.properties?.minIn);
+    if (!Number.isFinite(minIn) || minIn <= best || minIn > 8) continue;
+    const geometry = feature.geometry;
+    if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon")) continue;
+    if (pointInGeometry(lon, lat, geometry)) best = minIn;
+  }
+  if (best > 0) return Math.round(best * 100) / 100;
+  return hailAt(lon, lat, [], fallback);
+}
+
+/** Replace each stop's hail with the band drawn under that pin. */
+export function hailAlongStops(
+  stops: KnockStop[],
+  features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }>,
+): KnockStop[] {
+  if (!stops.length || !features.length) return stops;
+  return stops.map((stop) => ({ ...stop, hailIn: meshHailAt(stop.lon, stop.lat, features, stop.hailIn) }));
+}
+
+/** A tapped ring often has the harder core cut out as a hole. Walk that core too. */
+export function dropHoles(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Polygon | GeoJSON.MultiPolygon {
+  if (geometry.type === "Polygon") {
+    const outer = geometry.coordinates[0];
+    return outer ? { type: "Polygon", coordinates: [outer] } : geometry;
+  }
+  const coordinates = geometry.coordinates
+    .map((polygon) => polygon.slice(0, 1))
+    .filter((polygon) => polygon.length > 0 && polygon[0].length >= 4);
+  return coordinates.length ? { type: "MultiPolygon", coordinates } : geometry;
 }
 
 function formatInches(value: number): string {
@@ -230,19 +273,23 @@ export function metersPerPixel(lat: number, zoom: number): number {
   return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
 }
 
+/** Center distance that keeps a two-digit stop number off its neighbor. */
+export const KNOCK_PIN_GAP = 48;
+
 /**
  * Pixel offsets that keep stacked stop numbers from sitting on each other.
  * Points are already in screen pixels. The first pin stays put. Later pins
- * step up and sideways, never down into the sheet. The route line still uses
- * the real coordinates.
+ * step sideways and up, never down into the sheet. Only pins already placed
+ * block a slot, so a pin that will move itself cannot trap the one before it.
+ * The route line still uses the real coordinates.
  */
-export function spreadPixelOffsets(points: Array<{ x: number; y: number }>, gapPx = 36): Array<[number, number]> {
+export function spreadPixelOffsets(points: Array<{ x: number; y: number }>, gapPx = KNOCK_PIN_GAP): Array<[number, number]> {
+  const gap = Math.max(32, gapPx);
   const placed = points.map((point) => ({ x: point.x, y: point.y }));
-  const slots = fanSlots(gapPx);
+  const slots = fanSlots(gap);
   const blocked = (index: number, x: number, y: number) => {
-    for (let j = 0; j < placed.length; j += 1) {
-      if (j === index) continue;
-      if (Math.hypot(x - placed[j].x, y - placed[j].y) < gapPx - 0.01) return true;
+    for (let j = 0; j < index; j += 1) {
+      if (Math.hypot(x - placed[j].x, y - placed[j].y) < gap - 0.25) return true;
     }
     return false;
   };
@@ -258,26 +305,85 @@ export function spreadPixelOffsets(points: Array<{ x: number; y: number }>, gapP
       found = true;
       break;
     }
-    if (!found) placed[i] = { x: origin.x + (i % 2 === 0 ? -gapPx : gapPx), y: origin.y - gapPx * i };
+    if (!found) {
+      let y = origin.y;
+      let x = origin.x + (i % 2 === 0 ? -gap : gap);
+      let guard = 0;
+      while (blocked(i, x, y) && guard < 10) {
+        y -= gap;
+        guard += 1;
+      }
+      placed[i] = { x, y };
+    }
   }
   return points.map((point, index) => [Math.round(placed[index].x - point.x), Math.round(placed[index].y - point.y)]);
 }
 
-/** Screen offsets on square rings. Positive y is down, so the fan stays at dy <= 0. */
+/** Screen offsets on a ring. Positive y is down, so the fan stays at or above the street. */
 function fanSlots(gap: number): Array<[number, number]> {
   const slots: Array<[number, number]> = [];
-  for (let ring = 1; ring <= 5; ring += 1) {
+  for (let ring = 1; ring <= 8; ring += 1) {
     const band: Array<[number, number]> = [];
-    for (let dx = -ring; dx <= ring; dx += 1) {
-      for (let dy = -ring; dy <= 0; dy += 1) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
-        band.push([dx * gap, dy * gap]);
-      }
+    const steps = 16;
+    for (let step = 0; step < steps; step += 1) {
+      const angle = -Math.PI / 2 + (step / steps) * Math.PI * 2;
+      const oy = Math.sin(angle) * gap * ring;
+      if (oy > gap * 0.2) continue;
+      band.push([Math.cos(angle) * gap * ring, oy]);
     }
     band.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || Math.abs(a[0]) - Math.abs(b[0]));
     slots.push(...band);
   }
   return slots;
+}
+
+/**
+ * Extra pixel shifts from real pin boxes. `x` and `y` are the top-left of each pin.
+ * A pair is clear when one axis has `air` pixels between the boxes.
+ */
+export function separateScreenPins(
+  boxes: Array<{ x: number; y: number; w: number; h: number }>,
+  air = 6,
+  bounds?: { left: number; top: number; right: number; bottom: number },
+): Array<[number, number]> {
+  const placed = boxes.map((box) => ({ ...box }));
+  const crowds = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => {
+    const gapX = Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w);
+    const gapY = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+    return gapX < air && gapY < air;
+  };
+  for (let i = 1; i < placed.length; i += 1) {
+    for (let guard = 0; guard < 24; guard += 1) {
+      let blocker = -1;
+      for (let j = 0; j < i; j += 1) {
+        if (crowds(placed[i], placed[j])) {
+          blocker = j;
+          break;
+        }
+      }
+      const current = placed[i];
+      const outside =
+        bounds != null &&
+        (current.x < bounds.left || current.y < bounds.top || current.x + current.w > bounds.right || current.y + current.h > bounds.bottom);
+      if (blocker < 0 && !outside) break;
+      if (blocker >= 0) {
+        const other = placed[blocker];
+        const gapX = Math.max(current.x, other.x) - Math.min(current.x + current.w, other.x + other.w);
+        const gapY = Math.max(current.y, other.y) - Math.min(current.y + current.h, other.y + other.h);
+        const needX = Math.max(1, Math.ceil(air - gapX));
+        const needY = Math.max(1, Math.ceil(air - gapY));
+        const dir = current.x + current.w / 2 >= other.x + other.w / 2 ? 1 : -1;
+        const roomAbove = bounds ? current.y - bounds.top : needY;
+        if (roomAbove >= needY && needY <= needX + 8) current.y -= needY;
+        else current.x += dir * needX;
+      }
+      if (bounds) {
+        current.x = Math.min(Math.max(bounds.left, current.x), bounds.right - current.w);
+        current.y = Math.min(Math.max(bounds.top, current.y), bounds.bottom - current.h);
+      }
+    }
+  }
+  return boxes.map((box, index) => [Math.round(placed[index].x - box.x), Math.round(placed[index].y - box.y)]);
 }
 
 /**
@@ -287,7 +393,7 @@ function fanSlots(gap: number): Array<[number, number]> {
 export function knockPinOffsets(
   stops: Array<{ lat: number; lon: number }>,
   metersPerPixel: number,
-  gapPx = 36,
+  gapPx = KNOCK_PIN_GAP,
 ): Array<[number, number]> {
   if (!stops.length || !(metersPerPixel > 0) || !Number.isFinite(metersPerPixel)) return stops.map(() => [0, 0]);
   const origin = stops[0];
@@ -325,12 +431,24 @@ function simplifyRing(ring: number[][]): number[][] {
   return next.length >= 4 ? next : [];
 }
 
-/** Keep only hail bands near the stop so the route request stays small. */
+function simplifyGeometry(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
+  if (geometry.type === "Polygon") {
+    const coordinates = geometry.coordinates.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4);
+    return coordinates.length ? { type: "Polygon", coordinates } : null;
+  }
+  const coordinates = geometry.coordinates
+    .slice(0, 3)
+    .map((polygon) => polygon.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4))
+    .filter((polygon) => polygon.length);
+  return coordinates.length ? { type: "MultiPolygon", coordinates } : null;
+}
+
+/** Keep the hail bands around the stop, highest first, so a later 2" core is not dropped. */
 export function compactBands(
   features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: Record<string, unknown> | null }>,
   focus: { lat: number; lon: number },
 ): HailBand[] {
-  const bands: HailBand[] = [];
+  const nearby: HailBand[] = [];
   for (const feature of features) {
     const minIn = Number(feature.properties?.minIn);
     const geometry = feature.geometry;
@@ -340,22 +458,16 @@ export function compactBands(
     if (!bounds) continue;
     if (focus.lon < bounds.west - 0.08 || focus.lon > bounds.east + 0.08) continue;
     if (focus.lat < bounds.south - 0.08 || focus.lat > bounds.north + 0.08) continue;
-    const simplified =
-      geometry.type === "Polygon"
-        ? { type: "Polygon" as const, coordinates: geometry.coordinates.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4) }
-        : {
-            type: "MultiPolygon" as const,
-            coordinates: geometry.coordinates
-              .slice(0, 2)
-              .map((polygon) => polygon.slice(0, 1).map(simplifyRing).filter((ring) => ring.length >= 4))
-              .filter((polygon) => polygon.length),
-          };
-    if (!simplified.coordinates.length) continue;
-    bands.push({ minIn: Math.round(minIn * 100) / 100, geometry: simplified });
-    if (bands.length >= 6) break;
+    const simplified = simplifyGeometry(geometry);
+    if (!simplified) continue;
+    nearby.push({ minIn: Math.round(minIn * 100) / 100, geometry: simplified });
   }
-  bands.sort((a, b) => b.minIn - a.minIn);
-  return bands.slice(0, 6);
+  nearby.sort((a, b) => {
+    const aHit = pointInGeometry(focus.lon, focus.lat, a.geometry) ? 1 : 0;
+    const bHit = pointInGeometry(focus.lon, focus.lat, b.geometry) ? 1 : 0;
+    return bHit - aHit || b.minIn - a.minIn;
+  });
+  return nearby.slice(0, 6);
 }
 
 /** Casing first, then the colored line, so both sit above hail fills. */

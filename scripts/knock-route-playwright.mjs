@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 
 const base = process.env.BASE_URL ?? "http://127.0.0.1:3210";
 const outDir = process.env.KNOCK_SHOTS ?? "/opt/cursor/artifacts/knock-route";
-const phone = { viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
 const desktop = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 };
 const themes = [
   ["a", "storm-core"],
@@ -13,6 +13,11 @@ const themes = [
 
 async function hideDev(page) {
   await page.addInitScript(() => {
+    try {
+      localStorage.setItem("swathline-install-dismissed", "1");
+    } catch {
+      /* private mode */
+    }
     const style = document.createElement("style");
     style.textContent = "nextjs-portal{display:none!important}";
     document.documentElement.appendChild(style);
@@ -149,19 +154,19 @@ async function shoot(browser, label, options, theme, name) {
   await page.screenshot({ path: card });
   console.log("wrote", card);
   await page.locator("[data-knock-route]").click();
-  await page.locator("[data-knock-sheet] .knock-list li").first().waitFor({ timeout: 100000 });
+  await page.locator("[data-knock-stop]").first().waitFor({ timeout: 100000 });
   await page.waitForFunction(() => {
-    const listed = document.querySelectorAll("[data-knock-sheet] .knock-list li").length;
-    const pins = document.querySelectorAll(".maplibregl-marker .knock-pin").length;
-    return listed > 0 && pins >= listed;
+    const listed = document.querySelectorAll("[data-knock-stop]").length;
+    const pins = document.querySelectorAll(".maplibregl-marker [data-knock-pin]").length;
+    return listed > 0 && pins === listed;
   }, { timeout: 15000 });
   await page.waitForTimeout(600);
   const viewport = page.viewportSize();
   const sheetBox = await page.locator("[data-bottom-sheet]").boundingBox();
-  const pinBoxes = await page.locator(".maplibregl-marker .knock-pin").evaluateAll((nodes) =>
+  const pinBoxes = await page.locator(".maplibregl-marker [data-knock-pin]").evaluateAll((nodes) =>
     nodes.map((node) => {
       const box = node.getBoundingClientRect();
-      return { x: box.x, y: box.y, width: box.width, height: box.height, text: node.textContent };
+      return { x: box.x, y: box.y, width: box.width, height: box.height, text: node.textContent?.trim() ?? "" };
     }),
   );
   if (!sheetBox || !viewport) throw new Error("route sheet was not measured");
@@ -169,7 +174,7 @@ async function shoot(browser, label, options, theme, name) {
   if (sheetRatio > 0.52) throw new Error(`route sheet is ${Math.round(sheetRatio * 100)}% of the screen`);
   const hidden = pinBoxes.filter((pin) => pin.y < 70 || pin.y + pin.height > sheetBox.y + 2 || pin.x < 0 || pin.x + pin.width > viewport.width + 1);
   if (hidden.length) throw new Error(`stops outside the map above the sheet: ${JSON.stringify(hidden)}`);
-  const listed = await page.locator("[data-knock-sheet] .knock-list li").count();
+  const listed = await page.locator("[data-knock-stop]").count();
   if (pinBoxes.length !== listed) throw new Error(`map has ${pinBoxes.length} pins and the list has ${listed}`);
   for (let i = 0; i < pinBoxes.length; i += 1) {
     for (let j = i + 1; j < pinBoxes.length; j += 1) {
@@ -181,14 +186,31 @@ async function shoot(browser, label, options, theme, name) {
     }
   }
   const routeLabel = await page.locator("[data-knock-label]").innerText();
-  if (!/^Up to .+ hail$/.test(routeLabel)) throw new Error(`route label is "${routeLabel}"`);
-  const noteBox = await page.locator(".knock-note").boundingBox();
-  if (!noteBox || noteBox.height > 24) throw new Error(`route note is taller than one line (${noteBox?.height})`);
-  const last = page.locator("[data-knock-sheet] .knock-list li").last();
+  const hails = await page.locator("[data-knock-stop]").evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute("data-hail"))).filter((value) => Number.isFinite(value)),
+  );
+  const formatInches = (value) => {
+    const rounded = Math.round(value * 100) / 100;
+    if (Number.isInteger(rounded)) return String(rounded);
+    return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  };
+  const low = formatInches(Math.min(...hails));
+  const high = formatInches(Math.max(...hails));
+  const expectedLabel = low === high ? `${high}" hail` : `${low}–${high}" hail`;
+  if (routeLabel !== expectedLabel) throw new Error(`route label is "${routeLabel}", expected "${expectedLabel}"`);
+  if (/radar hail/i.test(routeLabel)) throw new Error(`route label still uses the tapped swath: "${routeLabel}"`);
+  const noteFit = await page.locator("[data-knock-note]").evaluate((node) => ({
+    height: node.getBoundingClientRect().height,
+    overflow: node.scrollWidth - node.clientWidth,
+  }));
+  if (!noteFit || noteFit.height > 22 || noteFit.overflow > 1) throw new Error(`route note is not one line (${JSON.stringify(noteFit)})`);
+  const footFit = await page.locator(".knock-foot-note").evaluate((node) => node.scrollWidth - node.clientWidth);
+  if (footFit > 1) throw new Error("maps note does not fit on one line");
+  const last = page.locator("[data-knock-stop]").last();
   await last.scrollIntoViewIfNeeded();
   const lastBox = await last.boundingBox();
   const foot = await page.locator(".knock-foot").boundingBox();
-  if (!lastBox || !foot || lastBox.y + lastBox.height > foot.y - 4) {
+  if (!lastBox || !foot || lastBox.y + lastBox.height > foot.y - 8) {
     throw new Error(`last stop is under the maps footer ${JSON.stringify({ lastBox, foot })}`);
   }
   await page.locator("[data-knock-sheet] .knock-list").evaluate((node) => {
@@ -207,9 +229,12 @@ async function shoot(browser, label, options, theme, name) {
 async function main() {
   mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
+  const phoneOnly = process.env.PHONE_ONLY === "1";
+  const only = process.env.THEME_ONLY;
   for (const [theme, name] of themes) {
+    if (only && theme !== only && name !== only) continue;
     await shoot(browser, "phone", phone, theme, name);
-    await shoot(browser, "desktop", desktop, theme, name);
+    if (!phoneOnly) await shoot(browser, "desktop", desktop, theme, name);
   }
   await browser.close();
 }

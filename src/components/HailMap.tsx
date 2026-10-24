@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import Map, {
@@ -14,7 +14,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
-import { raiseKnockRoute, spreadPixelOffsets } from "@/lib/knock-route";
+import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
@@ -601,7 +601,7 @@ export default function HailMap({
     onBackgroundClick?.();
   }
 
-  const knockOffsets = useMemo(() => {
+  const projectedOffsets = useMemo(() => {
     if (!knockStops?.length) return [] as Array<[number, number]>;
     const map = mapRef.current?.getMap();
     if (!map) return knockStops.map(() => [0, 0] as [number, number]);
@@ -609,8 +609,56 @@ export default function HailMap({
       const projected = map.project([stop.lon, stop.lat]);
       return { x: projected.x, y: projected.y };
     });
-    return spreadPixelOffsets(points);
+    return spreadPixelOffsets(points, KNOCK_PIN_GAP);
   }, [knockStops, cameraTick]);
+  const projectionKey = projectedOffsets.map((pair) => pair.join(",")).join("|");
+  const [knockRepair, setKnockRepair] = useState<{ key: string; shifts: Array<[number, number]>; passes: number }>({
+    key: "",
+    shifts: [],
+    passes: 0,
+  });
+  const repair = knockRepair.key === projectionKey ? knockRepair.shifts : [];
+  const knockShift = projectedOffsets.map(
+    (pair, index) => [pair[0] + (repair[index]?.[0] ?? 0), pair[1] + (repair[index]?.[1] ?? 0)] as [number, number],
+  );
+  const shiftKey = knockShift.map((pair) => pair.join(",")).join("|");
+  const [pinSeen, setPinSeen] = useState(0);
+
+  useEffect(() => {
+    if (!knockStops?.length) return;
+    const id = window.requestAnimationFrame(() => setPinSeen((value) => value + 1));
+    return () => window.cancelAnimationFrame(id);
+  }, [knockStops, projectionKey]);
+
+  useLayoutEffect(() => {
+    if (!knockStops?.length || (knockRepair.key === projectionKey && knockRepair.passes > 4)) return;
+    const nodes = [...document.querySelectorAll<HTMLElement>(".maplibregl-marker [data-knock-pin]")];
+    if (nodes.length < 2) return;
+    const mapRect = mapRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
+    const sheet = document.querySelector("[data-bottom-sheet]")?.getBoundingClientRect();
+    const header = document.querySelector(".map-chrome")?.getBoundingClientRect();
+    const bounds =
+      mapRect && (sheet?.top ?? mapRect.bottom) - (header?.bottom ?? mapRect.top) > 80
+        ? {
+            left: mapRect.left + 6,
+            top: (header?.bottom ?? mapRect.top) + 6,
+            right: mapRect.right - 6,
+            bottom: (sheet?.top ?? mapRect.bottom) - 6,
+          }
+        : undefined;
+    const boxes = nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+    });
+    const extra = separateScreenPins(boxes, 6, bounds);
+    if (extra.every(([x, y]) => x === 0 && y === 0)) return;
+    const base = knockRepair.key === projectionKey ? knockRepair.shifts : [];
+    setKnockRepair({
+      key: projectionKey,
+      passes: (knockRepair.key === projectionKey ? knockRepair.passes : 0) + 1,
+      shifts: extra.map((pair, index) => [(base[index]?.[0] ?? 0) + pair[0], (base[index]?.[1] ?? 0) + pair[1]]),
+    });
+  }, [knockStops, projectionKey, shiftKey, knockRepair, pinSeen]);
 
   return (
     <Map
@@ -1131,17 +1179,20 @@ export default function HailMap({
           />
         </Source>
       ) : null}
-      {knockStops?.map((stop, index) => (
-        <Marker
-          key={stop.id}
-          longitude={stop.lon}
-          latitude={stop.lat}
-          anchor="center"
-          offset={knockOffsets[index]}
-        >
-          <span className="knock-pin">{stop.n}</span>
-        </Marker>
-      ))}
+      {knockStops?.map((stop, index) => {
+        const shift = knockShift[index] ?? [0, 0];
+        return (
+          <Marker key={`${stop.n}-${stop.id}`} longitude={stop.lon} latitude={stop.lat} anchor="center" style={{ zIndex: stop.n }}>
+            <span
+              className="knock-pin knock-map-pin"
+              data-knock-pin={stop.n}
+              style={{ transform: `translate(${shift[0]}px, ${shift[1]}px)` }}
+            >
+              {stop.n}
+            </span>
+          </Marker>
+        );
+      })}
       {userLocation ? (
         <Marker longitude={userLocation.lon} latitude={userLocation.lat} anchor="center">
           <span className="user-dot-hit">

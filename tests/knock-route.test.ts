@@ -5,13 +5,19 @@ import {
   appleMapsHref,
   circlePolygon,
   googleMapsHref,
+  compactBands,
+  dropHoles,
   knockHailLabel,
   knockPinOffsets,
+  meshHailAt,
   orderKnockStops,
   raiseKnockRoute,
+  separateScreenPins,
+  spreadPixelOffsets,
   streetsFromWays,
   type KnockStop,
 } from "@/lib/knock-route";
+import { pointInGeometry } from "@/lib/geo";
 
 const area: GeoJSON.Polygon = {
   type: "Polygon",
@@ -107,9 +113,83 @@ describe("door-knock route", () => {
   });
 
   it("names the route from the hail on the stops", () => {
-    expect(knockHailLabel([{ hailIn: 1.5 }, { hailIn: 2 }])).toBe('Up to 2" hail');
-    expect(knockHailLabel([{ hailIn: 1.5 }])).toBe('Up to 1.5" hail');
+    expect(knockHailLabel([{ hailIn: 1.5 }, { hailIn: 2 }])).toBe('1.5–2" hail');
+    expect(knockHailLabel([{ hailIn: 1.5 }])).toBe('1.5" hail');
     expect(knockHailLabel([])).toBe("Door-knock route");
+  });
+
+  it("reads the hail band under the pin, including a harder core inside a tapped ring", () => {
+    const holed: GeoJSON.Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-111.9, 33.3],
+          [-111.7, 33.3],
+          [-111.7, 33.5],
+          [-111.9, 33.5],
+          [-111.9, 33.3],
+        ],
+        [
+          [-111.84, 33.38],
+          [-111.8, 33.38],
+          [-111.8, 33.42],
+          [-111.84, 33.42],
+          [-111.84, 33.38],
+        ],
+      ],
+    };
+    const core: GeoJSON.Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-111.84, 33.38],
+          [-111.8, 33.38],
+          [-111.8, 33.42],
+          [-111.84, 33.42],
+          [-111.84, 33.38],
+        ],
+      ],
+    };
+    expect(pointInGeometry(-111.82, 33.4, holed)).toBe(false);
+    expect(pointInGeometry(-111.82, 33.4, dropHoles(holed))).toBe(true);
+    expect(meshHailAt(-111.82, 33.4, [{ properties: { minIn: 1 }, geometry: holed }, { properties: { minIn: 2 }, geometry: core }], 1)).toBe(2);
+    const inside = streetsFromWays(
+      [way(9, "Core Street", 33.4, -111.82)],
+      dropHoles(holed),
+      [{ minIn: 2, geometry: core }],
+      { lat: 33.4, lon: -111.82 },
+      1,
+    );
+    expect(inside.map((stop) => stop.hailIn)).toEqual([2]);
+  });
+
+  it("keeps a higher hail band that is not the first polygon in the file", () => {
+    const square = (minIn: number, pad: number): GeoJSON.Polygon => ({
+      type: "Polygon",
+      coordinates: [
+        [
+          [-111.9 - pad, 33.3 - pad],
+          [-111.7 + pad, 33.3 - pad],
+          [-111.7 + pad, 33.5 + pad],
+          [-111.9 - pad, 33.5 + pad],
+          [-111.9 - pad, 33.3 - pad],
+        ],
+      ],
+    });
+    const bands = compactBands(
+      [
+        { properties: { minIn: 0.75 }, geometry: square(0.75, 0.02) },
+        { properties: { minIn: 0.75 }, geometry: square(0.75, 0.03) },
+        { properties: { minIn: 1 }, geometry: square(1, 0.01) },
+        { properties: { minIn: 1 }, geometry: square(1, 0) },
+        { properties: { minIn: 1 }, geometry: square(1, 0.04) },
+        { properties: { minIn: 1 }, geometry: square(1, 0.05) },
+        { properties: { minIn: 2 }, geometry: square(2, 0) },
+      ],
+      { lat: 33.4, lon: -111.82 },
+    );
+    expect(bands.some((band) => band.minIn === 2)).toBe(true);
+    expect(bands[0].minIn).toBe(2);
   });
 
   it("slides a stacked stop far enough that its number is readable", () => {
@@ -126,6 +206,26 @@ describe("door-knock route", () => {
         expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(30);
       }
     }
+    const close = spreadPixelOffsets(
+      [
+        { x: 100, y: 200 },
+        { x: 108, y: 200 },
+      ],
+      48,
+    );
+    const apart = Math.hypot(108 + close[1][0] - 100, 200 + close[1][1] - 200);
+    expect(apart).toBeGreaterThanOrEqual(48);
+    const boxes = separateScreenPins(
+      [
+        { x: 40, y: 80, w: 32, h: 32 },
+        { x: 48, y: 84, w: 32, h: 32 },
+      ],
+      6,
+    );
+    const moved = { x: 48 + boxes[1][0], y: 84 + boxes[1][1], w: 32, h: 32 };
+    const gapX = Math.max(40, moved.x) - Math.min(72, moved.x + moved.w);
+    const gapY = Math.max(80, moved.y) - Math.min(112, moved.y + moved.h);
+    expect(gapX >= 6 || gapY >= 6).toBe(true);
   });
 
   it("uses a pin link when the route is a single street", () => {

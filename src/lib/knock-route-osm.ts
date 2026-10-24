@@ -5,6 +5,7 @@ import { dataDir } from "@/lib/db";
 import { pointInGeometry } from "@/lib/geo";
 import { userAgent } from "@/lib/ingest";
 import {
+  dropHoles,
   geometryBounds,
   knockWorkGeometry,
   orderKnockStops,
@@ -70,7 +71,8 @@ export async function findKnockRoute(input: {
   bands: HailBand[];
   fallbackHail: number;
 }): Promise<{ stops: KnockStop[]; note: string }> {
-  const work = knockWorkGeometry(input.geometry, input.focus);
+  const area = dropHoles(input.geometry);
+  const work = knockWorkGeometry(area, input.focus);
   const bounds = geometryBounds(work);
   if (!bounds) throw new Error("That area has no outline");
   const key = createHash("sha1")
@@ -94,14 +96,13 @@ export async function findKnockRoute(input: {
       fs.writeFileSync(file, JSON.stringify({ at: Date.now(), elements }));
     }
   }
-  const ranked = streetsFromWays(elements, input.geometry, input.bands, input.focus, input.fallbackHail).filter((stop) =>
+  const ranked = streetsFromWays(elements, area, input.bands, input.focus, input.fallbackHail).filter((stop) =>
     pointInGeometry(stop.lon, stop.lat, work),
   );
   const stops = orderKnockStops(ranked, input.focus);
+  const count = stops.length === 1 ? "1 stop" : `${stops.length} stops`;
   return {
     stops,
-    note: stops.length
-      ? "Named streets in this swath, hardest hail first."
-      : "No named residential streets in this area.",
+    note: stops.length ? `${count}, hardest hail first.` : "No named residential streets in this area.",
   };
 }

@@ -67,7 +67,7 @@ import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
 import { showHoneyRanking } from "@/lib/honey";
-import { circlePolygon, compactBands, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
+import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
 import { reportsToSwaths } from "@/lib/swath";
 import type { Confidence } from "@/lib/confidence";
@@ -1421,8 +1421,14 @@ export default function HailApp() {
       });
       const payload = (await response.json()) as { stops?: KnockStop[]; note?: string; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not build that route");
-      const stops = payload.stops ?? [];
-      setKnock({ label: stops.length ? knockHailLabel(stops) : input.label, stops, mode: "walk", note: payload.note ?? null });
+      const stops = hailAlongStops(payload.stops ?? [], meshCollection?.features ?? []);
+      const countNote = stops.length === 1 ? "1 stop, hardest hail first." : `${stops.length} stops, hardest hail first.`;
+      setKnock({
+        label: stops.length ? knockHailLabel(stops) : input.label,
+        stops,
+        mode: "walk",
+        note: stops.length ? countNote : (payload.note ?? null),
+      });
       setHoneyOpen(false);
       if (stops.length) {
         const lons = stops.map((stop) => stop.lon);

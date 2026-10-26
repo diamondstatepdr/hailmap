@@ -355,14 +355,21 @@ button {
     left: 0.55rem;
     bottom: calc(var(--honey-stack, calc(min(48dvh, 28rem) + 0.5rem)) + 1.35rem);
   }
+
+  div:has(> .honey-dock) .maplibregl-ctrl-attrib[data-credit="open"] .maplibregl-ctrl-attrib-inner {
+    right: auto;
+    left: 0;
+  }
 }
 
 .maplibregl-ctrl-attrib.maplibregl-compact {
   margin: 0 !important;
   min-height: 44px;
   padding: 0 !important;
+  border: 1.5px solid #102033;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.96) !important;
+  color-scheme: light;
   box-shadow: 0 6px 16px rgba(8, 12, 20, 0.22);
 }
 
@@ -374,9 +381,10 @@ button {
   right: auto !important;
   top: auto !important;
   background-color: transparent !important;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='%23102033' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E") !important;
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 22px 22px;
+  background-size: 22px 22px !important;
 }
 
 /* Closed until the info button sets data-credit. MapLibre's compact-show class is not the source of truth. */
@@ -397,7 +405,7 @@ button {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.97);
   color: #142033;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.35;
   white-space: normal;
   box-shadow: 0 8px 20px rgba(8, 12, 20, 0.28);
@@ -1321,6 +1329,7 @@ html.dark .honey-kicker {
 .honey-name {
   display: block;
   overflow: hidden;
+  padding-inline-end: 0.12em;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9rem;
@@ -1420,6 +1429,7 @@ html.dark .honey-kicker {
 .chase-title {
   min-width: 0;
   overflow: hidden;
+  padding-inline-end: 0.12em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2077,6 +2087,22 @@ html.dark .replay-range::-moz-range-thumb {
   color: var(--chrome-ink);
 }
 
+.map-topbar .address-search-input {
+  color-scheme: dark;
+  background-color: color-mix(in srgb, var(--chrome) 78%, #ffffff);
+  color: var(--chrome-ink);
+  caret-color: var(--chrome-ink);
+}
+
+.map-topbar .address-search-input::placeholder {
+  color: color-mix(in srgb, var(--chrome-ink) 78%, transparent);
+  opacity: 1;
+}
+
+.map-topbar .address-search-icon {
+  color: var(--chrome-ink);
+}
+
 .map-topbar input::placeholder,
 .map-topbar .text-muted {
   color: color-mix(in srgb, var(--chrome-ink) 74%, transparent);
@@ -2532,6 +2558,7 @@ html.dark .replay-range::-moz-range-thumb {
 .knock-title {
   margin: 0.15rem 0 0;
   overflow: hidden;
+  padding-inline-end: 0.12em;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 1.125rem;
@@ -4388,6 +4415,43 @@ body:has([data-install-prompt]) .maplibregl-ctrl-bottom-right {
   position: relative;
   min-width: 0;
   flex: 1;
+}
+
+.map-controls .address-search {
+  z-index: 3;
+}
+
+.address-search button {
+  color: var(--text);
+  background: transparent;
+}
+
+.map-topbar .address-search button {
+  color: var(--text);
+}
+
+html:not(.dark) .address-search ul {
+  color-scheme: light;
+}
+
+html.dark .address-search ul {
+  color-scheme: dark;
+}
+
+.address-search-list button {
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.year-browse-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 14rem;
+  margin-top: 0.55rem;
+  overflow: auto;
 }
 
 .address-search-icon {

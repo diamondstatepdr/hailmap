@@ -22,6 +22,7 @@ import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { CANVASS_COLORS, canvassStatusLabel, type CanvassStatus } from "@/lib/canvass";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import { toggleMapCredit } from "@/lib/map-credit";
+import { relaxPlaceLabels } from "@/lib/place-labels";
 import stateOverlay from "@/data/us-states.json";
 import { SIGNIFICANT_COLOR, THREAT_LEGEND, threatFromProperties, type ThreatInfo } from "@/lib/threats";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -533,11 +534,15 @@ export default function HailMap({
     const map = mapRef.current?.getMap();
     const root = map?.getContainer()?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
     if (!root?.classList.contains("maplibregl-compact")) return;
+    const summary = root.querySelector("summary");
+    if (summary && summary.getAttribute("aria-label") !== "Map credits") {
+      summary.setAttribute("aria-label", "Map credits");
+      summary.setAttribute("title", "Map credits");
+    }
     if (root.dataset.credit === "open" || root.dataset.credit === "closed") return;
     root.dataset.credit = "closed";
     root.classList.remove("maplibregl-compact-show");
     root.removeAttribute("open");
-    const summary = root.querySelector("summary");
     summary?.addEventListener(
       "click",
       (event) => {
@@ -568,6 +573,7 @@ export default function HailMap({
     if (map.getLayer("state-names") && layers[layers.length - 1]?.id !== "state-names") {
       map.moveLayer("state-names");
     }
+    relaxPlaceLabels(map);
   }
 
   function moneyHitFrom(event: MapLayerMouseEvent): (GlanceHit & { key: string }) | null {

@@ -1,4 +1,5 @@
 import { validLatLon } from "@/lib/geo";
+import { repairPlaceName } from "@/lib/place-name";
 
 export interface GeocodeHit {
   label: string;
@@ -51,11 +52,12 @@ export function parseCensusLocations(payload: unknown): GeocodeHit[] {
     if (!validLatLon(lat, lon)) continue;
     const parts = (row.addressComponents ?? {}) as Record<string, unknown>;
     const stateRaw = text(parts.state, 8);
+    const city = text(parts.city, 80);
     hits.push({
-      label: text(row.matchedAddress, 180) ?? `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+      label: repairPlaceName(text(row.matchedAddress, 180) ?? `${lat.toFixed(4)}, ${lon.toFixed(4)}`),
       lat,
       lon,
-      city: text(parts.city, 80),
+      city: city ? repairPlaceName(city) : null,
       state: stateRaw && /^[A-Za-z]{2}$/.test(stateRaw) ? stateRaw.toUpperCase() : stateRaw,
       zip: text(parts.zip, 10),
       source: "census",
@@ -79,10 +81,10 @@ export function parseNominatim(payload: unknown): GeocodeHit[] {
     const city = text(address.city, 80) ?? text(address.town, 80) ?? text(address.village, 80);
     const state = text(address.state, 40);
     hits.push({
-      label: text(row.display_name, 180) ?? `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+      label: repairPlaceName(text(row.display_name, 180) ?? `${lat.toFixed(4)}, ${lon.toFixed(4)}`),
       lat,
       lon,
-      city,
+      city: city ? repairPlaceName(city) : null,
       state,
       zip: text(address.postcode, 12),
       source: "nominatim",

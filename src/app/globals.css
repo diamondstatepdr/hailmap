@@ -2829,6 +2829,70 @@ html.dark .replay-range::-moz-range-thumb {
   text-align: left;
 }
 
+.money-glance {
+  width: max-content;
+  max-width: min(16.5rem, 74vw);
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  background: var(--panel);
+  padding: 0.45rem 0.6rem 0.55rem;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.money-glance.is-sheet {
+  width: 100%;
+  max-width: none;
+  margin: 0.55rem 0 0.15rem;
+}
+
+.money-glance-kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html.dark .money-glance-kicker {
+  color: var(--mark);
+}
+
+.money-glance-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.28rem;
+}
+
+.money-glance-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.05rem;
+}
+
+.money-glance-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.money-glance-copy small,
+.money-glance-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.money-glance-hint {
+  margin: 0.2rem 0 0;
+}
+
 .canvass-pin-card {
   position: relative;
   z-index: 2;

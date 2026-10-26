@@ -31,7 +31,9 @@ import AlertsPanel from "@/components/panels/AlertsPanel";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import ReportsPanel, { type SavedReport } from "@/components/panels/ReportsPanel";
 import ChaseMapButton from "@/components/chase/ChaseMapButton";
+import { chaseStops } from "@/components/chase/ChaseList";
 import ChasePopup from "@/components/chase/ChasePopup";
+import { MoneyGlanceCard } from "@/components/map/MoneyGlance";
 import HoneyPanel, { type HoneyMode, type HoneySpotView } from "@/components/panels/HoneyPanel";
 import KnockRouteSheet from "@/components/panels/KnockRouteSheet";
 import ForecastSheet from "@/components/panels/ForecastSheet";
@@ -74,7 +76,8 @@ import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeView
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
-import { showHoneyRanking } from "@/lib/honey";
+import { HONEY_CITY_SPAN_KM, showHoneyRanking } from "@/lib/honey";
+import { areasFollowMap, glanceAt, honeyQueryFromMap, type GlancePlace } from "@/lib/money-glance";
 import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine, type KnockMode, type KnockStop } from "@/lib/knock-route";
 import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
 import { bandsForSelection, type ForecastQuery } from "@/lib/forecast";
@@ -233,6 +236,7 @@ export default function HailApp() {
   const [chasePopup, setChasePopup] = useState(false);
   const [chaseUnseen, setChaseUnseen] = useState(false);
   const [selectedHoneyId, setSelectedHoneyId] = useState<string | null>(null);
+  const [areaPick, setAreaPick] = useState<HoneySpotView | null>(null);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
   const [historyMode, setHistoryMode] = useState<HistoryMode>({ kind: "window" });
@@ -1794,29 +1798,32 @@ export default function HailApp() {
     setUser(null);
   }
 
+  const honeyBounds = rankBounds ?? viewBounds;
+  const honeySpan = honeyBounds ? haversineKm(honeyBounds.south, honeyBounds.west, honeyBounds.north, honeyBounds.east) : null;
+  const viewTooWide = honeySpan == null || honeySpan > HONEY_CITY_SPAN_KM;
+  const mapDay = historyMode.kind === "day" ? historyMode.date : meshDate || null;
   const honeyQuery = useMemo(() => {
-    const bounds = rankBounds ?? viewBounds;
-    if (!bounds) return "";
-    const day = historyMode.kind === "day" ? historyMode.date : meshDate;
-    const liveHours = !day && historyMode.kind === "window" && filter.hours <= 24 ? filter.hours : null;
-    if (!day && liveHours == null) return "";
-    const params = new URLSearchParams({
-      west: bounds.west.toFixed(2),
-      south: bounds.south.toFixed(2),
-      east: bounds.east.toFixed(2),
-      north: bounds.north.toFixed(2),
+    return honeyQueryFromMap({
+      bounds: honeyBounds,
+      historyKind: mapDay ? "day" : historyMode.kind,
+      day: mapDay,
+      hours: filter.hours,
+      originLat: userLocation?.lat ?? null,
+      originLon: userLocation?.lon ?? null,
     });
-    if (day) params.set("date", day);
-    else if (liveHours != null) params.set("hours", String(liveHours));
-    const originLat = userLocation?.lat ?? (bounds.south + bounds.north) / 2;
-    const originLon = userLocation?.lon ?? (bounds.west + bounds.east) / 2;
-    params.set("lat", originLat.toFixed(4));
-    params.set("lon", originLon.toFixed(4));
-    return params.toString();
-  }, [rankBounds, viewBounds, historyMode, meshDate, filter.hours, userLocation]);
+  }, [honeyBounds, historyMode, mapDay, filter.hours, userLocation]);
 
   const honeyReady = Boolean(honey) && showHoneyRanking({ partial: honey?.partial, loading: honeyLoading });
-  const honeyFinding = Boolean(honeyQuery) && !honeyReady && !honeyError;
+  const honeyFinding = Boolean(honeyQuery) && !viewTooWide && !honeyReady && !honeyError;
+  const allowAreaScores = chase
+    ? areasFollowMap({
+        historyKind: mapDay ? "day" : historyMode.kind,
+        hours: filter.hours,
+        date: mapDay,
+        chaseStart: chase.windowStart,
+        chaseEnd: chase.windowEnd,
+      })
+    : false;
   const honeyCollection = useMemo(() => {
     const collection = honey?.heat?.[honeyMode];
     if (!showHoney || !collection || !showHoneyRanking({ partial: honey?.partial })) return null;
@@ -1832,7 +1839,43 @@ export default function HailApp() {
     };
   }, [honey, honeyMode, selectedHoneyId, showHoney]);
 
+  const visibleAreas = useMemo(() => {
+    if (!chase || !allowAreaScores) return [] as ChaseStop[];
+    return chaseStops(chase, honeyMode, false)
+      .filter((stop) => (mapDay && historyMode.kind !== "window" ? stop.date === mapDay : true))
+      .filter((stop) => {
+        if (!honeyBounds) return true;
+        return stop.lat >= honeyBounds.south && stop.lat <= honeyBounds.north && stop.lon >= honeyBounds.west && stop.lon <= honeyBounds.east;
+      })
+      .slice(0, 8);
+  }, [chase, allowAreaScores, honeyMode, honeyBounds, mapDay, historyMode.kind]);
+  const citySpots = honeyReady && !viewTooWide && !honey?.zoom ? (honey?.spots?.[honeyMode] ?? []) : [];
+  const areaSpots = visibleAreas.map(chaseToSpot);
+  const panelSpots = citySpots.length ? citySpots : viewTooWide || honey?.zoom ? areaSpots : [];
+  const glanceNoun = honeyMode === "pdr" ? "cars" : "homes";
+  const moneyGlanceContext = {
+    spots: citySpots.map((spot) => spotToGlance(spot, glanceNoun)),
+    areas: visibleAreas.map((stop) => ({ ...spotToGlance(chaseToSpot(stop), glanceNoun), bounds: stop.bounds })),
+    zoomedOut: viewTooWide || Boolean(honey?.zoom),
+    loading: honeyFinding,
+  };
+  const actionSpot = citySpots.find((spot) => spot.id === selectedHoneyId) ?? areaSpots.find((spot) => spot.id === selectedHoneyId) ?? areaPick;
+  const tappedGlance = (() => {
+    if (!area) return null;
+    const center = ringCenter(area.geometry);
+    const lat = area.anchorLat ?? center?.lat;
+    const lon = area.anchorLon ?? center?.lon;
+    if (lat == null || lon == null) return null;
+    return glanceAt({ lat, lon, geometry: area.geometry }, moneyGlanceContext);
+  })();
+
   useEffect(() => {
+    if (viewTooWide) {
+      setHoney(null);
+      setHoneyLoading(false);
+      setHoneyError(null);
+      return;
+    }
     if (!honeyOpen || !honeyQuery) return;
     setHoney(null);
     setHoneyLoading(true);
@@ -1869,7 +1912,7 @@ export default function HailApp() {
       window.clearTimeout(start);
       window.clearTimeout(retryTimer);
     };
-  }, [honeyOpen, honeyQuery]);
+  }, [honeyOpen, honeyQuery, viewTooWide]);
 
   const folded = Math.max(0, rawCount - reports.length);
   const hazards = filter.hazards ?? ["hail", "wind", "tornado"];
@@ -2115,8 +2158,10 @@ export default function HailApp() {
             honeyPanel={honeyOpen && section === "map"}
             visible={showMap}
             honey={honeyCollection}
+            moneyGlance={section === "map" && !replay.active ? moneyGlanceContext : null}
             onSelectHoney={(id) => {
               setSelectedHoneyId(id);
+              setAreaPick(null);
               const spot = honey?.spots?.[honeyMode]?.find((item) => item.id === id);
               if (!spot) return;
               holdRankUntil.current = Date.now() + 1600;
@@ -2573,28 +2618,30 @@ export default function HailApp() {
           {section === "map" && honeyOpen ? (
             <HoneyPanel
               label={
-                honey?.label ||
+                (honey?.label && honey.label !== "Money Hole" ? honey.label : null) ||
                 (historyMode.kind === "day"
                   ? formatDay(historyMode.date)
-                  : historyMode.kind === "window" && filter.hours <= 24
-                    ? windowPhrase(filter.hours)
-                    : "Pick a storm day")
+                  : mapDay
+                    ? formatDay(mapDay)
+                    : historyMode.kind === "window"
+                      ? windowPhrase(filter.hours)
+                      : "Hail on the map")
               }
               mode={honeyMode}
               onMode={setHoneyMode}
               showHeat={showHoney}
               onToggleHeat={() => setShowHoney((value) => !value)}
               loading={honeyFinding}
-              zoomedOut={Boolean(honey?.zoom)}
-              note={honeyReady && !honey?.zoom ? honey?.note ?? null : null}
+              zoomedOut={viewTooWide || Boolean(honey?.zoom)}
+              note={citySpots.length ? honey?.note ?? null : null}
               error={honeyError}
-              spots={honeyReady ? honey?.spots?.[honeyMode] ?? [] : []}
+              spots={panelSpots}
               selectedId={selectedHoneyId}
               needsDay={!honeyQuery}
+              showActions={Boolean(actionSpot)}
               distanceFrom={userLocation ? "you" : placePoint ? "search" : null}
               onRoute={() => {
-                const spots = honey?.spots?.[honeyMode] ?? [];
-                const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
+                const spot = actionSpot;
                 if (!spot) return;
                 void buildKnockRoute({
                   label: spot.name,
@@ -2606,8 +2653,7 @@ export default function HailApp() {
               routeBusy={knockBusy}
               routeError={knockError}
               onForecast={() => {
-                const spots = honey?.spots?.[honeyMode] ?? [];
-                const spot = spots.find((item) => item.id === selectedHoneyId) ?? spots[0];
+                const spot = actionSpot;
                 if (!spot) return;
                 const selection = circlePolygon(spot.lat, spot.lon, 1.8);
                 setForecast({
@@ -2625,14 +2671,19 @@ export default function HailApp() {
               }}
               attribution={honey?.attribution ?? "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports."}
               updatedAt={honey?.updatedAt ?? chase?.generatedAt ?? null}
-              onClose={() => setHoneyOpen(false)}
+              onClose={() => {
+                setHoneyOpen(false);
+                setAreaPick(null);
+              }}
               onSelect={(spot) => {
                 setSelectedHoneyId(spot.id);
                 setSelectedId(null);
                 setCounty(null);
                 setThreat(null);
                 holdRankUntil.current = Date.now() + 1600;
-                setFocus({ lat: spot.lat, lon: spot.lon, zoom: 13, nonce: Date.now() });
+                if (spot.kind === "area") setAreaPick(spot);
+                else setAreaPick(null);
+                setFocus({ lat: spot.lat, lon: spot.lon, zoom: spot.kind === "area" ? 11 : 13, nonce: Date.now() });
               }}
             />
           ) : null}
@@ -2781,6 +2832,7 @@ export default function HailApp() {
                     {swathSubtitle}
                   </p>
                 ) : null}
+                {tappedGlance ? <MoneyGlanceCard sheet score={tappedGlance.score} hint={tappedGlance.hint} /> : null}
                 {swathReadout ? (
                   <div className="swath-stats" data-swath-stats>
                     {swathReadout.bands.map((band) => (
@@ -3330,6 +3382,41 @@ function sourceSwath(
     geometry,
     minIn: Number.isFinite(minIn) ? minIn : selection.minIn,
     maxIn: Number.isFinite(maxIn) ? maxIn : selection.maxIn,
+  };
+}
+
+function chaseToSpot(stop: ChaseStop): HoneySpotView {
+  return {
+    id: stop.id,
+    name: stop.name,
+    kind: "area",
+    lat: stop.lat,
+    lon: stop.lon,
+    hailIn: Math.max(stop.radarIn ?? 0, stop.spotterIn ?? 0),
+    radarIn: stop.radarIn,
+    spotterIn: stop.spotterIn,
+    vehicles: stop.vehicles,
+    homes: stop.homes,
+    score: stop.score,
+    level: stop.level,
+    distanceKm: null,
+    sourceLabel: stop.sourceLabel,
+  };
+}
+
+function spotToGlance(spot: HoneySpotView, noun: "cars" | "homes"): GlancePlace {
+  return {
+    id: spot.id,
+    name: spot.name,
+    lat: spot.lat,
+    lon: spot.lon,
+    score: spot.score,
+    level: spot.level,
+    hailIn: spot.hailIn,
+    radarIn: spot.radarIn,
+    spotterIn: spot.spotterIn,
+    count: noun === "cars" ? spot.vehicles : spot.homes,
+    noun,
   };
 }
 

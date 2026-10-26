@@ -3,6 +3,7 @@
 import { Gem, X } from "lucide-react";
 import Explain from "@/components/ui/Explain";
 import UpdatedLine from "@/components/ui/UpdatedLine";
+import { MONEY_LOADING_HINT, MONEY_MAP_HINT, MONEY_ZOOM_HINT } from "@/lib/money-glance";
 import { formatHoneyDetail, RADAR_TIP, SCORE_TIP } from "@/lib/plain";
 import { formatMiles } from "@/lib/units";
 
@@ -48,9 +49,22 @@ interface Props {
   routeBusy?: boolean;
   routeError?: string | null;
   onForecast?: () => void;
+  /** Door-knock and the estimate stay hidden until a spot or hail area is chosen. */
+  showActions?: boolean;
 }
 
 export default function HoneyPanel(props: Props) {
+  const statusTip = props.error
+    ? props.error
+    : props.spots.length
+      ? null
+      : props.needsDay
+        ? MONEY_MAP_HINT
+        : props.loading
+          ? MONEY_LOADING_HINT
+          : props.zoomedOut
+            ? MONEY_ZOOM_HINT
+            : "No hail in this view. Move the map onto a hail path.";
   return (
     <aside
       className="honey-dock glass"
@@ -96,43 +110,20 @@ export default function HoneyPanel(props: Props) {
         <span className="honey-switch" aria-hidden />
         Show on the map
       </button>
-      {props.onRoute ? (
-        <button
-          type="button"
-          className="btn btn-primary press"
-          data-knock-route
-          disabled={Boolean(props.routeBusy || props.needsDay || !props.spots.length)}
-          onClick={props.onRoute}
-        >
-          {props.routeBusy ? "Building the route…" : "Door-knock route"}
-        </button>
+      {statusTip ? (
+        <p className="honey-note" data-money-tip>
+          {statusTip}
+        </p>
       ) : null}
-      {props.routeError ? <p className="honey-note">{props.routeError}</p> : null}
-      {props.onForecast ? (
-        <button type="button" className="btn btn-primary press" data-forecast-open disabled={!props.spots.length || props.needsDay} onClick={props.onForecast}>
-          Storm-to-cash estimate
-        </button>
-      ) : null}
+      {props.note && !props.error && props.spots.length ? <p className="honey-note">{props.note}</p> : null}
       <div className="honey-body">
-        {props.needsDay ? (
-          <p className="honey-note">Pick the day the hail fell. Money spots are ranked one storm at a time.</p>
-        ) : null}
-        {props.error ? <p className="honey-note">{props.error}</p> : null}
-        {props.note && !props.error ? <p className="honey-note">{props.note}</p> : null}
         {props.loading && !props.needsDay ? (
           <div aria-busy="true" className="space-y-2 px-1" data-honey-loading>
-            <p className="honey-note">Finding the best lots and neighborhoods…</p>
             <div className="honey-progress" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
             <div className="skeleton h-14" />
           </div>
-        ) : null}
-        {props.zoomedOut && !props.loading ? (
-          <p className="honey-note">Zoom in to a city to see the best stops.</p>
-        ) : null}
-        {!props.needsDay && !props.zoomedOut && !props.loading && !props.spots.length && !props.error ? (
-          <p className="honey-note">No hail here on this day. Move the map onto a hail path, or pick another storm day.</p>
         ) : null}
         {props.loading ? null : <ol className="honey-list">
           {props.spots.map((spot, index) => {
@@ -171,6 +162,23 @@ export default function HoneyPanel(props: Props) {
           })}
         </ol>}
       </div>
+      {props.routeError ? <p className="honey-note">{props.routeError}</p> : null}
+      {props.showActions && props.onRoute ? (
+        <button
+          type="button"
+          className="btn btn-primary press"
+          data-knock-route
+          disabled={Boolean(props.routeBusy)}
+          onClick={props.onRoute}
+        >
+          {props.routeBusy ? "Building the route…" : "Door-knock route"}
+        </button>
+      ) : null}
+      {props.showActions && props.onForecast ? (
+        <button type="button" className="btn btn-primary press" data-forecast-open onClick={props.onForecast}>
+          Storm-to-cash estimate
+        </button>
+      ) : null}
       {props.attribution ? <p className="honey-attrib">{props.attribution}</p> : null}
     </aside>
   );

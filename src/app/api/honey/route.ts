@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const hours = numberParam(url.searchParams.get("hours"));
   if (date && !isIsoDate(date)) return Response.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
   if (!date && (hours == null || !WINDOW_HOURS.has(hours))) {
-    return Response.json({ error: "Pick a storm day or a live time window." }, { status: 400 });
+    return Response.json({ error: "Money Hole uses the hail already on the map." }, { status: 400 });
   }
   const west = numberParam(url.searchParams.get("west"));
   const south = numberParam(url.searchParams.get("south"));

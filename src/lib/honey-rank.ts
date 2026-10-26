@@ -8,6 +8,7 @@ import {
   scorePlaces,
   spotsToHeat,
   toSpots,
+  HONEY_CITY_SPAN_KM,
   type HailEvidence,
   type HoneyBounds,
   type HoneyPlace,
@@ -43,8 +44,6 @@ export interface HoneyPayload {
 
 const ATTRIBUTION =
   "Lots and apartments © OpenStreetMap contributors. Homes from US Census ACS housing units. Hail from radar estimates and official spotter reports.";
-
-const MAX_SPAN_KM = 210;
 
 function rankingUpdatedAt(now: Date): string {
   return readStormRefresh()?.refreshedAt ?? now.toISOString();
@@ -256,7 +255,7 @@ export async function buildHoney(input: {
 }): Promise<HoneyPayload> {
   const now = input.now ?? new Date();
   const span = haversineKm(input.bounds.south, input.bounds.west, input.bounds.north, input.bounds.east);
-  if (span > MAX_SPAN_KM) {
+  if (span > HONEY_CITY_SPAN_KM) {
     return emptyPayload("Money Hole", "Zoom in to a city and Money Hole will rank the hail-hit stops.", true);
   }
   const plan = planMesh({ date: input.date, hours: input.date ? undefined : (input.hours ?? 24), now });

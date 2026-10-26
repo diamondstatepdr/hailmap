@@ -13,6 +13,8 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
+import { glanceAt, type GlanceHit, type MoneyGlanceContext } from "@/lib/money-glance";
+import { MoneyGlanceCard } from "@/components/map/MoneyGlance";
 import { swathTitle } from "@/lib/swath-measure";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
@@ -209,6 +211,8 @@ interface Props {
   onSelectArea?: (area: AreaSelection) => void;
   onSelectDealer?: (id: string) => void;
   onSelectHoney?: (id: string) => void;
+  /** Spots and weekly hail areas used to show a score on hover or tap. */
+  moneyGlance?: MoneyGlanceContext | null;
   onViewChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onPreviewBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   /** A finger, mouse, or wheel moved the camera. Programmatic fitBounds does not count. */
@@ -297,6 +301,7 @@ export default function HailMap({
   onSelectArea,
   onSelectDealer,
   onSelectHoney,
+  moneyGlance = null,
   onViewChange,
   onPreviewBounds,
   onUserMove,
@@ -305,6 +310,7 @@ export default function HailMap({
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [cameraTick, setCameraTick] = useState(0);
+  const [moneyHover, setMoneyHover] = useState<(GlanceHit & { key: string; pinned: boolean }) | null>(null);
   const flownNonce = useRef<number | null>(null);
   const mapStyle = useMapStyle(theme);
   const brand = useBrandPaint(theme);
@@ -564,6 +570,45 @@ export default function HailMap({
     }
   }
 
+  function moneyHitFrom(event: MapLayerMouseEvent): (GlanceHit & { key: string }) | null {
+    const features = event.features ?? [];
+    const honeyHit = features.find((feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat");
+    if (honeyHit?.properties?.id != null) {
+      const id = String(honeyHit.properties.id);
+      return { key: `spot:${id}`, lat: event.lngLat.lat, lon: event.lngLat.lng, spotId: id };
+    }
+    const hail = features.find((feature) => isRadarLayer(feature.layer?.id) || feature.layer?.id === "swath-fill");
+    const geometry = hail?.geometry;
+    if (!hail || (geometry?.type !== "Polygon" && geometry?.type !== "MultiPolygon")) return null;
+    const id = String(hail.properties?.id ?? hail.id ?? hail.layer?.id ?? "hail");
+    return { key: `hail:${id}`, lat: event.lngLat.lat, lon: event.lngLat.lng, geometry };
+  }
+
+  function showMoneyHover(hit: (GlanceHit & { key: string }) | null, pinned: boolean) {
+    if (!moneyGlance) {
+      setMoneyHover(null);
+      return;
+    }
+    setMoneyHover((current) => {
+      if (!hit) return pinned ? current : null;
+      const next = { ...hit, pinned };
+      if (
+        current &&
+        current.key === next.key &&
+        current.pinned === next.pinned &&
+        current.lat.toFixed(2) === next.lat.toFixed(2) &&
+        current.lon.toFixed(2) === next.lon.toFixed(2)
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }
+
+  function coarsePointer(): boolean {
+    return window.matchMedia("(pointer: coarse)").matches;
+  }
+
   function onClick(event: MapLayerMouseEvent) {
     if (pickMode) {
       onPickLocation(event.lngLat.lng, event.lngLat.lat);
@@ -581,6 +626,8 @@ export default function HailMap({
       (feature) => feature.layer?.id === "honey-pins" || feature.layer?.id === "honey-heat",
     );
     if (honeyHit?.properties?.id) {
+      const hit = moneyHitFrom(event);
+      if (hit) showMoneyHover(hit, coarsePointer());
       onSelectHoney?.(String(honeyHit.properties.id));
       return;
     }
@@ -634,6 +681,8 @@ export default function HailMap({
         const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
         const radar = isRadarLayer(feature.layer.id);
         const source = radar ? "mesh" : "reports";
+        const hover = moneyHitFrom(event);
+        if (hover) showMoneyHover(hover, coarsePointer());
         onSelectArea?.({
           id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
           label: swathTitle({ source, minIn, maxIn, label: props.label ? String(props.label) : undefined }),
@@ -666,6 +715,7 @@ export default function HailMap({
         return;
       }
     }
+    setMoneyHover(null);
     onBackgroundClick?.();
   }
 
@@ -728,6 +778,8 @@ export default function HailMap({
     });
   }, [knockStops, projectionKey, shiftKey, knockRepair, pinSeen]);
 
+  const moneyCard = moneyHover && moneyGlance ? glanceAt(moneyHover, moneyGlance) : null;
+
   return (
     <Map
       ref={mapRef}
@@ -782,6 +834,16 @@ export default function HailMap({
       onMouseMove={(event) => {
         const canvas = mapRef.current?.getCanvas();
         if (canvas) canvas.style.cursor = pickMode ? "crosshair" : event.features?.length ? "pointer" : "";
+        if (coarsePointer()) return;
+        const hit = moneyHitFrom(event);
+        if (!hit) {
+          setMoneyHover((current) => (current?.pinned ? current : null));
+          return;
+        }
+        showMoneyHover(hit, false);
+      }}
+      onMouseOut={() => {
+        setMoneyHover((current) => (current?.pinned ? current : null));
       }}
       style={{ width: "100%", height: "100%" }}
     >
@@ -1406,6 +1468,11 @@ export default function HailMap({
           onDragEnd={(event) => onPickLocation(event.lngLat.lng, event.lngLat.lat)}
         >
           <span className="draft-pin" />
+        </Marker>
+      ) : null}
+      {moneyHover && moneyCard && (moneyCard.score || moneyCard.hint) ? (
+        <Marker longitude={moneyHover.lon} latitude={moneyHover.lat} anchor="bottom" offset={[0, -16]} style={{ pointerEvents: "none" }}>
+          <MoneyGlanceCard score={moneyCard.score} hint={moneyCard.hint} />
         </Marker>
       ) : null}
     </Map>

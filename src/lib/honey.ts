@@ -231,6 +231,9 @@ export function scoreHoney(input: {
   return { raw, score, level: levelForScore(score) };
 }
 
+/** Wider than a city, Money Hole cannot rank lots yet. Same cutoff the ranker uses. */
+export const HONEY_CITY_SPAN_KM = 210;
+
 export function boundsSpanKm(bounds: HoneyBounds): number {
   return haversineKm(bounds.south, bounds.west, bounds.north, bounds.east);
 }

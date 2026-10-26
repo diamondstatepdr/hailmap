@@ -6,8 +6,8 @@ const STEPS = [
   "Search an address, or just move the map.",
   "Use Hail · 7 days to look at today, this week, or one storm day.",
   "Open Chase list for the biggest storms this week.",
-  "Open Money spots for the lots and neighborhoods under the hail.",
-  "Tap a colored hail path to see how big the stones were.",
+  "Open Money spots for the best stops under the hail already on the map.",
+  "Hover or tap a hail path to see the Money Hole score.",
 ];
 
 export default function HelpGuide({ onClose }: { onClose: () => void }) {

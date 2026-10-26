@@ -188,6 +188,18 @@ export default function FieldSheet({
                   </span>
                   <span className="block text-xs text-muted">{dealer.address}</span>
                 </button>
+                <span className="dealer-hit-actions px-2">
+                  {dealer.phone ? (
+                    <a href={`tel:${dealer.phone.replace(/[^\d+]/g, "")}`}>{dealer.phone}</a>
+                  ) : null}
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${dealer.lat.toFixed(5)},${dealer.lon.toFixed(5)}&travelmode=driving`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Directions
+                  </a>
+                </span>
               </li>
             ))}
           </ul>

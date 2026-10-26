@@ -13,6 +13,7 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import type { AreaSelection } from "@/lib/area-selection";
+import { swathTitle } from "@/lib/swath-measure";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
@@ -158,6 +159,7 @@ interface Props {
   mesh?: GeoJSON.FeatureCollection | null;
   meshPulse?: GeoJSON.FeatureCollection | null;
   dealers?: GeoJSON.FeatureCollection | null;
+  selectedDealerId?: string | null;
   income: GeoJSON.FeatureCollection | null;
   threats: GeoJSON.FeatureCollection | null;
   showPoints: boolean;
@@ -243,6 +245,7 @@ export default function HailMap({
   mesh = null,
   meshPulse = null,
   dealers = null,
+  selectedDealerId = null,
   income,
   threats,
   showPoints,
@@ -293,6 +296,20 @@ export default function HailMap({
   frameRef.current = frame;
   const outlookData = useMemo(() => subsetThreats(threats, ["outlook", "significant"]), [threats]);
   const alertData = useMemo(() => subsetThreats(threats, ["watch", "warning", "statement"]), [threats]);
+  const clusteredDealers = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (dealers?.features ?? []).filter((feature) => String(feature.properties?.id ?? "") !== (selectedDealerId ?? "")),
+    }),
+    [dealers, selectedDealerId],
+  );
+  const selectedDealer = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (dealers?.features ?? []).filter((feature) => String(feature.properties?.id ?? "") === (selectedDealerId ?? "")),
+    }),
+    [dealers, selectedDealerId],
+  );
   const interactiveLayerIds = [
     showHoney && honey?.features.length ? "honey-pins" : "",
     showHoney && honey?.features.length ? "honey-heat" : "",
@@ -303,6 +320,7 @@ export default function HailMap({
       ? ["mesh-a-fill", "mesh-b-fill", "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
       : [showMesh && mesh?.features.length ? "mesh-fill" : "", showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : ""]),
     showSwaths ? "swath-fill" : "",
+    dealers?.features.length ? "dealer-clusters" : "",
     dealers?.features.length ? "dealer-pins" : "",
     dealers?.features.length ? "dealer-hit" : "",
     showThreats ? "threat-warning-fill" : "",
@@ -466,6 +484,8 @@ export default function HailMap({
     try {
       if (!map.hasImage("mark-wind")) map.addImage("mark-wind", windGlyph(), { pixelRatio: 2 });
       if (!map.hasImage("mark-tornado")) map.addImage("mark-tornado", tornadoGlyph(), { pixelRatio: 2 });
+      if (!map.hasImage("mark-dealer")) map.addImage("mark-dealer", dealerGlyph("#0c6278"), { pixelRatio: 2 });
+      if (!map.hasImage("mark-dealer-on")) map.addImage("mark-dealer-on", dealerGlyph("#d97706"), { pixelRatio: 2 });
     } catch {
       /* Style swaps drop images; the next style event adds them again. */
     }
@@ -537,7 +557,10 @@ export default function HailMap({
       onSelectHoney?.(String(honeyHit.properties.id));
       return;
     }
-    for (const feature of event.features ?? []) {
+    const features = [...(event.features ?? [])].sort(
+      (a, b) => Number(isRadarLayer(b.layer?.id)) - Number(isRadarLayer(a.layer?.id)),
+    );
+    for (const feature of features) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
         const source = mapRef.current?.getSource("reports");
@@ -560,6 +583,19 @@ export default function HailMap({
         onSelectReport(String(props.id));
         return;
       }
+      if (feature.layer?.id === "dealer-clusters" && props.cluster_id != null) {
+        const source = mapRef.current?.getSource("dealers");
+        const geometry = feature.geometry;
+        if (!source || geometry.type !== "Point" || !("getClusterExpansionZoom" in source)) return;
+        const [lon, lat] = geometry.coordinates;
+        void (source as GeoJSONSource)
+          .getClusterExpansionZoom(Number(props.cluster_id))
+          .then((zoom) => {
+            mapRef.current?.easeTo({ center: [lon, lat], zoom: Math.max(zoom, 15), duration: 600 });
+          })
+          .catch(() => undefined);
+        return;
+      }
       if ((feature.layer?.id === "dealer-pins" || feature.layer?.id === "dealer-hit") && props.id) {
         onSelectDealer?.(String(props.id));
         return;
@@ -570,17 +606,22 @@ export default function HailMap({
         const minIn = numberProp(props.minIn);
         const maxIn = numberProp(props.maxIn ?? props.maxSizeIn);
         const radar = isRadarLayer(feature.layer.id);
+        const source = radar ? "mesh" : "reports";
         onSelectArea?.({
           id: String(props.id ?? feature.id ?? `${feature.layer.id}-${minIn}`),
-          label: radar
-            ? `Radar hail ${props.label ?? ""}`.trim()
-            : maxIn != null
-              ? `Report swath · ${maxIn.toFixed(2)} in`
-              : "Report swath",
-          source: radar ? "mesh" : "reports",
+          label: swathTitle({ source, minIn, maxIn, label: props.label ? String(props.label) : undefined }),
+          source,
           minIn,
           maxIn,
           geometry,
+          startedAt: typeof props.startedAt === "string" ? props.startedAt : null,
+          endedAt: typeof props.endedAt === "string" ? props.endedAt : null,
+          startLat: numberProp(props.startLat),
+          startLon: numberProp(props.startLon),
+          endLat: numberProp(props.endLat),
+          endLon: numberProp(props.endLon),
+          anchorLat: event.lngLat.lat,
+          anchorLon: event.lngLat.lng,
         });
         return;
       }
@@ -676,9 +717,11 @@ export default function HailMap({
           iconsBound.current = true;
           map.on("styleimagemissing", (event) => {
             const id = event.id;
-            if (id !== "mark-wind" && id !== "mark-tornado") return;
+            if (id !== "mark-wind" && id !== "mark-tornado" && id !== "mark-dealer" && id !== "mark-dealer-on") return;
             if (map.hasImage(id)) return;
-            map.addImage(id, id === "mark-wind" ? windGlyph() : tornadoGlyph(), { pixelRatio: 2 });
+            const glyph =
+              id === "mark-wind" ? windGlyph() : id === "mark-tornado" ? tornadoGlyph() : dealerGlyph(id === "mark-dealer-on" ? "#d97706" : "#0c6278");
+            map.addImage(id, glyph, { pixelRatio: 2 });
           });
         }
         installIcons();
@@ -1047,7 +1090,7 @@ export default function HailMap({
             paint={{
               "circle-color": brand.halo,
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 5, 6, 7, 10, 10],
-              "circle-opacity": 0.28,
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.22, 12, 0.1, 15, 0.04] as never,
             }}
           />
           <Layer
@@ -1083,7 +1126,8 @@ export default function HailMap({
                 1.8,
                 1,
               ] as never,
-              "circle-opacity": 0.94,
+              "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.95, 12, 0.45, 15, 0.16] as never,
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.94, 12, 0.55, 15, 0.22] as never,
             }}
           />
           <Layer
@@ -1116,20 +1160,60 @@ export default function HailMap({
         </Source>
       ) : null}
       {dealers?.features.length ? (
-        <Source id="dealers" type="geojson" data={dealers}>
+        <Source id="dealers" type="geojson" data={clusteredDealers} cluster clusterRadius={28} clusterMaxZoom={14}>
+          <Layer
+            id="dealer-clusters"
+            type="circle"
+            filter={["has", "point_count"]}
+            paint={{
+              "circle-color": "#0c6278",
+              "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 2, 11, 8, 14, 20, 16],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 1.5,
+              "circle-opacity": 0.94,
+            }}
+          />
+          <Layer
+            id="dealer-cluster-count"
+            type="symbol"
+            filter={["has", "point_count"]}
+            layout={{
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-size": 11,
+              "text-font": ["Noto Sans Bold"],
+              "text-allow-overlap": true,
+            }}
+            paint={{ "text-color": "#ffffff" }}
+          />
           <Layer
             id="dealer-hit"
             type="circle"
-            paint={{ "circle-color": "#000000", "circle-radius": 22, "circle-opacity": 0 }}
+            filter={["!", ["has", "point_count"]]}
+            paint={{ "circle-color": "#000000", "circle-radius": 14, "circle-opacity": 0 }}
           />
           <Layer
             id="dealer-pins"
-            type="circle"
-            paint={{
-              "circle-color": "#0c6278",
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 8, 14, 11],
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 2,
+            type="symbol"
+            filter={["!", ["has", "point_count"]]}
+            layout={{
+              "icon-image": "mark-dealer",
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.4, 13, 0.48, 16, 0.56],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            }}
+          />
+        </Source>
+      ) : null}
+      {selectedDealer.features.length ? (
+        <Source id="dealer-selected" type="geojson" data={selectedDealer}>
+          <Layer
+            id="dealer-selected-pin"
+            type="symbol"
+            layout={{
+              "icon-image": "mark-dealer-on",
+              "icon-size": 0.72,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
             }}
           />
         </Source>
@@ -1239,6 +1323,32 @@ function windGlyph(): ImageData {
   });
 }
 
+function dealerGlyph(color: string): ImageData {
+  return glyphCanvas((ctx) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(32, 32, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(18, 34);
+    ctx.lineTo(24, 23);
+    ctx.quadraticCurveTo(32, 18, 40, 23);
+    ctx.lineTo(46, 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(14, 32, 36, 11);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(22, 44, 4.2, 0, Math.PI * 2);
+    ctx.arc(42, 44, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
 function tornadoGlyph(): ImageData {
   return glyphCanvas((ctx) => {
     ctx.strokeStyle = "#ffffff";
@@ -1264,6 +1374,30 @@ function numberProp(value: unknown): number | null {
 
 const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const SWATH_FADE_MS = 420;
+
+/** Regional zoom keeps the swath readable. Street zoom drops the fill so roads show, and the contour stays. */
+function zoomFill(fill: number): number | unknown[] {
+  if (fill <= 0) return 0;
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    5,
+    fill,
+    9.5,
+    Math.max(0.46, fill * 0.85),
+    12,
+    0.72,
+    14.2,
+    0.6,
+    16,
+    0.48,
+  ];
+}
+
+function zoomLine(width: number): unknown[] {
+  return ["interpolate", ["linear"], ["zoom"], 6, Math.max(1.4, width * 0.9), 11, width + 0.7, 13.5, width + 1.7, 15.5, width + 2.3];
+}
 
 function isRadarLayer(id?: string): boolean {
   if (!id || id.endsWith("-line")) return false;
@@ -1376,6 +1510,8 @@ function SwathSource({
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
+  const halo = theme === "dark" ? "#f7fbff" : "#102033";
+  const contour = theme === "dark" ? "#f8fafc" : "#102033";
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
       <Layer
@@ -1385,7 +1521,7 @@ function SwathSource({
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": fill,
+            "fill-opacity": zoomFill(fill) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }
@@ -1397,8 +1533,8 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": swathColor as never,
-            "line-width": lineWidth + 3.2,
+            "line-color": halo,
+            "line-width": zoomLine(lineWidth + 2.4) as never,
             "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
@@ -1412,8 +1548,8 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": swathColor as never,
-            "line-width": lineWidth,
+            "line-color": contour,
+            "line-width": zoomLine(lineWidth) as never,
             "line-opacity": lineOpacity,
             "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),

@@ -164,9 +164,18 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
   const features: GeoJSON.Feature[] = [];
 
   clusters.forEach((cluster, index) => {
-    const times = cluster.map((point) => Date.parse(point.occurredAt)).sort((a, b) => a - b);
+    const timed = [...cluster].sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+    const times = timed.map((point) => Date.parse(point.occurredAt));
     const startedAt = new Date(times[0]).toISOString();
     const endedAt = new Date(times[times.length - 1]).toISOString();
+    const first = timed[0];
+    const last = timed[timed.length - 1];
+    const motion = {
+      startLat: first.lat,
+      startLon: first.lon,
+      endLat: last.lat,
+      endLon: last.lon,
+    };
     const confidence = bestConfidence(cluster);
     const sized = cluster.filter((point) => point.sizeIn != null && point.sizeIn >= MESH_LEGEND[0].minIn);
     if (!sized.length) {
@@ -193,6 +202,7 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
           showLabel: false,
           startedAt,
           endedAt,
+          ...motion,
           confidence,
         },
       });
@@ -234,6 +244,7 @@ export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {
           ink: row.band.ink,
           startedAt,
           endedAt,
+          ...motion,
           confidence,
         },
       });

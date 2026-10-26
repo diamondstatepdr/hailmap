@@ -8,6 +8,7 @@ import { gunzipIfNeeded, readGribMesh } from "@/lib/grib-mesh";
 import {
   cellsToSwaths,
   indexCells,
+  sampleCell,
   sampleIndexed,
   swathBounds,
   type MeshCell,
@@ -410,6 +411,27 @@ export async function radarSampleFor(plan: MeshRequestPlan, lat: number, lon: nu
         ? `${plan.note} Nothing at or above 0.50 in covers this point.`
         : plan.note;
   return { status, maxIn, days, note, label: plan.label };
+}
+
+/** Exact MESH cell under each point, one grid load for the whole list. */
+export async function meshAtPoints(
+  plan: MeshRequestPlan,
+  points: Array<{ lat: number; lon: number }>,
+  now = new Date(),
+): Promise<Array<number | null>> {
+  const grids = await loadPlanGrids(plan, now);
+  const indexed = grids
+    .filter((grid) => grid.status !== "error" && grid.cells.length && grid.shape.nx)
+    .map((grid) => ({ shape: grid.shape, index: indexCells(grid.cells, grid.shape) }));
+  return points.map((point) => {
+    let max: number | null = null;
+    for (const grid of indexed) {
+      const value = sampleCell(grid.index, grid.shape, point.lat, point.lon);
+      if (value == null) continue;
+      max = max == null ? value : Math.max(max, value);
+    }
+    return max;
+  });
 }
 
 /** Swaths near a point, for the printable map. Uses the same cached grids as the sample. */

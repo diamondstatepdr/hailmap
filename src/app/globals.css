@@ -72,6 +72,7 @@ button {
 .map-quick-row {
   display: flex;
   max-width: 100%;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
 }
@@ -276,10 +277,46 @@ button {
 }
 
 .map-legend {
-  bottom: 0.7rem;
-  left: 0.75rem;
+  bottom: 0.55rem;
+  left: 0.55rem;
   /* Leave the info button a clear corner so the hail legend cannot cover it. */
-  right: 4.4rem;
+  right: auto;
+  max-width: min(15.5rem, calc(100% - 5.2rem));
+}
+
+.map-legend-card {
+  display: grid;
+  gap: 0.18rem;
+  max-width: 100%;
+  border-radius: 0.85rem;
+  padding: 0.32rem 0.45rem;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.map-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.18rem 0.38rem;
+}
+
+.map-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  white-space: nowrap;
+}
+
+.map-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border-radius: 2px;
+}
+
+.map-legend-swatch.is-round {
+  border-radius: 999px;
 }
 
 .maplibregl-ctrl-top-right {
@@ -2655,6 +2692,207 @@ html.dark .replay-range::-moz-range-thumb {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.canvass-card {
+  margin-top: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel-2);
+  padding: 0.65rem 0.7rem 0.7rem;
+}
+
+.canvass-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.canvass-status {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 680;
+  text-align: left;
+}
+
+.canvass-status[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--canvass);
+  color: #fff;
+}
+
+.canvass-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.canvass-counts {
+  margin-top: 0.35rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.canvass-rep {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.canvass-legend {
+  display: inline-flex;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--chrome-line);
+  border-radius: 999px;
+  background: linear-gradient(115deg, var(--chrome), var(--chrome-2));
+  color: var(--chrome-ink);
+  padding: 0 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1;
+  pointer-events: auto;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--chrome) 40%, transparent);
+}
+
+.canvass-legend-count {
+  display: inline-grid;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.68rem;
+}
+
+.canvass-key {
+  display: grid;
+  gap: 0.16rem;
+  width: max-content;
+  max-width: 100%;
+  border-radius: 0.85rem;
+  padding: 0.38rem 0.55rem 0.42rem;
+  font-size: 11px;
+  line-height: 1.15;
+  pointer-events: auto;
+}
+
+.canvass-key-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.canvass-key-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.canvass-key-row i,
+.canvass-pin-card-top i {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(16, 32, 51, 0.45);
+}
+
+.canvass-key button {
+  margin-top: 0.1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.canvass-pin-card {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 0.12rem;
+  width: max-content;
+  max-width: min(13.5rem, 68vw);
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--panel);
+  padding: 0.45rem 0.6rem 0.5rem;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.canvass-pin-card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.canvass-pin-card p {
+  margin: 0;
+}
+
+.canvass-pin-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.canvass-pin-card-top p {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.canvass-pin-card-top button {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.canvass-pin-card-rep {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.canvass-form textarea,
+.canvass-card textarea {
+  color: var(--text);
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,

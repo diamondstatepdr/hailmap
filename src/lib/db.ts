@@ -177,6 +177,34 @@ function migrate(db: Database.Database) {
       last_sent_at TEXT,
       last_result TEXT
     );
+    CREATE TABLE IF NOT EXISTS canvass_stops (
+      id TEXT PRIMARY KEY,
+      team_key TEXT NOT NULL,
+      address_key TEXT NOT NULL,
+      address TEXT NOT NULL,
+      lat REAL NOT NULL,
+      lon REAL NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      hail_in REAL,
+      rep_id TEXT NOT NULL,
+      rep_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_canvass_team ON canvass_stops(team_key, updated_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_canvass_address ON canvass_stops(team_key, address_key);
+    CREATE TABLE IF NOT EXISTS canvass_events (
+      id TEXT PRIMARY KEY,
+      team_key TEXT NOT NULL,
+      stop_id TEXT NOT NULL,
+      rep_id TEXT NOT NULL,
+      rep_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_canvass_events_day ON canvass_events(team_key, created_at);
   `);
   const crmColumns = db.prepare("PRAGMA table_info(crm_settings)").all() as { name: string }[];
   if (crmColumns.length && !crmColumns.some((column) => column.name === "last_sent_at")) {

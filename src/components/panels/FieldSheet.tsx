@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CarFront } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { DealerPin } from "@/lib/area-selection";
@@ -49,6 +49,7 @@ interface Props {
   onSendLeads: () => void;
   sendMessage: string | null;
   onClose: () => void;
+  canvass?: ReactNode;
 }
 
 const STATUS_TONE: Record<PinStatus, string> = {
@@ -90,6 +91,7 @@ export default function FieldSheet({
   onSendLeads,
   sendMessage,
   onClose,
+  canvass = null,
 }: Props) {
   const [note, setNote] = useState("");
   const [damageType, setDamageType] = useState<(typeof FIELD_DAMAGE_TYPES)[number]>("hail");
@@ -158,6 +160,7 @@ export default function FieldSheet({
           ) : null}
         </div>
       )}
+      {canvass}
       <div className="mt-3 rounded-2xl border border-line bg-panel-2 p-3" style={{ background: "var(--panel-2)" }}>
         <div className="flex items-center gap-2">
           <span className="hazard-badge h-8 w-8 hazard-hail">

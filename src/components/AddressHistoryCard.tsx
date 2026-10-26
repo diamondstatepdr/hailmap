@@ -6,6 +6,7 @@ import HailCalendar, { type CalendarMark } from "@/components/HailCalendar";
 import { ADDRESS_SPANS, formatDay, type DateSpan } from "@/lib/history-range";
 import { topScoreFactors, type DamageScore } from "@/lib/probability";
 import { formatHailSources, formatMiles } from "@/lib/units";
+import { ProofLaunch } from "@/components/hail-proof/ProofActions";
 import ScoreRing from "@/components/ui/ScoreRing";
 import SourceYears from "@/components/SourceYears";
 import { sourceCoverage } from "@/lib/source-coverage";
@@ -49,6 +50,8 @@ interface Props {
   onReplay?: (date: string) => void;
   onSave?: () => void;
   onReport?: () => void;
+  onProof?: (company: string, phone: string) => void;
+  proofBusy?: boolean;
   onAlert?: () => void;
   onClose?: () => void;
   expanded?: boolean;
@@ -69,6 +72,8 @@ export default function AddressHistoryCard({
   onReplay,
   onSave,
   onReport,
+  onProof,
+  proofBusy,
   onAlert,
   onClose,
   expanded = true,
@@ -306,6 +311,7 @@ export default function AddressHistoryCard({
             Storm report
           </button>
         ) : null}
+        {onProof ? <ProofLaunch busy={proofBusy} onProof={onProof} /> : null}
       </div>
       {canvass}
     </article>

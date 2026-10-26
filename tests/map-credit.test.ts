@@ -35,7 +35,7 @@ describe("map credit toggle", () => {
     const first = tap();
     expect(toggleMapCredit(root, first)).toBe(true);
     expect(root.getAttribute("data-credit")).toBe("open");
-    expect(root.getAttribute("open")).toBeNull();
+    expect(root.getAttribute("open")).toBe("");
     expect(root.classes.has("maplibregl-compact-show")).toBe(false);
     expect(first.prevented).toBe(1);
     expect(first.stopped).toBe(1);
@@ -54,6 +54,7 @@ describe("map credit toggle", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(toggleMapCredit(root, tap())).toBe(false);
     expect(root.getAttribute("data-credit")).toBe("closed");
+    expect(root.getAttribute("open")).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(toggleMapCredit(root, tap())).toBe(true);
   });

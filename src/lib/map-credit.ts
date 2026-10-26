@@ -18,6 +18,9 @@ let lastToggleAt = 0;
  * MapLibre's compact handler and the native `<details>` toggle both run on the
  * same tap and undo each other. This handler runs first, cancels both, and
  * keeps the open state on `data-credit`. A second event from that same tap is ignored.
+ * The `<details open>` attribute has to stay set while the credit is open.
+ * Current Chrome does not paint the credit line inside a closed details element,
+ * even when CSS forces that line to display.
  */
 export function toggleMapCredit(root: CreditControl, event?: CreditEvent): boolean {
   event?.preventDefault();
@@ -28,6 +31,7 @@ export function toggleMapCredit(root: CreditControl, event?: CreditEvent): boole
   const open = root.getAttribute("data-credit") !== "open";
   root.setAttribute("data-credit", open ? "open" : "closed");
   root.classList.remove("maplibregl-compact-show");
-  root.removeAttribute("open");
+  if (open) root.setAttribute("open", "");
+  else root.removeAttribute("open");
   return open;
 }

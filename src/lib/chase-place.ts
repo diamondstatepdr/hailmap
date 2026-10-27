@@ -4,6 +4,7 @@ import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import type { ChaseHit } from "@/lib/chase-week";
 import { pointInGeometry } from "@/lib/geo";
+import { repairPlaceName } from "@/lib/place-name";
 import { stateLabel, stateOf } from "@/lib/state-locate";
 
 interface CountyShape {
@@ -86,7 +87,7 @@ export function townFromLocation(location: string | null | undefined): string | 
   if (comma > 0) town = town.slice(0, comma).trim();
   town = town.replace(/\s+(?:city|town|village|cdp)$/i, "").trim();
   if (!town || town.length > 40 || NOT_A_TOWN.test(town)) return null;
-  return town;
+  return repairPlaceName(town);
 }
 
 /** Census county-division names such as "West Terrell" are not towns. */

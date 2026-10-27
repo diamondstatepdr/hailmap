@@ -18,6 +18,7 @@ import {
 import { loadRoofTracts, scheduleCensusFill } from "@/lib/honey-census";
 import { loadOsmTargets, scheduleOsmFill, type PlaceLabel } from "@/lib/honey-osm";
 import { getMapReports } from "@/lib/ingest";
+import { repairPlaceName } from "@/lib/place-name";
 import { indexCells, sampleIndexed, type MeshCell, type MeshGridShape } from "@/lib/mesh-contour";
 import { loadPlanGrids } from "@/lib/mesh-cache";
 import { addIsoDays, formatStormDate, isoDateUTC, planMesh } from "@/lib/mesh-plan";
@@ -170,7 +171,7 @@ async function loadReports(input: {
 }
 
 function shortPlace(name: string): string {
-  return name.replace(/\s+national historic district$/i, "").replace(/\s+historic district$/i, "").trim();
+  return repairPlaceName(name.replace(/\s+national historic district$/i, "").replace(/\s+historic district$/i, "").trim());
 }
 
 function nearestLabels(

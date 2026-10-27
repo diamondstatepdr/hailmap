@@ -8,6 +8,7 @@ import AppMenu from "@/components/shell/AppMenu";
 import HelpGuide from "@/components/help/HelpGuide";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
 import { chipWhen, friendlyWhen, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
+import { hailYearChoices, hailYearSpan } from "@/lib/hail-year";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
@@ -243,9 +244,10 @@ export default function HailApp() {
   const [serverClusters, setServerClusters] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNote, setHistoryNote] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<null | "range" | "calendar" | "days">(null);
+  const [overlay, setOverlay] = useState<null | "range" | "calendar" | "days" | "years">(null);
   const calendarOpen = overlay === "calendar";
   const hailDaysOpen = overlay === "days";
+  const yearsOpen = overlay === "years";
   const [dealersOpen, setDealersOpen] = useState(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getUTCFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getUTCMonth() + 1);
@@ -415,7 +417,7 @@ export default function HailApp() {
     replay: replay.active,
     filters: filtersOpen,
     report: reportOpen,
-    calendar: calendarOpen || hailDaysOpen,
+    calendar: calendarOpen || hailDaysOpen || yearsOpen,
     detail: Boolean(selectedId || threat || county || area),
   });
 
@@ -1244,6 +1246,24 @@ export default function HailApp() {
     setOverlay((current) => (current === "calendar" ? null : "calendar"));
   }
 
+  function openHailYears() {
+    setMenuOpen(false);
+    setCustomOpen(false);
+    setHoneyOpen(false);
+    setOverlay("years");
+  }
+
+  function openHailYear(year: number) {
+    const span = hailYearSpan(year);
+    if (!span) return;
+    setMenuOpen(false);
+    setHoneyOpen(false);
+    setHistoryMode({ kind: "custom", start: span.start, end: span.end });
+    setMeshDate("");
+    setCustomOpen(false);
+    setOverlay("days");
+  }
+
   function finishWelcome() {
     try {
       localStorage.setItem(WELCOME_KEY, "1");
@@ -2018,7 +2038,7 @@ export default function HailApp() {
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [showMap, calendarOpen, hailDaysOpen, showMesh, customOpen]);
+  }, [showMap, calendarOpen, hailDaysOpen, yearsOpen, showMesh, customOpen]);
 
   const mapDetailOpen = section === "map" && Boolean(selected || threat || county || area);
   useEffect(() => {
@@ -2305,7 +2325,13 @@ export default function HailApp() {
                 />
               ) : null}
               <div className="map-controls">
-                <AddressSearch onPick={chooseAddress} closeSignal={addressClose} />
+                <AddressSearch
+                  onPick={chooseAddress}
+                  closeSignal={addressClose}
+                  placeholder="Address, city, ZIP, or hail by year"
+                  onBrowseYears={openHailYears}
+                  onHailYear={openHailYear}
+                />
               </div>
               {honeyOpen ? null : (
                 <div className="plain-actions">
@@ -2434,6 +2460,17 @@ export default function HailApp() {
                   >
                     Hail days
                   </button>
+                  <button
+                    type="button"
+                    aria-pressed={yearsOpen}
+                    onClick={() => {
+                      setCustomOpen(false);
+                      setOverlay((current) => (current === "years" ? null : "years"));
+                    }}
+                    className={`tap press rounded-full px-3 text-sm ${yearsOpen ? "chip-on" : "chip"}`}
+                  >
+                    Hail by year
+                  </button>
                 </div>
                 {customOpen ? (
                   <form
@@ -2485,6 +2522,33 @@ export default function HailApp() {
                 ) : (
                   <p className="mt-2 text-[11px] leading-snug text-muted">Tap a day, then Replay, to watch that storm move.</p>
                 )}
+              </div>
+            ) : null}
+            {yearsOpen ? (
+              <div id="hail-years" className="pointer-events-auto glass w-[min(24rem,100%)] rounded-2xl p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Hail by year</p>
+                  <button type="button" className="tap text-xs font-semibold text-accent" onClick={() => setOverlay(null)}>
+                    Hide
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-muted">Pick a year to see hail days in this map view.</p>
+                <div className="year-browse-list" role="group" aria-label="Hail by year">
+                  {hailYearChoices().map((year) => {
+                    const on = historyMode.kind === "custom" && historyMode.start === `${year}-01-01`;
+                    return (
+                      <button
+                        key={year}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => openHailYear(year)}
+                        className={`tap press rounded-full px-3 text-sm ${on ? "chip-on" : "chip"}`}
+                      >
+                        {year}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
             {hailDaysOpen ? (

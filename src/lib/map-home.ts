@@ -12,6 +12,16 @@ export const UNITED_STATES_FRAME: LngLatBounds = {
 /** The camera a plain visit uses. Zoomed on the US, not the hemisphere. */
 export const DEFAULT_HOME_VIEW = { lat: 38.4, lon: -98.2, zoom: 4.15 };
 
+/** Stop a chase tap from zooming into streets, where a small swath disappears. */
+export const CHASE_LANDING_MAX_ZOOM = 11.5;
+
+/** Padding for a chase landing after the sheet has closed. The old 260px bottom pad was for the open sheet and shoved the hail up off a phone. */
+export function chaseLandingPadding(mobile: boolean): { top: number; bottom: number; left: number; right: number } {
+  return mobile
+    ? { top: 176, bottom: 84, left: 18, right: 58 }
+    : { top: 112, bottom: 56, left: 40, right: 72 };
+}
+
 /**
  * A plain visit opens on the continental US. `?lat=&lon=` is an explicit place.
  * A stored pan is not: it was sending first-time and returning visitors to empty corners.

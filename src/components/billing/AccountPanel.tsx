@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 interface SessionPayload {
   user: { id: string; name: string; role?: string; email?: string } | null;
-  billing?: { enabled?: boolean; access?: boolean; status?: string | null; tierName?: string | null };
+  billing?: { enabled?: boolean; access?: boolean; status?: string | null; tierName?: string | null; trialEligible?: boolean };
 }
 
 export default function AccountPanel() {
@@ -31,7 +31,9 @@ export default function AccountPanel() {
       const payload = (await response.json()) as SessionPayload;
       if (cancel) return;
       setSession(payload);
-      if (finish && payload.billing?.access) setNote("You’re subscribed. Sales tools are open.");
+      if (finish && payload.billing?.access && payload.billing.status === "trialing") {
+        setNote("Your 7-day free trial is on. Sales tools are open.");
+      } else if (finish && payload.billing?.access) setNote("You’re subscribed. Sales tools are open.");
       else if (finish) setNote("Payment received. Access updates as soon as Stripe confirms it.");
       if (params.get("checkout") === "cancel") setNote("Checkout was canceled. No charge was made.");
     })();
@@ -104,8 +106,8 @@ export default function AccountPanel() {
                   {busy ? "Opening…" : "Manage billing"}
                 </button>
               ) : (
-                <Link href="/pricing" className="btn btn-primary press w-full">
-                  See Solo
+                <Link href="/pricing" className="btn btn-primary press plan-cta w-full">
+                  {billing?.trialEligible === false ? "See plans" : "Start 7-day free trial"}
                 </Link>
               )
             ) : null}
@@ -123,7 +125,8 @@ export default function AccountPanel() {
 }
 
 function statusText(status: string | null | undefined): string {
-  if (status === "active" || status === "trialing") return "Active";
+  if (status === "trialing") return "Free trial";
+  if (status === "active") return "Active";
   if (status === "past_due") return "Payment failed";
   if (status === "canceled") return "Canceled";
   if (!status) return "Not subscribed";

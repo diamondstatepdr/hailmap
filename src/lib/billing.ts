@@ -17,7 +17,7 @@ export const TIERS = [
     name: "Crew",
     audience: "team",
     featured: false,
-    blurb: "For a crew. The same sales tools, on a price you set for more than one person.",
+    blurb: "For a crew. The same sales tools, priced for more than one person.",
     env: "STRIPE_PRICE_CREW",
   },
   {
@@ -32,6 +32,22 @@ export const TIERS = [
 
 export type TierId = (typeof TIERS)[number]["id"];
 export type Tier = (typeof TIERS)[number];
+
+/** Card is collected at checkout. Stripe bills the plan after this many days. */
+export const TRIAL_DAYS = 7;
+
+/**
+ * One trial per account. Any subscription on the row — including a canceled
+ * one — has already used it. A Stripe customer with no subscription yet has not.
+ */
+export function canStartTrial(
+  account: { subscriptionStatus?: string | null; stripeSubscriptionId?: string | null } | null,
+): boolean {
+  if (!account) return true;
+  if (account.stripeSubscriptionId?.trim()) return false;
+  if (account.subscriptionStatus?.trim()) return false;
+  return true;
+}
 
 const STRIPE_ENV = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", ...TIERS.map((tier) => tier.env)] as const;
 
@@ -63,7 +79,11 @@ export function subscriptionGrantsAccess(status: string | null | undefined): boo
 
 export function billingSnapshot(
   user: { role?: string } | null,
-  account: { subscriptionStatus: string | null; subscriptionPriceId: string | null } | null,
+  account: {
+    subscriptionStatus: string | null;
+    subscriptionPriceId: string | null;
+    stripeSubscriptionId?: string | null;
+  } | null,
 ) {
   const enabled = billingEnabled();
   const status = account?.subscriptionStatus ?? null;
@@ -75,6 +95,7 @@ export function billingSnapshot(
     status: enabled ? status : null,
     tier: tier?.id ?? null,
     tierName: tier?.name ?? null,
+    trialEligible: canStartTrial(account),
   };
 }
 

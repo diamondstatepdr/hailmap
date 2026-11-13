@@ -4,7 +4,7 @@ import PricingBoard from "@/components/billing/PricingBoard";
 
 export const metadata: Metadata = {
   title: "Pricing · Swathline",
-  description: "Solo is the Swathline plan for one tech. Crew and Storm Team are priced for a crew.",
+  description: "Live hail swaths, storm history, and the sales tools for paintless dent repair. Solo, Crew, and Storm Team each start with a 7-day free trial.",
 };
 
 export default function PricingPage() {

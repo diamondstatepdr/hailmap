@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { SALES_TOOLS } from "@/lib/billing";
+import { TRIAL_LABEL } from "@/lib/pitch";
 import { LogoMark } from "@/components/brand/Logo";
 
 interface Props {
@@ -21,7 +22,7 @@ export default function PaywallDialog({ onClose, onTeamPasscode }: Props) {
           </div>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          The live hail map stays free. These tools need an active subscription. Start with Solo, or pick a crew plan if you are pricing a team.
+          The live hail map stays free. These tools need a plan. Every plan starts with a {TRIAL_LABEL}. Solo is one person. Crew and Storm Team are for a crew.
         </p>
         <ul className="mt-3 grid grid-cols-2 gap-1.5 text-sm">
           {SALES_TOOLS.map((tool) => (
@@ -32,7 +33,7 @@ export default function PaywallDialog({ onClose, onTeamPasscode }: Props) {
         </ul>
         <div className="mt-4 flex flex-col gap-2">
           <Link href="/pricing" className="btn btn-primary press w-full">
-            See Solo and crew plans
+            See plans · {TRIAL_LABEL}
           </Link>
           <Link href="/login?next=/pricing" className="btn btn-secondary press w-full">
             Sign in

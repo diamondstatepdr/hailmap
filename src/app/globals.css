@@ -1926,22 +1926,13 @@ html.dark .replay-range::-moz-range-thumb {
   max-width: 100%;
   overflow: hidden;
   color: var(--text);
-  font-size: 1.05rem;
+  font-family: var(--font-mark), "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 0.95rem;
   font-weight: 800;
-  letter-spacing: -0.062em;
-  line-height: 0.95;
+  letter-spacing: 0.02em;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.swath-bar {
-  display: block;
-  width: 100%;
-  height: 3px;
-  margin-top: 0.28rem;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--swath), var(--accent) 48%, var(--mark));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--mark) 55%, transparent);
 }
 
 .swath-sub {
@@ -1980,13 +1971,7 @@ html.dark .replay-range::-moz-range-thumb {
 
 .brand-splash .swath-name {
   color: var(--chrome-ink);
-  font-size: 2.35rem;
-}
-
-.brand-splash .swath-bar {
-  height: 4px;
-  background: linear-gradient(90deg, #f9a8d4, #67e8f9 52%, #fff);
-  box-shadow: 0 0 14px rgba(103, 232, 249, 0.8);
+  font-size: 1.7rem;
 }
 
 .brand-splash p {
@@ -2079,12 +2064,7 @@ html.dark .replay-range::-moz-range-thumb {
 
 .map-topbar .swath-name {
   color: var(--chrome-ink);
-  font-size: 1.2rem;
-}
-
-.map-topbar .swath-bar {
-  background: linear-gradient(90deg, #f9a8d4, #67e8f9 48%, #fff);
-  box-shadow: 0 0 12px rgba(103, 232, 249, 0.75);
+  font-size: 1.05rem;
 }
 
 .map-controls {
@@ -2192,11 +2172,6 @@ html.dark .replay-range::-moz-range-thumb {
 .shell-rail .nav-item,
 .shell-rail a {
   color: var(--chrome-ink);
-}
-
-.shell-rail .swath-bar {
-  background: linear-gradient(90deg, #f9a8d4, #67e8f9 48%, #fff);
-  box-shadow: 0 0 12px rgba(103, 232, 249, 0.75);
 }
 
 .shell-rail .swath-sub,

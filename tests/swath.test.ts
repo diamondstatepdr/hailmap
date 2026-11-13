@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bufferPoints, clusterBySpaceTime, convexHull, reportsToSwaths, type SwathPoint } from "@/lib/swath";
+import { bufferPoints, clusterBySpaceTime, convexHull, mergeSwathPoints, reportsToSwaths, type SwathPoint } from "@/lib/swath";
 
 const T0 = "2026-09-21T18:00:00.000Z";
 
@@ -98,5 +98,38 @@ describe("reportsToSwaths", () => {
     expect(collection.features.some((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true)).toBe(true);
     const edge = collection.features.find((feature) => feature.geometry.type === "LineString" && feature.properties?.halo === true);
     expect(edge?.properties?.color).toBe("#16a34a");
+  });
+});
+
+function polygonBox(collection: GeoJSON.FeatureCollection): { west: number; east: number; south: number; north: number } | null {
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const feature of collection.features) {
+    if (feature.geometry.type !== "Polygon") continue;
+    for (const ring of feature.geometry.coordinates) {
+      for (const [lon, lat] of ring) {
+        west = Math.min(west, lon);
+        east = Math.max(east, lon);
+        south = Math.min(south, lat);
+        north = Math.max(north, lat);
+      }
+    }
+  }
+  if (!Number.isFinite(west)) return null;
+  return { west, east, south, north };
+}
+
+describe("swath footprint across zoom", () => {
+  it("keeps the same ground when a closer view returns only some of the reports", () => {
+    const full = [at(39.7, 0, "west"), at(40.05, 0.4, "core"), at(40.35, 0.8, "east")];
+    const closerView = [full[1]];
+    const wide = polygonBox(reportsToSwaths(full));
+    const cropped = polygonBox(reportsToSwaths(closerView));
+    const kept = polygonBox(reportsToSwaths(mergeSwathPoints(full, closerView)));
+    expect(wide).not.toEqual(cropped);
+    expect(kept).toEqual(wide);
+    expect(mergeSwathPoints(full, closerView).map((point) => point.id).sort()).toEqual(["core", "east", "west"]);
   });
 });

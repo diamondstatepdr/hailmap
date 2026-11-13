@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHASE_LANDING_MAX_ZOOM, CHASE_MAP_GAP_PX, chaseLandingPadding, chaseMapPadding, DEFAULT_HOME_VIEW, homeViewAfterChase, initialCamera } from "@/lib/map-home";
+import { CHASE_LANDING_MAX_ZOOM, CHASE_MAP_GAP_PX, chaseLandingPadding, chaseMapPadding, conusPhoneCamera, DEFAULT_HOME_VIEW, homeViewAfterChase, initialCamera } from "@/lib/map-home";
 
 describe("chase map padding", () => {
   it("fills the phone gap above the sheet instead of shrinking the country", () => {
@@ -30,6 +30,18 @@ describe("home view after the chase sheet", () => {
     expect(homeViewAfterChase({ lat: 15, lon: -90, zoom: 1.7 })).toEqual(DEFAULT_HOME_VIEW);
     expect(DEFAULT_HOME_VIEW.zoom).toBeGreaterThanOrEqual(3.5);
     expect(DEFAULT_HOME_VIEW.zoom).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("phone home frame", () => {
+  it("keeps a 390x844 phone on the lower 48 instead of Canada", () => {
+    const camera = conusPhoneCamera({ width: 390, height: 760, chromePx: 180 });
+    expect(camera.zoom).toBeGreaterThanOrEqual(3.15);
+    expect(camera.zoom).toBeLessThanOrEqual(4.2);
+    expect(camera.lat).toBeGreaterThan(34);
+    expect(camera.lat).toBeLessThan(43);
+    expect(camera.lon).toBeLessThan(-90);
+    expect(camera.lon).toBeGreaterThan(-105);
   });
 });
 

@@ -20,6 +20,16 @@ import { ensureDailySpan, ensureHistoryIndex } from "@/lib/spc-archive";
 
 const POINT_CAP = 60000;
 
+/**
+ * Dots may collapse to grid centroids when the view is crowded.
+ * A swath request (`points`) must not: those centroids move whenever the
+ * grid size changes with zoom, and the hail path would follow them.
+ */
+export function historyUsesClusters(input: { count: number; spanDeg: number; total: number; points?: boolean }): boolean {
+  if (input.points) return false;
+  return shouldCluster(input.count, input.spanDeg) || input.total > POINT_CAP;
+}
+
 export interface HistoryMapResult {
   mode: "points" | "clusters";
   start: string;
@@ -112,6 +122,8 @@ export async function queryHistoryMap(input: {
   span: DateSpan;
   bounds: HistoryBounds;
   state?: string;
+  /** Raw report coordinates for a hail path. Skips zoom-dependent clustering. */
+  points?: boolean;
 }): Promise<HistoryMapResult> {
   await ensureHistoryIndex();
   const pending = await ensureDailySpan(input.span.start, input.span.end, 12);
@@ -121,7 +133,7 @@ export async function queryHistoryMap(input: {
   const live = await liveRows(input.span, input.bounds, state);
   const archive = selectHistory(input.span, input.bounds, state, POINT_CAP);
   const rows = dedupe([...live, ...archive]);
-  const cluster = shouldCluster(rows.length, spanDeg) || total > POINT_CAP;
+  const cluster = historyUsesClusters({ count: rows.length, spanDeg, total, points: input.points });
   if (!cluster) {
     return {
       mode: "points",

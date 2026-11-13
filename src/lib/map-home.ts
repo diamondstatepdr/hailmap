@@ -12,6 +12,43 @@ export const UNITED_STATES_FRAME: LngLatBounds = {
 /** The camera a plain visit uses. Zoomed on the US, not the hemisphere. */
 export const DEFAULT_HOME_VIEW = { lat: 38.4, lon: -98.2, zoom: 4.15 };
 
+function mercatorT(lat: number): number {
+  const rad = (lat * Math.PI) / 180;
+  const sine = Math.sin(rad);
+  return 0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI);
+}
+
+/**
+ * Phone home view. Fitting the full width of the lower 48 into 390px with a
+ * tall top pad zoomed out to ~1.9 and shoved the camera into Canada.
+ * Fit the latitude into the map below the top bar instead, so the country
+ * fills the screen and stays centered.
+ */
+export function conusPhoneCamera(input: { width: number; height: number; chromePx: number }): {
+  lat: number;
+  lon: number;
+  zoom: number;
+} {
+  const chrome = Math.min(Math.max(input.chromePx || 168, 140), Math.max(140, input.height * 0.38));
+  const bottom = 72;
+  const visibleH = Math.max(220, input.height - chrome - bottom);
+  const south = UNITED_STATES_FRAME.south;
+  const north = UNITED_STATES_FRAME.north;
+  const ySpan = Math.abs(mercatorT(north) - mercatorT(south));
+  const zoom = Math.min(4.4, Math.max(3.15, Math.log2(visibleH / (ySpan * 512))));
+  const mid = (south + north) / 2;
+  const bandCenter = chrome + visibleH / 2;
+  const shiftPx = bandCenter - input.height / 2;
+  const latRad = (mid * Math.PI) / 180;
+  const metersPerPixel = (40075016.686 * Math.cos(latRad)) / (512 * 2 ** zoom);
+  const lat = mid + (shiftPx * metersPerPixel) / 111320;
+  return {
+    lat: Math.round(lat * 100) / 100,
+    lon: Math.round(((UNITED_STATES_FRAME.west + UNITED_STATES_FRAME.east) / 2) * 100) / 100,
+    zoom: Math.round(zoom * 100) / 100,
+  };
+}
+
 /** Stop a chase tap from zooming into streets, where a small swath disappears. */
 export const CHASE_LANDING_MAX_ZOOM = 11.5;
 

@@ -15,6 +15,7 @@ import Map, {
 import type { AreaSelection } from "@/lib/area-selection";
 import { glanceAt, type GlanceHit, type MoneyGlanceContext } from "@/lib/money-glance";
 import { MoneyGlanceCard } from "@/components/map/MoneyGlance";
+import { chooseMapClick } from "@/lib/map-click";
 import { swathTitle } from "@/lib/swath-measure";
 import { normalizeMapBounds, type LngLatBounds } from "@/lib/geo";
 import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets } from "@/lib/knock-route";
@@ -637,9 +638,50 @@ export default function HailMap({
       onSelectHoney?.(String(honeyHit.properties.id));
       return;
     }
-    const features = [...(event.features ?? [])].sort(
-      (a, b) => Number(isRadarLayer(b.layer?.id)) - Number(isRadarLayer(a.layer?.id)),
-    );
+    const map = mapRef.current?.getMap();
+    const point = event.point;
+    let nearby: NonNullable<MapLayerMouseEvent["features"]> = [];
+    if (map && point) {
+      const pad = 28;
+      const layers = ["hail-points", "hail-point-hit", "hail-clusters"].filter((id) => map.getLayer(id));
+      if (layers.length) {
+        nearby = map.queryRenderedFeatures(
+          [
+            [point.x - pad, point.y - pad],
+            [point.x + pad, point.y + pad],
+          ],
+          { layers },
+        );
+      }
+    }
+    const clickFeatures = [...nearby, ...(event.features ?? [])].map((feature) => ({
+      layerId: feature.layer?.id ?? "",
+      id: feature.properties?.id != null ? String(feature.properties.id) : null,
+      clusterId: feature.properties?.cluster_id != null ? Number(feature.properties.cluster_id) : null,
+    }));
+    const choice = chooseMapClick(clickFeatures);
+    if (choice.type === "report") {
+      onSelectReport(choice.id);
+      return;
+    }
+    if (choice.type === "hail-cluster") {
+      const feature = [...nearby, ...(event.features ?? [])].find(
+        (item) => item.layer?.id === "hail-clusters" && Number(item.properties?.cluster_id) === choice.clusterId,
+      );
+      const source = mapRef.current?.getSource("reports");
+      const geometry = feature?.geometry;
+      if (source && geometry?.type === "Point" && "getClusterExpansionZoom" in source) {
+        const [lon, lat] = geometry.coordinates;
+        void (source as GeoJSONSource)
+          .getClusterExpansionZoom(choice.clusterId)
+          .then((zoom) => {
+            mapRef.current?.easeTo({ center: [lon, lat], zoom, duration: 600 });
+          })
+          .catch(() => undefined);
+      }
+      return;
+    }
+    const features = event.features ?? [];
     for (const feature of features) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
@@ -1698,8 +1740,9 @@ function SwathSource({
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
   const halo = theme === "dark" ? "#f7fbff" : "#102033";
   const contour = theme === "dark" ? "#f8fafc" : "#102033";
+  // Pixel simplification and a short tile buffer shift the same polygon between zooms.
   return (
-    <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION}>
+    <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION} tolerance={0} buffer={512}>
       <Layer
         id={`${id}-fill`}
         type="fill"

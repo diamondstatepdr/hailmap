@@ -545,9 +545,10 @@ html.dark .maplibregl-ctrl-attrib[data-credit="open"] .maplibregl-ctrl-attrib-in
 
 .account-chip {
   position: fixed;
-  z-index: 35;
-  right: 0.75rem;
-  bottom: calc(4.6rem + env(safe-area-inset-bottom));
+  z-index: 40;
+  top: max(0.45rem, env(safe-area-inset-top));
+  right: 6.4rem;
+  bottom: auto;
   max-width: 9rem;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,8 +1,13 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
+export type SessionRole = "owner" | "member";
+
 export interface SessionUser {
   id: string;
   name: string;
+  /** Missing on cookies issued before accounts. Those sessions are the team passcode. */
+  role?: SessionRole;
+  email?: string;
 }
 
 const COOKIE = "hailmap_session";
@@ -37,9 +42,14 @@ export function verifyPasscode(input: string): boolean {
 }
 
 export function signSession(user: SessionUser): string {
-  const body = Buffer.from(
-    JSON.stringify({ id: user.id, name: user.name, exp: Date.now() + MAX_AGE_SEC * 1000 }),
-  ).toString("base64url");
+  const payload: Record<string, unknown> = {
+    id: user.id,
+    name: user.name,
+    exp: Date.now() + MAX_AGE_SEC * 1000,
+    role: user.role ?? "owner",
+  };
+  if (user.email) payload.email = user.email;
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = createHmac("sha256", signingKey()).update(body).digest("base64url");
   return `${body}.${sig}`;
 }
@@ -59,14 +69,23 @@ export function verifySessionToken(token: string | null | undefined): SessionUse
       id?: unknown;
       name?: unknown;
       exp?: unknown;
+      role?: unknown;
+      email?: unknown;
     };
     if (typeof parsed.id !== "string" || typeof parsed.name !== "string" || typeof parsed.exp !== "number") {
       return null;
     }
     if (parsed.exp < Date.now()) return null;
+    if (parsed.role === "member") {
+      if (!/^acct_[0-9a-f-]{36}$/i.test(parsed.id)) return null;
+      const name = parsed.name.trim().replace(/\s+/g, " ");
+      if (name.length < 2 || name.length > 60) return null;
+      const email = typeof parsed.email === "string" && parsed.email.includes("@") ? parsed.email : undefined;
+      return { id: parsed.id, name, role: "member", email };
+    }
     const user = normalizeUserName(parsed.name);
     if (!user || user.id !== parsed.id) return null;
-    return user;
+    return { ...user, role: "owner" };
   } catch {
     return null;
   }
@@ -94,7 +113,9 @@ export function clearSessionCookie(): string {
 }
 
 export function requireUser(request: Request): { user: SessionUser } | { response: Response } {
-  if (!authConfigured()) {
+  const user = readSession(request);
+  if (user) return { user };
+  if (!signingKey()) {
     return {
       response: Response.json(
         { error: "Sign-in is not configured. Set HAILMAP_TEAM_PASSCODE on the server." },
@@ -102,11 +123,7 @@ export function requireUser(request: Request): { user: SessionUser } | { respons
       ),
     };
   }
-  const user = readSession(request);
-  if (!user) {
-    return {
-      response: Response.json({ error: "Sign in to use field notes and the watch list." }, { status: 401 }),
-    };
-  }
-  return { user };
+  return {
+    response: Response.json({ error: "Sign in to use field notes and the watch list." }, { status: 401 }),
+  };
 }

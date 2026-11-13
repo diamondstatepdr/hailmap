@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { LogoMark } from "@/components/brand/Logo";
 
@@ -84,6 +85,15 @@ export default function AuthDialog({ configured, onClose, onSignedIn }: Props) {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </div>
+        <p className="mt-3 text-center text-sm text-muted">
+          <Link href="/login" className="font-semibold text-accent">
+            Email sign in
+          </Link>
+          {" · "}
+          <Link href="/signup" className="font-semibold text-accent">
+            Create account
+          </Link>
+        </p>
       </form>
     </div>
   );

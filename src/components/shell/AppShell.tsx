@@ -25,6 +25,7 @@ interface Props {
   paletteLabel: string;
   userName: string | null;
   authConfigured: boolean;
+  billingEnabled?: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
   /** True when this week's chase list has refreshed and has not been opened. */
@@ -41,6 +42,7 @@ export default function AppShell({
   paletteLabel,
   userName,
   authConfigured,
+  billingEnabled = false,
   onSignIn,
   onSignOut,
   stormsNew = false,
@@ -99,25 +101,40 @@ export default function AppShell({
             </button>
           </div>
           {userName ? (
-            <button type="button" onClick={onSignOut} className="flex w-full items-center gap-2 rounded-2xl px-1 py-1 text-left">
-              <span className="avatar">{userName.slice(0, 1).toUpperCase()}</span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">{userName}</span>
-                <span className="text-xs text-muted">Sign out</span>
-              </span>
-            </button>
+            <div className="flex items-center gap-2 rounded-2xl px-1 py-1">
+              <Link href="/account" className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="avatar">{userName.slice(0, 1).toUpperCase()}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{userName}</span>
+                  <span className="text-xs text-muted">Account</span>
+                </span>
+              </Link>
+              <button type="button" onClick={onSignOut} className="shrink-0 text-xs font-semibold text-muted">
+                Sign out
+              </button>
+            </div>
           ) : (
             <button type="button" onClick={onSignIn} className="btn btn-secondary press w-full flex-col gap-0 py-2">
               Sign in
-              <span className="text-[11px] font-medium text-muted">{authConfigured ? "Team passcode" : "Not configured"}</span>
+              <span className="text-[11px] font-medium text-muted">
+                {billingEnabled ? "Email account" : authConfigured ? "Team passcode" : "Not configured"}
+              </span>
             </button>
           )}
+          <Link href="/pricing" className="block px-1 text-xs text-muted hover:text-ink">
+            Pricing
+          </Link>
           <Link href="/privacy" className="block px-1 text-xs text-muted hover:text-ink">
             Privacy
           </Link>
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {billingEnabled ? (
+          <Link href={userName ? "/account" : "/login"} className="account-chip md:hidden">
+            {userName ? userName : "Sign in"}
+          </Link>
+        ) : null}
         <div className="relative min-h-0 flex-1">{children}</div>
         <nav
           className="tab-bar grid grid-cols-6 pb-[max(0.25rem,env(safe-area-inset-bottom))] md:hidden"

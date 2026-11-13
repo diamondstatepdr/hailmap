@@ -21,7 +21,7 @@ export default function PrivacyPage() {
       </div>
       <article className="prose-hail space-y-3">
         <h1>Privacy policy</h1>
-        <p>Effective October 19, 2026. Swathline is operated by Diamond State Hail Solutions.</p>
+        <p>Effective November 13, 2026. Swathline is operated by Diamond State Hail Solutions.</p>
         <p>
           Contact: <a href="mailto:diamondstatepdr@gmail.com">diamondstatepdr@gmail.com</a>
         </p>
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
 
         <h2>Data we do not collect</h2>
         <ul className="list-disc space-y-1 pl-5">
-          <li>No account, name, or phone number is required to view the map.</li>
+          <li>No account is required to view the map.</li>
           <li>Viewing the map does not read contacts, SMS, or your photo library.</li>
           <li>We do not sell personal information and we do not show third-party ads.</li>
           <li>We do not pull posts from X, Facebook, Instagram, or any other social platform.</li>
@@ -98,10 +98,16 @@ export default function PrivacyPage() {
         <h2>Optional team sign-in</h2>
         <p>
           Viewing the map does not require an account. Field notes, damage photos, and a watch list
-          are stored only after you sign in with a name and the team passcode. The name is the
-          account. Those notes and photos are not shown on the public map and are not labeled as
-          official weather reports. A shareable storm report includes your field photos only when
-          you generate it while signed in. Anyone with that link can open that one report.
+          are stored only after you sign in with a name and the team passcode, or with an email and
+          password. The name on a passcode login is the account. An email account stores the email
+          address and a hashed password. Those notes and photos are not shown on the public map and
+          are not labeled as official weather reports. A shareable storm report includes your field
+          photos only when you generate it while signed in. Anyone with that link can open that one report.
+        </p>
+        <p>
+          If subscriptions are turned on, card numbers are entered on Stripe Checkout, not on
+          Swathline. We store the Stripe customer id and whether the subscription is active. Stripe
+          is the payment processor. We do not keep the card number.
         </p>
         <p>
           Field mode can use your device location to show where you are and the damage score at that

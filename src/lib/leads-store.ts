@@ -7,7 +7,7 @@ export function leadTeamKey(): string {
   return createHash("sha256").update(`swathline-team|${passcode}`).digest("hex").slice(0, 24);
 }
 
-export function listLeads(): LeadRow[] {
+export function listLeads(team = leadTeamKey()): LeadRow[] {
   const rows = getDb()
     .prepare(
       `SELECT address, status, rep_name, note, hail_in, updated_at
@@ -15,7 +15,7 @@ export function listLeads(): LeadRow[] {
        WHERE team_key = ? AND status IN ('interested', 'signed')
        ORDER BY updated_at DESC, address COLLATE NOCASE`,
     )
-    .all(leadTeamKey()) as Array<{
+    .all(team) as Array<{
     address: string;
     status: string;
     rep_name: string;

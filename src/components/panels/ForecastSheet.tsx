@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { requestPaywall, subscriptionRequired } from "@/lib/paywall-client";
 import BottomSheet from "@/components/ui/BottomSheet";
 import {
   basisTag,
@@ -64,8 +65,13 @@ export default function ForecastSheet({ label, query, onClose }: Props) {
       body: JSON.stringify(query),
     })
       .then(async (response) => {
-        const payload = (await response.json()) as { lines?: ExposureLine[]; note?: string | null; error?: string };
+        const payload = (await response.json()) as { lines?: ExposureLine[]; note?: string | null; error?: string; code?: string };
         if (cancelled) return;
+        if (subscriptionRequired(response.status, payload)) {
+          requestPaywall();
+          setLoadNote(payload.error ?? "Subscribe to use this sales tool.");
+          return;
+        }
         if (!response.ok) {
           setLoadNote(payload.error ?? "Could not build that estimate.");
           return;

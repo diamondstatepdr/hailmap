@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { leadCsv } from "@/lib/leads";
 import { listLeads } from "@/lib/leads-store";
+import { salesDenied } from "@/lib/sales-gate";
+import { memberTeamKey } from "@/lib/team-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,8 +10,10 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   const format = new URL(request.url).searchParams.get("format");
-  const leads = listLeads();
+  const leads = listLeads(memberTeamKey(auth.user));
   if (format === "csv" || format === "sheets") {
     const sheets = format === "sheets";
     const body = leadCsv(leads, sheets);

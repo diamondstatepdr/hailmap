@@ -234,6 +234,34 @@ function migrate(db: Database.Database) {
   if (crmColumns.length && !crmColumns.some((column) => column.name === "last_result")) {
     db.exec("ALTER TABLE crm_settings ADD COLUMN last_result TEXT");
   }
+  const userColumns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  for (const column of [
+    "email",
+    "password_hash",
+    "stripe_customer_id",
+    "stripe_subscription_id",
+    "subscription_status",
+    "subscription_price_id",
+    "current_period_end",
+  ]) {
+    if (!userColumns.some((row) => row.name === column)) {
+      db.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT`);
+    }
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_stripe_customer ON users(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS crm_accounts (
+      scope TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      secret TEXT NOT NULL,
+      record_type TEXT NOT NULL,
+      status_name TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_sent_at TEXT,
+      last_result TEXT
+    );
+  `);
 }
 
 function hoursAgo(hours: number): string {

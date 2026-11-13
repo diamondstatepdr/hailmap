@@ -57,8 +57,10 @@ function mapStop(row: StopRow): CanvassStop | null {
 
 const STOP_SQL = `id, address_key, address, lat, lon, status, note, hail_in, rep_id, rep_name, created_at, updated_at`;
 
-export function listCanvass(bounds?: { west: number; south: number; east: number; north: number } | null): CanvassStop[] {
-  const team = currentTeamKey();
+export function listCanvass(
+  bounds?: { west: number; south: number; east: number; north: number } | null,
+  team = currentTeamKey(),
+): CanvassStop[] {
   const rows = bounds
     ? (getDb()
         .prepare(
@@ -73,7 +75,7 @@ export function listCanvass(bounds?: { west: number; south: number; east: number
   return rows.map(mapStop).filter((stop): stop is CanvassStop => Boolean(stop));
 }
 
-export function canvassCounts(day: string, timeZone: string): CanvassRepCount[] | null {
+export function canvassCounts(day: string, timeZone: string, team = currentTeamKey()): CanvassRepCount[] | null {
   const range = zonedDayRange(day, timeZone);
   if (!range) return null;
   const rows = getDb()
@@ -82,7 +84,7 @@ export function canvassCounts(day: string, timeZone: string): CanvassRepCount[] 
        FROM canvass_events
        WHERE team_key = ? AND created_at >= ? AND created_at < ?`,
     )
-    .all(currentTeamKey(), range.start.toISOString(), range.end.toISOString()) as Array<{
+    .all(team, range.start.toISOString(), range.end.toISOString()) as Array<{
     stopId: string;
     repId: string;
     repName: string;
@@ -106,6 +108,7 @@ export function saveCanvass(input: {
   status: CanvassStatus;
   note?: string | null;
   hailIn?: number | null;
+  team?: string;
 }): CanvassStop | null {
   if (!validLatLon(input.lat, input.lon)) return null;
   const address = input.address.trim().replace(/\s+/g, " ").slice(0, 180);
@@ -113,9 +116,9 @@ export function saveCanvass(input: {
   const key = addressKey(address, input.lat, input.lon);
   const note = clipNote(input.note);
   const hailIn = clipHail(input.hailIn);
-  const team = currentTeamKey();
+  const team = input.team ?? currentTeamKey();
   const db = getDb();
-  const nearby = listCanvass();
+  const nearby = listCanvass(undefined, team);
   const found = matchStop(nearby, { addressKey: key, lat: input.lat, lon: input.lon });
   const now = new Date().toISOString();
   const nextKey = found ? preferAddressKey(found.addressKey, key) : key;

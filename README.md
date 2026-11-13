@@ -40,8 +40,14 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | `HAILMAP_PHOTO_DAILY_LIMIT` | Public photo reports per hashed client IP per day. Default 30. |
 | `HAILMAP_PHOTO_MAX_BYTES` | Max photo upload size, capped at 8 MB. Default 8388608. |
 | `HAILMAP_USER_AGENT` | Contact string for the NWS API, the Census geocoder, and Nominatim. |
-| `HAILMAP_TEAM_PASSCODE` | Shared passcode for Field notes, damage photos, and the watch list. Unset disables sign-in. |
-| `HAILMAP_AUTH_SECRET` | Signs the session cookie. Falls back to the team passcode when unset. |
+| `HAILMAP_TEAM_PASSCODE` | Shared passcode for Field notes, damage photos, and the watch list. Also an owner override that skips the paywall when billing is on. Unset disables passcode sign-in. |
+| `HAILMAP_AUTH_SECRET` | Signs the session cookie. Falls back to the team passcode when unset. Set this before email accounts go live. |
+| `STRIPE_SECRET_KEY` | Stripe secret key. Billing stays off until this, the webhook secret, and all three price ids are set. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for `POST /api/billing/webhook`. |
+| `STRIPE_PRICE_SOLO` | Stripe Price id for Solo, the single-person plan. The amount is whatever that price is in Stripe. |
+| `STRIPE_PRICE_CREW` | Stripe Price id for Crew, a team price. |
+| `STRIPE_PRICE_STORM` | Stripe Price id for Storm Team, the larger team price. |
+| `HAILMAP_PUBLIC_URL` | Optional HTTPS origin used for Checkout return links. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Optional Web Push keys. When unset, the first boot writes `vapid.json` in the data directory. |
 | `VAPID_SUBJECT` | `mailto:` or `https:` contact on each push. Defaults to the project mailbox. |
 | `HAILMAP_ALERT_INTERVAL_MS` | Alert loop interval. Default 3 minutes, clamped between 2 and 5. |
@@ -74,7 +80,9 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 - `GET /api/history/days?start=&end=&west=&south=&east=&north=` — hail dates in that view, largest hail first, with counts and any cached radar maximum.
 - `GET /api/history/place?lat=&lon=&radiusKm=&years=` — address history. `years` defaults to 2 (max 80). `start` and `end` override it. Optional `scoreDate` picks which storm the damage score uses.
 - `GET /api/history/coverage` — probed archive start dates, index counts, and bytes under the history directory. `?build=1` builds the SPC index first.
-- `GET /api/auth/session`, `POST /api/auth/session`, `DELETE /api/auth/session` — team sign-in. Body `{ "name", "passcode" }`.
+- `GET /api/auth/session`, `POST /api/auth/session`, `DELETE /api/auth/session` — team passcode sign-in. Body `{ "name", "passcode" }`. That session is the owner override.
+- `POST /api/auth/signup`, `POST /api/auth/login` — email and password accounts. Passwords are scrypt hashes.
+- `GET /api/billing/plans`, `POST /api/billing/checkout`, `POST /api/billing/portal`, `POST /api/billing/webhook`, `POST /api/billing/confirm` — Stripe subscriptions. Absent until the Stripe env vars are set.
 - `GET /api/watch`, `POST /api/watch`, `DELETE /api/watch/[id]` — per-user address watch list.
 - `GET /api/alerts/vapid` — public VAPID key for the browser Push API.
 - `POST /api/alerts/subscribe`, `DELETE /api/alerts/subscribe` — save or remove this phone's push subscription. No account. Later calls send `x-hailmap-device`.
@@ -136,6 +144,10 @@ In Android Studio, generate a signed App Bundle with that keystore. Play Console
 Field notes, field photos, and the watch list belong to a name plus the team passcode (`HAILMAP_TEAM_PASSCODE`). The public map, address search, and damage score work without signing in. The name is the account: two people who type the same name share that field data. Notes are not published on the map. A storm report link is unlisted; field photos are included only when the person who generated it was signed in.
 
 Set `HAILMAP_AUTH_SECRET` in production so the cookie key is not the passcode itself.
+
+Email accounts are optional. Passwords are stored as scrypt hashes. The session cookie stays `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Password reset by email is not wired up yet.
+
+Stripe billing stays completely off until `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SOLO`, `STRIPE_PRICE_CREW`, and `STRIPE_PRICE_STORM` are all set. Until then the map and the sales tools behave as they do today. When billing is on, the live map, address history, replay, and phone alerts stay free. Door-knock routes, the dealership hit list, canvass, hail proof PDFs, storm-to-cash, lead export, Money Hole, and field mode need an active or trialing subscription. A team-passcode session skips that check. Solo is the single-person plan. Crew and Storm Team are separate Stripe prices for a crew. Dollar amounts are read from Stripe, not from the app. Any of those prices unlocks the same tools for that one login. The app does not count seats.
 
 ## Money holes
 

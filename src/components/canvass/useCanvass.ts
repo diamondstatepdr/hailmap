@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CanvassRepCount, CanvassStatus, CanvassStop } from "@/lib/canvass";
+import { requestPaywall, subscriptionRequired } from "@/lib/paywall-client";
 
 export function useCanvass(enabled: boolean) {
   const [stops, setStops] = useState<CanvassStop[]>([]);
@@ -23,7 +24,7 @@ export function useCanvass(enabled: boolean) {
         fetch(`/api/canvass?${params}`),
         fetch(`/api/canvass/stats?day=${day}&tz=${encodeURIComponent(zone)}`),
       ]);
-      if (listResponse.status === 401) {
+      if (listResponse.status === 401 || listResponse.status === 402) {
         setStops([]);
         setCounts([]);
         return;
@@ -60,7 +61,12 @@ export function useCanvass(enabled: boolean) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(input),
       });
-      const payload = (await response.json()) as { stop?: CanvassStop; error?: string };
+      const payload = (await response.json()) as { stop?: CanvassStop; error?: string; code?: string };
+      if (subscriptionRequired(response.status, payload)) {
+        requestPaywall();
+        setError(payload.error ?? "Subscribe to use this sales tool.");
+        return;
+      }
       if (!response.ok || !payload.stop) {
         setError(payload.error ?? "Could not save that house.");
         return;

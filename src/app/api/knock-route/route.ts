@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
+import { gateSales } from "@/lib/sales-gate";
 import { validLatLon } from "@/lib/geo";
 import { findKnockRoute } from "@/lib/knock-route-osm";
 import type { HailBand } from "@/lib/knock-route";
@@ -31,6 +32,8 @@ function asBands(value: unknown): HailBand[] {
 }
 
 export async function POST(request: Request) {
+  const denied = gateSales(request);
+  if (denied) return denied;
   const hash = createHash("sha256").update(`knock-route|${clientIp(request)}`).digest("hex");
   const slot = takeActionSlot(hash, "knock-route", 20, 3600000);
   if (!slot.ok) return Response.json({ error: slot.error }, { status: 429 });

@@ -1,4 +1,5 @@
 import type { DealerPin } from "@/lib/area-selection";
+import { gateSales } from "@/lib/sales-gate";
 import { findDealers } from "@/lib/dealers";
 import { validLatLon } from "@/lib/geo";
 import { meshAtPoints } from "@/lib/mesh-cache";
@@ -29,6 +30,8 @@ function outerOnly(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Po
 }
 
 export async function POST(request: Request) {
+  const denied = gateSales(request);
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();

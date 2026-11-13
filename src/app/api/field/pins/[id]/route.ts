@@ -1,5 +1,6 @@
 import { asPinStatus, deletePin, updatePin } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
+import { salesDenied } from "@/lib/sales-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ function clip(value: unknown, max: number): string | null {
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   const { id } = await context.params;
   let body: unknown;
   try {
@@ -37,6 +40,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   const { id } = await context.params;
   if (!deletePin(auth.user.id, id)) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ ok: true });

@@ -1,3 +1,4 @@
+import { gateSales } from "@/lib/sales-gate";
 import { TIME_WINDOWS } from "@/lib/filters";
 import { validLatLon } from "@/lib/geo";
 import { buildHoney } from "@/lib/honey-rank";
@@ -15,6 +16,8 @@ function numberParam(value: string | null): number | null {
 }
 
 export async function GET(request: Request) {
+  const denied = gateSales(request);
+  if (denied) return denied;
   const url = new URL(request.url);
   const date = url.searchParams.get("date")?.trim() || null;
   const hours = numberParam(url.searchParams.get("hours"));

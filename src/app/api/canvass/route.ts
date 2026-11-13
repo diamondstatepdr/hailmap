@@ -1,6 +1,8 @@
 import { asCanvassStatus } from "@/lib/canvass";
 import { listCanvass, saveCanvass } from "@/lib/canvass-store";
 import { requireUser } from "@/lib/auth";
+import { salesDenied } from "@/lib/sales-gate";
+import { memberTeamKey } from "@/lib/team-scope";
 import { validLatLon } from "@/lib/geo";
 
 export const runtime = "nodejs";
@@ -20,13 +22,17 @@ function boundsOf(url: URL): { west: number; south: number; east: number; north:
 export async function GET(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
-  const stops = listCanvass(boundsOf(new URL(request.url)));
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
+  const stops = listCanvass(boundsOf(new URL(request.url)), memberTeamKey(auth.user));
   return Response.json({ stops });
 }
 
 export async function POST(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();
@@ -53,6 +59,7 @@ export async function POST(request: Request) {
     status,
     note: record.note == null ? null : String(record.note),
     hailIn: hailIn != null && Number.isFinite(hailIn) ? hailIn : null,
+    team: memberTeamKey(auth.user),
   });
   if (!stop) return Response.json({ error: "Could not save that house." }, { status: 400 });
   return Response.json({ stop });

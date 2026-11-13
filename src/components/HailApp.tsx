@@ -12,6 +12,8 @@ import { hailYearChoices, hailYearSpan } from "@/lib/hail-year";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
 import AuthDialog from "@/components/AuthDialog";
+import PaywallDialog from "@/components/billing/PaywallDialog";
+import { PAYWALL_EVENT } from "@/lib/paywall-client";
 import type { MapFocus, MapFrame } from "@/components/HailMap";
 import { BrandSplash, LogoMark, Wordmark } from "@/components/brand/Logo";
 import { applyPalette, applyScheme, activePalette, paletteName, type PaletteId } from "@/lib/palette";
@@ -293,9 +295,11 @@ export default function HailApp() {
   const [draftPin, setDraftPin] = useState<{ lat: number; lon: number } | null>(null);
   const [picking, setPicking] = useState(false);
   const [filter, setFilter] = useState(defaultFilter);
-  const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; role?: "owner" | "member" } | null>(null);
   const [authConfigured, setAuthConfigured] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [billing, setBilling] = useState({ enabled: false, access: true });
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [radiusMi, setRadiusMi] = useState<SearchRadiusMi>(DEFAULT_RADIUS_MI);
   const radiusKm = milesToKm(radiusMi);
   const [livePlaceLoading, setLivePlaceLoading] = useState(false);
@@ -468,7 +472,8 @@ export default function HailApp() {
       document.documentElement.style.colorScheme = "light";
       localStorage.setItem("hailmap-theme", "light");
     }
-    if (params.get("honey") === "1") {
+      if (params.get("signin") === "team") setAuthOpen(true);
+      if (params.get("honey") === "1") {
       const west = Number(params.get("west"));
       const south = Number(params.get("south"));
       const east = Number(params.get("east"));
@@ -565,12 +570,34 @@ export default function HailApp() {
     setPalette(activePalette());
     fetch("/api/auth/session")
       .then((response) => response.json())
-      .then((payload: { user?: { id: string; name: string } | null; configured?: boolean }) => {
+      .then((payload: { user?: { id: string; name: string; role?: "owner" | "member" } | null; configured?: boolean; billing?: { enabled?: boolean; access?: boolean } }) => {
         setUser(payload.user ?? null);
         setAuthConfigured(Boolean(payload.configured));
+        setBilling({
+          enabled: Boolean(payload.billing?.enabled),
+          access: payload.billing?.access !== false,
+        });
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const open = () => setPaywallOpen(true);
+    window.addEventListener(PAYWALL_EVENT, open);
+    return () => window.removeEventListener(PAYWALL_EVENT, open);
+  }, []);
+
+  useEffect(() => {
+    if (!billing.enabled || billing.access) return;
+    if (section === "field") {
+      setSection("map");
+      setPaywallOpen(true);
+    }
+    if (honeyOpen) {
+      setHoneyOpen(false);
+      setPaywallOpen(true);
+    }
+  }, [billing.enabled, billing.access, section, honeyOpen]);
 
   useEffect(() => {
     if (!user) {
@@ -1425,7 +1452,23 @@ export default function HailApp() {
     setLocationOn(true);
   }
 
+  function salesLocked() {
+    return billing.enabled && !billing.access;
+  }
+
+  function denySales() {
+    if (!salesLocked()) return false;
+    setPaywallOpen(true);
+    return true;
+  }
+
+  function openForecast(next: { label: string; query: ForecastQuery }) {
+    if (denySales()) return;
+    setForecast(next);
+  }
+
   function enterField(anchor?: FieldAnchor) {
+    if (denySales()) return;
     if (anchor) {
       setFieldAnchor(anchor);
     } else if (section !== "field") {
@@ -1500,6 +1543,7 @@ export default function HailApp() {
     focus: { lat: number; lon: number };
     fallbackHail: number;
   }) {
+    if (denySales()) return;
     setKnockBusy(true);
     setKnockError(null);
     try {
@@ -1513,7 +1557,8 @@ export default function HailApp() {
           bands: compactBands(meshCollection?.features ?? [], input.focus),
         }),
       });
-      const payload = (await response.json()) as { stops?: KnockStop[]; note?: string; error?: string };
+      const payload = (await response.json()) as { stops?: KnockStop[]; note?: string; error?: string; code?: string };
+      if (response.status === 402 || payload.code === "subscription_required") setPaywallOpen(true);
       if (!response.ok) throw new Error(payload.error ?? "Could not build that route");
       const stops = hailAlongStops(payload.stops ?? [], meshCollection?.features ?? []);
       const countNote = stops.length === 1 ? "1 stop, hardest hail first." : `${stops.length} stops, hardest hail first.`;
@@ -1629,6 +1674,7 @@ export default function HailApp() {
   }
 
   async function loadDealers(selection: AreaSelection) {
+    if (denySales()) return;
     setArea(selection);
     setDealersOpen(false);
     setDealerLoading(true);
@@ -1659,7 +1705,8 @@ export default function HailApp() {
       } finally {
         window.clearTimeout(timer);
       }
-      const payload = (await response.json()) as { dealers?: DealerPin[]; note?: string; error?: string };
+      const payload = (await response.json()) as { dealers?: DealerPin[]; note?: string; error?: string; code?: string };
+      if (response.status === 402 || payload.code === "subscription_required") setPaywallOpen(true);
       if (!response.ok) throw new Error(payload.error ?? "Could not search dealerships. Try again.");
       setDealers(payload.dealers ?? []);
       setDealerNote(payload.note ?? null);
@@ -1713,6 +1760,7 @@ export default function HailApp() {
     storms: Array<{ date: string; label: string; meshMaxIn?: number | null; spotterMaxIn?: number | null }>;
     nearby: Array<{ when: string; where: string; detail: string }>;
   }) {
+    if (denySales()) return;
     setProofBusy(true);
     try {
       const features = meshCollection?.features ?? [];
@@ -1735,6 +1783,10 @@ export default function HailApp() {
         stormDate: historyMode.kind === "day" ? historyMode.date : undefined,
       });
     } catch (error) {
+      if (error instanceof Error && error.name === "SubscriptionRequired") {
+        setPaywallOpen(true);
+        return;
+      }
       if (error instanceof DOMException && error.name === "AbortError") return;
       setError(error instanceof Error ? error.message : "Could not make the hail proof");
     } finally {
@@ -1816,6 +1868,7 @@ export default function HailApp() {
   async function signOut() {
     await fetch("/api/auth/session", { method: "DELETE" });
     setUser(null);
+    setBilling((current) => ({ enabled: current.enabled, access: !current.enabled }));
   }
 
   const honeyBounds = rankBounds ?? viewBounds;
@@ -1907,8 +1960,14 @@ export default function HailApp() {
       setHoneyError(null);
       try {
         const response = await fetch(`/api/honey?${honeyQuery}`, { signal: controller.signal });
-        const payload = (await response.json()) as HoneyResponse;
+        const payload = (await response.json()) as HoneyResponse & { code?: string };
         if (cancelled) return;
+        if (response.status === 402 || payload.code === "subscription_required") {
+          setHoneyOpen(false);
+          setPaywallOpen(true);
+          setHoneyLoading(false);
+          return;
+        }
         if (!response.ok) throw new Error(payload.error ?? "Could not rank money holes");
         const stillLoading = payload.partial === true || payload.status === "partial";
         if (stillLoading) {
@@ -2091,13 +2150,23 @@ export default function HailApp() {
         lat={lat}
         lon={lon}
         hailIn={hailIn}
-        signedIn={Boolean(user)}
+        signedIn={Boolean(user) && !salesLocked()}
         stops={canvass.stops}
         counts={canvass.counts}
         saving={canvass.saving}
         error={canvass.error}
         showCounts={showCounts}
-        onSignIn={() => setAuthOpen(true)}
+        onSignIn={() => {
+          if (salesLocked()) {
+            setPaywallOpen(true);
+            return;
+          }
+          if (billing.enabled) {
+            window.location.href = "/login";
+            return;
+          }
+          setAuthOpen(true);
+        }}
         onSave={(status, note) => canvass.save({ address, lat, lon, status, note, hailIn })}
       />
     );
@@ -2138,7 +2207,14 @@ export default function HailApp() {
       paletteLabel={paletteName(palette)}
       userName={user?.name ?? null}
       authConfigured={authConfigured}
-      onSignIn={() => setAuthOpen(true)}
+      billingEnabled={billing.enabled}
+      onSignIn={() => {
+        if (billing.enabled) {
+          window.location.href = "/login";
+          return;
+        }
+        setAuthOpen(true);
+      }}
       onSignOut={() => void signOut()}
       stormsNew={chaseUnseen && section !== "storms"}
     >
@@ -2369,6 +2445,7 @@ export default function HailApp() {
                       aria-label="Money spots"
                       className="plain-action press"
                     onClick={() => {
+                      if (denySales()) return;
                       setOverlay(null);
                       setCustomOpen(false);
                       setMenuOpen(false);
@@ -2720,7 +2797,7 @@ export default function HailApp() {
                 const spot = actionSpot;
                 if (!spot) return;
                 const selection = circlePolygon(spot.lat, spot.lon, 1.8);
-                setForecast({
+                openForecast({
                   label: spot.name,
                   query: {
                     selection,
@@ -2974,7 +3051,7 @@ export default function HailApp() {
                     data-forecast-open
                     onClick={() => {
                       const hail = area.minIn ?? area.maxIn ?? 0.75;
-                      setForecast({
+                      openForecast({
                         label: area.label,
                         query: {
                           selection: area.geometry,
@@ -3206,6 +3283,10 @@ export default function HailApp() {
                 if (key === "honey") {
                   setShowHoney((value) => {
                     const next = !value;
+                    if (next && salesLocked()) {
+                      setPaywallOpen(true);
+                      return false;
+                    }
                     if (next) setHoneyOpen(true);
                     return next;
                   });
@@ -3368,7 +3449,17 @@ export default function HailApp() {
           onClose={() => setAuthOpen(false)}
           onSignedIn={(next) => {
             setUser(next);
+            setBilling((current) => ({ ...current, access: true }));
             setAuthOpen(false);
+          }}
+        />
+      ) : null}
+      {paywallOpen ? (
+        <PaywallDialog
+          onClose={() => setPaywallOpen(false)}
+          onTeamPasscode={() => {
+            setPaywallOpen(false);
+            setAuthOpen(true);
           }}
         />
       ) : null}
@@ -3382,6 +3473,7 @@ export default function HailApp() {
           helpOpen ||
           honeyOpen ||
           authOpen ||
+          paywallOpen ||
           Boolean(overlay)
         }
       />

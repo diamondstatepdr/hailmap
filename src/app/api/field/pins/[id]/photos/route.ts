@@ -1,5 +1,6 @@
 import { addFieldPhoto, asDamageType } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
+import { salesDenied } from "@/lib/sales-gate";
 import { clientIp, deletePhoto, detectImage, maxPhotoBytes, savePhoto, takePhotoSlot } from "@/lib/photos";
 
 export const runtime = "nodejs";
@@ -10,6 +11,8 @@ const THIRTY_DAYS = 30 * 86400000;
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   const { id } = await context.params;
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.includes("multipart/form-data")) {

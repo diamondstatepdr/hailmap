@@ -1,5 +1,6 @@
 import { asPinStatus, createPin, listPins } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
+import { salesDenied } from "@/lib/sales-gate";
 import { validLatLon } from "@/lib/geo";
 
 export const runtime = "nodejs";
@@ -15,12 +16,16 @@ function clip(value: unknown, max: number): string | null {
 export async function GET(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   return Response.json({ pins: listPins(auth.user.id) });
 }
 
 export async function POST(request: Request) {
   const auth = requireUser(request);
   if ("response" in auth) return auth.response;
+  const denied = salesDenied(auth.user);
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();

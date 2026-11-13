@@ -14,8 +14,8 @@ Answer the Data safety form from this sheet. The Android package `com.hailmap.ap
 | Data type | Collected | Shared | Notes |
 | --- | --- | --- | --- |
 | Location (precise or approximate) | Yes, optional | No | Field mode, “Use my location” on a community hail photo, and Near me alerts use browser geolocation. The last fix for Near me is stored with that phone’s push subscription. The map itself does not request location. Photo EXIF GPS is not used. |
-| Personal info (name, email, phone, address) | Yes, optional | No | A display name is stored only if someone signs in with the team passcode. It is the account id for that person’s field notes and watch list. Phone and email are not collected. |
-| Financial info | No | No | County income is Census statistics, not the user's finances. |
+| Personal info (name, email, phone, address) | Yes, optional | Email is shared with Stripe only if the person subscribes | A display name is stored if someone signs in with the team passcode or creates an email account. Email and a password hash are stored for an email account. Phone is not required. |
+| Financial info | Yes, optional, when billing is on | Yes, with Stripe | Card numbers are entered on Stripe Checkout. Swathline stores a Stripe customer id and subscription status, not the card number. County income on the map is Census statistics, not the user's finances. |
 | Photos | Yes, optional | No | A community hail photo is public on the map. A Field-mode photo stays on that user’s pin and is not shown as an official report. Contacts, SMS, and calendar are not accessed. |
 | App activity / web history | No | No | No analytics SDK. |
 | Device or other IDs | Yes, optional | No | Turning on phone alerts stores the browser push endpoint and its keys so Swathline can deliver hail notifications. It is deleted when alerts are turned off or the push service reports the subscription is gone. No advertising ID. |

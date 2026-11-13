@@ -110,8 +110,8 @@ function scrub(text: string, secret: string): string {
   return cleaned || "The service refused the request.";
 }
 
-export function publicCrm(): CrmPublic {
-  const stored = readCrm();
+export function publicCrm(scope: string | null = null): CrmPublic {
+  const stored = readCrm(scope);
   return {
     provider: stored?.provider ?? null,
     configured: Boolean(stored),
@@ -126,14 +126,24 @@ export function countLeadPins(userId: string): number {
   return listPins(userId).filter((pin) => pin.status === "lead").length;
 }
 
-function readCrm(): StoredCrm | null {
-  const row = getDb()
-    .prepare(
-      `SELECT provider, secret, record_type AS recordType, status_name AS statusName,
-              last_sent_at AS lastSentAt, last_result AS lastResult
-       FROM crm_settings WHERE id = 1`,
-    )
-    .get() as StoredCrm | undefined;
+function readCrm(scope: string | null = null): StoredCrm | null {
+  const row = (
+    scope
+      ? getDb()
+          .prepare(
+            `SELECT provider, secret, record_type AS recordType, status_name AS statusName,
+                    last_sent_at AS lastSentAt, last_result AS lastResult
+             FROM crm_accounts WHERE scope = ?`,
+          )
+          .get(scope)
+      : getDb()
+          .prepare(
+            `SELECT provider, secret, record_type AS recordType, status_name AS statusName,
+                    last_sent_at AS lastSentAt, last_result AS lastResult
+             FROM crm_settings WHERE id = 1`,
+          )
+          .get()
+  ) as StoredCrm | undefined;
   if (!row || !asCrmProvider(row.provider) || !row.secret) return null;
   return { ...row, provider: row.provider, lastSentAt: row.lastSentAt || null, lastResult: row.lastResult || null };
 }
@@ -143,8 +153,10 @@ export async function saveCrm(input: {
   secret?: string | null;
   recordType?: string | null;
   statusName?: string | null;
+  scope?: string | null;
 }): Promise<{ ok: true; settings: CrmPublic } | { ok: false; error: string }> {
-  const current = readCrm();
+  const scope = input.scope ?? null;
+  const current = readCrm(scope);
   const secret = input.secret?.trim() || (current?.provider === input.provider ? current.secret : "");
   if (!secret) return { ok: false, error: "Paste the link or API key first." };
   const recordType = clipLabel(input.recordType, current?.recordType || DEFAULT_RECORD);
@@ -152,14 +164,14 @@ export async function saveCrm(input: {
   if (input.provider === "webhook") {
     const target = await webhookTarget(secret);
     if ("error" in target) return { ok: false, error: target.error };
-    writeCrm({ provider: "webhook", secret: target.url, recordType, statusName });
-    return { ok: true, settings: publicCrm() };
+    writeCrm({ provider: "webhook", secret: target.url, recordType, statusName }, scope);
+    return { ok: true, settings: publicCrm(scope) };
   }
   if (secret.length < 8 || /\s/.test(secret) || secret.includes("://")) {
     return { ok: false, error: "That does not look like an API key." };
   }
-  writeCrm({ provider: input.provider, secret, recordType, statusName });
-  return { ok: true, settings: publicCrm() };
+  writeCrm({ provider: input.provider, secret, recordType, statusName }, scope);
+  return { ok: true, settings: publicCrm(scope) };
 }
 
 function clipLabel(value: string | null | undefined, fallback: string): string {
@@ -168,7 +180,23 @@ function clipLabel(value: string | null | undefined, fallback: string): string {
   return text.slice(0, 80);
 }
 
-function writeCrm(row: Pick<StoredCrm, "provider" | "secret" | "recordType" | "statusName">) {
+function writeCrm(row: Pick<StoredCrm, "provider" | "secret" | "recordType" | "statusName">, scope: string | null = null) {
+  const now = new Date().toISOString();
+  if (scope) {
+    getDb()
+      .prepare(
+        `INSERT INTO crm_accounts (scope, provider, secret, record_type, status_name, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(scope) DO UPDATE SET
+           provider = excluded.provider,
+           secret = excluded.secret,
+           record_type = excluded.record_type,
+           status_name = excluded.status_name,
+           updated_at = excluded.updated_at`,
+      )
+      .run(scope, row.provider, row.secret, row.recordType, row.statusName, now);
+    return;
+  }
   getDb()
     .prepare(
       `INSERT INTO crm_settings (id, provider, secret, record_type, status_name, updated_at)
@@ -180,13 +208,18 @@ function writeCrm(row: Pick<StoredCrm, "provider" | "secret" | "recordType" | "s
          status_name = excluded.status_name,
          updated_at = excluded.updated_at`,
     )
-    .run(row.provider, row.secret, row.recordType, row.statusName, new Date().toISOString());
+    .run(row.provider, row.secret, row.recordType, row.statusName, now);
 }
 
-function rememberSend(result: string) {
+function rememberSend(result: string, scope: string | null = null) {
   const text = result.replace(/\s+/g, " ").trim().slice(0, 180);
   if (!text) return;
-  getDb().prepare("UPDATE crm_settings SET last_sent_at = ?, last_result = ? WHERE id = 1").run(new Date().toISOString(), text);
+  const now = new Date().toISOString();
+  if (scope) {
+    getDb().prepare("UPDATE crm_accounts SET last_sent_at = ?, last_result = ? WHERE scope = ?").run(now, text, scope);
+    return;
+  }
+  getDb().prepare("UPDATE crm_settings SET last_sent_at = ?, last_result = ? WHERE id = 1").run(now, text);
 }
 
 function text(value: unknown, max = 80): string | null {
@@ -330,8 +363,8 @@ async function postJson(url: string, secret: string, body: unknown): Promise<{ o
   return { ok: true };
 }
 
-export async function testCrm(): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  const stored = readCrm();
+export async function testCrm(scope: string | null = null): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const stored = readCrm(scope);
   if (!stored) return { ok: false, error: "Save a webhook link or API key first." };
   if (stored.provider === "webhook") {
     const sent = await postWebhook(stored.secret, zapierBody([], new Date().toISOString(), "leads.test"));
@@ -373,15 +406,17 @@ async function postWebhook(url: string, body: unknown): Promise<{ ok: true } | {
   return { ok: true };
 }
 
-export async function sendLeads(userId: string): Promise<
-  { ok: true; sent: number; skipped: number; message: string } | { ok: false; error: string; sent?: number }
-> {
-  const stored = readCrm();
+export async function sendLeads(
+  userId: string,
+  scope: string | null = null,
+): Promise<{ ok: true; sent: number; skipped: number; message: string } | { ok: false; error: string; sent?: number }> {
+  const mark = (result: string) => rememberSend(result, scope);
+  const stored = readCrm(scope);
   if (!stored) return { ok: false, error: "Save a webhook link or API key first." };
   const pins = listPins(userId).filter((pin) => pin.status === "lead");
   if (!pins.length) {
     const message = "No leads yet. Mark a house as Lead, then try again.";
-    rememberSend(message);
+    mark(message);
     return { ok: true, sent: 0, skipped: 0, message };
   }
   const leads: OutboundLead[] = [];
@@ -392,11 +427,11 @@ export async function sendLeads(userId: string): Promise<
   if (stored.provider === "webhook") {
     const sent = await postWebhook(stored.secret, zapierBody(leads, new Date().toISOString(), "leads.sent"));
     if (!sent.ok) {
-      rememberSend(sent.error);
+      mark(sent.error);
       return sent;
     }
     const message = sentCount(leads.length);
-    rememberSend(message);
+    mark(message);
     return { ok: true, sent: leads.length, skipped: 0, message };
   }
   if (stored.provider === "jobnimbus") {
@@ -405,13 +440,13 @@ export async function sendLeads(userId: string): Promise<
       const result = await postJson(JOBNIMBUS_CONTACTS, stored.secret, jobNimbusContact(lead, stored.recordType, stored.statusName));
       if (!result.ok) {
         const error = sent ? `Sent ${sent}. JobNimbus then refused a lead. ${result.error}` : result.error;
-        rememberSend(error);
+        mark(error);
         return { ok: false, error, sent };
       }
       sent += 1;
     }
     const message = sentCount(sent);
-    rememberSend(message);
+    mark(message);
     return { ok: true, sent, skipped: 0, message };
   }
   let sent = 0;
@@ -435,33 +470,33 @@ export async function sendLeads(userId: string): Promise<
     if (!contact.ok) {
       const detail = scrub(await contact.text().catch(() => ""), stored.secret);
       const error = sent ? `Sent ${sent}. AccuLynx then refused a lead. ${detail}` : detail;
-      rememberSend(error);
+      mark(error);
       return { ok: false, error, sent };
     }
     const created = (await contact.json().catch(() => null)) as { id?: unknown; contactId?: unknown } | null;
     const contactId = typeof created?.id === "string" ? created.id : typeof created?.contactId === "string" ? created.contactId : null;
     if (!contactId) {
       const error = "AccuLynx did not return a contact id.";
-      rememberSend(error);
+      mark(error);
       return { ok: false, error, sent };
     }
     const job = await postJson(ACCULYNX_JOBS, stored.secret, acculynxJob(lead, contactId));
     if (!job.ok) {
       const error = sent ? `Sent ${sent}. ${job.error}` : job.error;
-      rememberSend(error);
+      mark(error);
       return { ok: false, error, sent };
     }
     sent += 1;
   }
   if (!sent) {
     const error = "AccuLynx needs a street, city, state, and ZIP. None of these leads have a full address.";
-    rememberSend(error);
+    mark(error);
     return { ok: false, error };
   }
   const message = skipped
     ? `${sentCount(sent)} ${skipped} ${skipped === 1 ? "lead has" : "leads have"} no street address, so AccuLynx did not take ${skipped === 1 ? "it" : "them"}.`
     : sentCount(sent);
-  rememberSend(message);
+  mark(message);
   return { ok: true, sent, skipped, message };
 }
 

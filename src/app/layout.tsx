@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Montserrat } from "next/font/google";
 import type { ReactNode } from "react";
 import RegisterSw from "@/components/RegisterSw";
 import { themeBootScript } from "@/lib/palette";
@@ -9,6 +9,13 @@ const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: "800",
+  display: "swap",
+  variable: "--font-mark",
 });
 
 const description = "Live US hail, wind, and tornado reports, property storm history, field notes, and phone hail alerts.";
@@ -52,7 +59,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-palette="a" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" data-palette="a" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
         <RegisterSw />

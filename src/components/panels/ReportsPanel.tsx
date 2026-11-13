@@ -101,7 +101,7 @@ export default function ReportsPanel({
         {!signedIn ? (
           <div className="mt-1 max-w-xl text-sm text-muted">
             <p>
-              Sign in with the team passcode to see reports saved on your name. The passcode is shared by whoever set up Swathline. It is not a personal password.
+              Sign in with an email account, or with the team passcode, to see reports saved on your name. The passcode is shared by whoever set up Swathline. It is not a personal password.
             </p>
             <button type="button" onClick={onSignIn} className="btn btn-secondary press mt-2">
               Sign in

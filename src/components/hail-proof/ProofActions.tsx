@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { subscriptionRequired } from "@/lib/paywall-client";
 
 export function ProofLaunch({ busy, onProof }: { busy?: boolean; onProof: (company: string, phone: string) => void }) {
   const [company, setCompany] = useState("");
@@ -66,7 +67,12 @@ export async function shareHailProof(draft: unknown): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(draft),
   });
-  const payload = (await response.json()) as { error?: string; pdfUrl?: string; filename?: string; url?: string };
+  const payload = (await response.json()) as { error?: string; code?: string; pdfUrl?: string; filename?: string; url?: string };
+  if (subscriptionRequired(response.status, payload)) {
+    const error = new Error(payload.error ?? "Subscribe to use this sales tool.");
+    error.name = "SubscriptionRequired";
+    throw error;
+  }
   if (!response.ok || !payload.pdfUrl || !payload.filename) throw new Error(payload.error ?? "Could not make the PDF");
   const pdf = await fetch(payload.pdfUrl);
   if (!pdf.ok) throw new Error("Could not download the PDF");

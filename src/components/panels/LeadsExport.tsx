@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { sheetsCreateUrl, type LeadRow } from "@/lib/leads";
+import { requestPaywall, subscriptionRequired } from "@/lib/paywall-client";
 
 interface Props {
   signedIn: boolean;
@@ -20,7 +21,11 @@ export default function LeadsExport({ signedIn, onSignIn }: Props) {
     let cancelled = false;
     void fetch("/api/leads")
       .then(async (response) => {
-        const payload = (await response.json()) as { leads?: LeadRow[]; error?: string };
+        const payload = (await response.json()) as { leads?: LeadRow[]; error?: string; code?: string };
+        if (subscriptionRequired(response.status, payload)) {
+          requestPaywall();
+          throw new Error(payload.error ?? "Subscribe to use this sales tool.");
+        }
         if (!response.ok) throw new Error(payload.error ?? "Could not load leads");
         if (!cancelled) setLeads(payload.leads ?? []);
       })
@@ -35,6 +40,11 @@ export default function LeadsExport({ signedIn, onSignIn }: Props) {
   async function download(format: "csv" | "sheets") {
     setError(null);
     const response = await fetch(`/api/leads?format=${format}`);
+    if (subscriptionRequired(response.status, null) || response.status === 402) {
+      requestPaywall();
+      setError("Subscribe to export leads");
+      return;
+    }
     if (!response.ok) {
       setError("Could not export leads");
       return;

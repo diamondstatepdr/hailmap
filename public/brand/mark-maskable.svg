@@ -1,28 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#070b16"/>
-  <svg x="86" y="86" width="340" height="340" viewBox="0 0 64 64">
-    <defs>
-      <linearGradient id="bg" x1="4" y1="0" x2="60" y2="64" gradientUnits="userSpaceOnUse">
-        <stop offset="0" stop-color="#243a9a"/>
-        <stop offset="0.46" stop-color="#101a3d"/>
-        <stop offset="1" stop-color="#070b16"/>
-      </linearGradient>
-      <linearGradient id="swath" x1="8" y1="54" x2="58" y2="8" gradientUnits="userSpaceOnUse">
-        <stop offset="0" stop-color="#9d174d"/>
-        <stop offset="0.46" stop-color="#22d3ee"/>
-        <stop offset="1" stop-color="#f8feff"/>
-      </linearGradient>
-      <linearGradient id="stone" x1="24" y1="20" x2="44" y2="42" gradientUnits="userSpaceOnUse">
-        <stop offset="0" stop-color="#ffffff"/>
-        <stop offset="0.5" stop-color="#c8f7ff"/>
-        <stop offset="1" stop-color="#38bdf8"/>
-      </linearGradient>
-    </defs>
-    <rect width="64" height="64" rx="16" fill="url(#bg)"/>
-    <circle cx="32" cy="32" r="23" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1.2"/>
-    <path d="M9 48.5 H28.5 L49 11.5 H29.5 Z" fill="url(#swath)"/>
-    <path d="M44.2 11.2 L56.2 8.2 L49.4 22.6 Z" fill="#f9a8d4"/>
-    <path d="M27.2 27.2 L33.6 23.4 L40 27.2 L40 34.6 L33.6 38.4 L27.2 34.6 Z" fill="url(#stone)"/>
-    <path d="M27.2 27.2 L33.6 23.4 L40 27.2 L33.6 30.6 Z" fill="#ffffff" fill-opacity="0.78"/>
-  </svg>
+  <rect width="512" height="512" fill="#FF5A00"/>
+  <g transform="translate(76 76) scale(0.70)">
+    <polygon points="78,164 274,148 274,196" fill="#fff"/>
+    <polygon points="28,206 290,186 290,238" fill="#fff"/>
+    <polygon points="0,252 304,224 304,286" fill="#fff"/>
+    <polygon points="36,298 288,278 288,334" fill="#fff"/>
+    <polygon points="96,346 270,332 270,372" fill="#fff"/>
+    <polygon points="300,128 408,176 446,252 412,346 324,396 236,332 214,244 276,156" fill="#FFFFFF"/>
+    <polygon points="214,244 276,156 300,128 268,210 236,300" fill="#E6E9EE"/>
+    <polygon points="236,332 324,396 412,346 330,300 250,292" fill="#EEF0F3"/>
+    <polygon points="300,128 408,176 360,168 318,150" fill="#FFFFFF"/>
+    <polygon points="408,176 446,252 390,230 352,188" fill="#F7F8FA"/>
+    <polygon points="276,188 340,160 352,230 286,248" fill="#F3F5F8"/>
+    <polygon points="286,248 352,230 368,300 300,318 250,280" fill="#FFFFFF"/>
+    <polygon points="250,280 300,318 324,360 248,330" fill="#E3E6EB"/>
+  </g>
 </svg>

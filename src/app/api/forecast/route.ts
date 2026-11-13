@@ -1,3 +1,4 @@
+import { gateSales } from "@/lib/sales-gate";
 import { loadForecastExposure } from "@/lib/forecast-exposure";
 import { parseForecastQuery } from "@/lib/forecast";
 import { ESTIMATE_BADGE, ESTIMATE_GUIDE, ESTIMATE_TITLE } from "@/lib/forecast-sources";
@@ -6,6 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const denied = gateSales(request);
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();

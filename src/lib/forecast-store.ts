@@ -7,15 +7,15 @@ export function forecastTeamKey(): string {
   return createHash("sha256").update(`swathline-team|${pass}`).digest("hex").slice(0, 24);
 }
 
-export function readPrices(): JobPrices {
+export function readPrices(team = forecastTeamKey()): JobPrices {
   const row = getDb()
     .prepare(`SELECT pdr_low, pdr_high, roof_low, roof_high FROM forecast_prices WHERE team_key = ?`)
-    .get(forecastTeamKey()) as { pdr_low: number; pdr_high: number; roof_low: number; roof_high: number } | undefined;
+    .get(team) as { pdr_low: number; pdr_high: number; roof_low: number; roof_high: number } | undefined;
   if (!row) return { ...DEFAULT_PRICES };
   return { pdrLow: row.pdr_low, pdrHigh: row.pdr_high, roofLow: row.roof_low, roofHigh: row.roof_high };
 }
 
-export function writePrices(prices: JobPrices): JobPrices {
+export function writePrices(prices: JobPrices, team = forecastTeamKey()): JobPrices {
   getDb()
     .prepare(
       `INSERT INTO forecast_prices (team_key, pdr_low, pdr_high, roof_low, roof_high, updated_at)
@@ -27,6 +27,6 @@ export function writePrices(prices: JobPrices): JobPrices {
          roof_high = excluded.roof_high,
          updated_at = excluded.updated_at`,
     )
-    .run(forecastTeamKey(), prices.pdrLow, prices.pdrHigh, prices.roofLow, prices.roofHigh, new Date().toISOString());
+    .run(team, prices.pdrLow, prices.pdrHigh, prices.roofLow, prices.roofHigh, new Date().toISOString());
   return prices;
 }

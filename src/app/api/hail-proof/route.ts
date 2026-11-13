@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
+import { gateSales } from "@/lib/sales-gate";
 import { normalizeProof, proofFilename, type HailProof } from "@/lib/hail-proof";
 import { saveHailProof } from "@/lib/hail-proof-store";
 import { formatStormDate } from "@/lib/mesh-plan";
@@ -19,6 +20,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const denied = gateSales(request);
+  if (denied) return denied;
   const hash = createHash("sha256").update(`hail-proof|${clientIp(request)}`).digest("hex");
   const slot = takeActionSlot(hash, "hail-proof", 30, 3600000);
   if (!slot.ok) return Response.json({ error: slot.error }, { status: 429 });

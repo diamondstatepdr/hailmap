@@ -23,6 +23,7 @@ import {
   type ChaseHit,
   type ChasePayload,
 } from "@/lib/chase";
+import { stampChaseRadar } from "@/lib/chase-radar";
 import { confidenceFor, recencyFactor, scoreHoney, type HoneyPlace } from "@/lib/honey";
 
 const NOW = new Date("2026-10-20T18:00:00.000Z");
@@ -509,6 +510,7 @@ describe("chase list UI", () => {
     expect(html).toContain('data-bottom-sheet');
     expect(html).toContain('data-sheet-grab');
     expect(html).toContain('aria-label="Close"');
+    expect(html).toContain("chase-close");
     expect(html).toContain("This week&#x27;s chase list");
     expect(html).toContain("Money Hole");
     expect(html.match(/data-chase-stop/g)).toHaveLength(CHASE_PREVIEW);
@@ -550,7 +552,8 @@ describe("chase list UI", () => {
     expect(html).toContain("Deming, NM");
     expect(html).toContain("Oct 20, 2026");
     expect(html).toContain("Oct 19, 2026");
-    expect(html).toContain("Radar size —");
+    expect(html).not.toContain("Radar size —");
+    expect(html).not.toContain("Radar size ·");
     expect(html).toContain("Spotter size 2.00&quot;");
     expect(html).toContain("233,409 vehicles in the hail path");
     expect(html).toContain("Radar size 2.24&quot;");
@@ -580,5 +583,21 @@ describe("chase list UI", () => {
     const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.chase-body\s*\{[^}]*overscroll-behavior:\s*contain/);
     expect(css).toMatch(/\.chase-sheet-dock\s*\{[^}]*var\(--chrome-offset\)/);
+    expect(css).toMatch(/\.chase-sheet-dock \.sheet-close\s*\{[^}]*width:\s*64px/);
+    expect(css).toMatch(/\.chase-sheet-dock \.sheet-close\s*\{[^}]*height:\s*64px/);
+    expect(css).toMatch(/\.maplibregl-map \.maplibregl-ctrl-top-right\s*\{[^}]*top:[^;]*!important/);
+  });
+});
+
+describe("chase radar stamp", () => {
+  it("copies nearby radar hail onto a spotter hit and leaves a quiet point alone", () => {
+    const spotter = hit({ lat: 39.8, lon: -75.46, stormDate: "2026-11-12", spotterIn: 1.5, radarIn: null, confidence: "spotter" });
+    const quiet = hit({ lat: 25.7, lon: -80.2, stormDate: "2026-11-12", spotterIn: 1.75, radarIn: null, confidence: "spotter" });
+    const [stamped, missed] = stampChaseRadar([spotter, quiet], [
+      { stormDate: "2026-11-12", latQ: 398, lonQ: -755, maxIn: 1.27 },
+    ]);
+    expect(stamped.radarIn).toBe(1.27);
+    expect(stamped.spotterIn).toBe(1.5);
+    expect(missed.radarIn).toBeNull();
   });
 });

@@ -89,13 +89,14 @@ export function chaseBlockedBySheet(sheets: ChaseSheets): boolean {
  * Auto-open only on a plain map visit. A deep link or an open sheet skips it
  * without marking the week dismissed or seen.
  */
-export function weeklyChaseShouldAutoOpen(input: {
+export function weeklyChaseShouldAutoOpen(_input: {
   pending: boolean;
   deepLink: boolean;
   sheetOpen: boolean;
   onMap: boolean;
 }): boolean {
-  return input.pending && input.onMap && !input.deepLink && !input.sheetOpen;
+  // The hail map is the first screen. The Chase button still opens the list.
+  return false;
 }
 
 export interface ChaseFrameState {

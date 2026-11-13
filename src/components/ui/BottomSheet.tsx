@@ -14,6 +14,8 @@ interface Props {
   /** Visible height, in pixels, while collapsed. */
   peekHeight?: number;
   className?: string;
+  /** Extra class on the close button, for a larger tap target. */
+  closeClassName?: string;
   /** Screen accent: map, storms, addresses, field, reports, alerts, money, chase. */
   tone?: string;
 }
@@ -33,6 +35,7 @@ export default function BottomSheet({
   expandedMax = "min(78dvh, 42rem)",
   peekHeight = 132,
   className,
+  closeClassName,
   tone,
 }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -166,7 +169,7 @@ export default function BottomSheet({
         onPointerCancel={endDrag}
       >
         <div className="sheet-handle" />
-        <button type="button" className="sheet-close press" aria-label="Close" onClick={() => onClose()}>
+        <button type="button" className={`sheet-close press${closeClassName ? ` ${closeClassName}` : ""}`} aria-label="Close" onClick={() => onClose()}>
           <X size={18} strokeWidth={2.4} />
         </button>
       </div>

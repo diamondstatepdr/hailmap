@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { clusterReports, shouldCluster } from "@/lib/history-cluster";
 import { groupEvents, isLossCandidate, lossCandidates, defaultScoreDate, rangeMaxHail, type AddressEvent } from "@/lib/history-place";
 import { hailCalendarBand, monthCells } from "@/lib/hail-calendar";
-import { lastDays, parseSpan } from "@/lib/history-range";
+import { DEFAULT_MAP_DAYS, HISTORY_CHIPS, lastDays, parseSpan } from "@/lib/history-range";
 import { parseHistoryBounds } from "@/lib/history-query";
 import { MESH_ARCHIVE_START } from "@/lib/history-coverage";
 import { pickMeshArchiveName, planMesh } from "@/lib/mesh-plan";
@@ -12,6 +12,17 @@ const hailCsv = `om,yr,mo,dy,date,time,tz,st,stf,stn,mag,inj,fat,loss,closs,slat
 2505081830-01,2024,05,08,2024-05-08,18:30:00,3,TX,48,0,2.75,0,0,0,0,32.7800,-96.8000,32.7800,-96.8000,0,0,0,0,0,113,0,0,0
 1,1955,1,17,1955-01-17,16:39:00,3,TX,48,1,0.75,0,0,0,0,32.2000,-101.5000,0,0,0,0,0,0,0,227,0,0,0
 `;
+
+describe("default map span", () => {
+  it("lands on 30 days, which stays one of the history choices", () => {
+    expect(DEFAULT_MAP_DAYS).toBe(30);
+    expect(HISTORY_CHIPS.some((chip) => chip.days === DEFAULT_MAP_DAYS && chip.label === "30 days")).toBe(true);
+    expect(lastDays(DEFAULT_MAP_DAYS, new Date("2026-11-13T18:00:00Z"))).toEqual({
+      start: "2026-10-15",
+      end: "2026-11-13",
+    });
+  });
+});
 
 describe("history map bounds", () => {
   it("folds a zoomed-out phone view into the world instead of returning a raw error", () => {

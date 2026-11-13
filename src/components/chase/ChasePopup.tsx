@@ -35,8 +35,8 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
           <UpdatedLine at={payload.generatedAt} />
         </div>
         {mobile ? null : (
-          <button type="button" className="honey-close press" aria-label="Close" onClick={onClose}>
-            <X size={16} />
+          <button type="button" className="honey-close chase-close press" aria-label="Close" onClick={onClose}>
+            <X size={28} strokeWidth={2.4} />
           </button>
         )}
       </header>
@@ -53,7 +53,7 @@ export default function ChasePopup({ mobile, mode, payload, preview, onMode, onC
   if (mobile) {
     return (
       <div className="sheet-dock chase-sheet-dock pointer-events-none absolute inset-x-0 bottom-0" data-chase-popup data-tone="chase">
-        <BottomSheet label="This week's Money Holes" tone="chase" onClose={onClose} expandedMax="100%" peekHeight={148}>
+        <BottomSheet label="This week's Money Holes" tone="chase" closeClassName="chase-close" onClose={onClose} expandedMax="100%" peekHeight={148}>
           {body}
         </BottomSheet>
       </div>

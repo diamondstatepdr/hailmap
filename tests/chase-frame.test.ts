@@ -70,9 +70,9 @@ const clearSheets: ChaseSheets = {
 };
 
 describe("weekly chase auto-open", () => {
-  it("opens on a plain map visit and stays closed for share links", () => {
+  it("stays closed on a plain map visit so the hail map is the first screen", () => {
     const plain = weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: true });
-    expect(plain).toBe(true);
+    expect(plain).toBe(false);
     const links = [
       FORT_WORTH,
       "/?honey=1",
@@ -103,7 +103,7 @@ describe("weekly chase auto-open", () => {
     const opening = describeOpening(params("/"), saved);
     expect(opening.savedView).toBe(true);
     expect(suppressesWeeklyChase(params("/"), opening)).toBe(false);
-    expect(weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: true })).toBe(true);
+    expect(weeklyChaseShouldAutoOpen({ pending: true, deepLink: false, sheetOpen: false, onMap: true })).toBe(false);
     expect(weeklyChaseShouldAutoOpen({ pending: false, deepLink: false, sheetOpen: false, onMap: true })).toBe(false);
   });
 

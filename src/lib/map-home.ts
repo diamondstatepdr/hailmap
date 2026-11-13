@@ -1,4 +1,5 @@
 import type { LngLatBounds } from "@/lib/geo";
+import { parseMapLink } from "@/lib/view-scope";
 
 /** Contiguous United States, with a little margin so the coasts stay on screen. */
 export const UNITED_STATES_FRAME: LngLatBounds = {
@@ -8,8 +9,16 @@ export const UNITED_STATES_FRAME: LngLatBounds = {
   north: 49.4,
 };
 
-/** The camera a plain visit uses before anyone has saved a view. Zoomed on the US, not the hemisphere. */
+/** The camera a plain visit uses. Zoomed on the US, not the hemisphere. */
 export const DEFAULT_HOME_VIEW = { lat: 38.4, lon: -98.2, zoom: 4.15 };
+
+/**
+ * A plain visit opens on the continental US. `?lat=&lon=` is an explicit place.
+ * A stored pan is not: it was sending first-time and returning visitors to empty corners.
+ */
+export function initialCamera(params: URLSearchParams): { lat: number; lon: number; zoom: number } {
+  return parseMapLink(params) ?? { ...DEFAULT_HOME_VIEW };
+}
 
 /**
  * After the weekly sheet closes, go back to the saved camera.

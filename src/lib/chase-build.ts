@@ -1,6 +1,8 @@
 import { listRecentReports } from "@/lib/db";
 import { haversineKm } from "@/lib/geo";
+import { stampChaseRadar, type RadarCell } from "@/lib/chase-radar";
 import { CHASE_LOOKBACK_DAYS, chaseWindow, clusterChaseHits, rankChaseWeek, type ChaseHit, type ChasePayload } from "@/lib/chase";
+import { addIsoDays } from "@/lib/mesh-plan";
 import { stampClusterTowns } from "@/lib/chase-town";
 import { inBounds, type HoneyPlace } from "@/lib/honey";
 import { loadRoofTracts } from "@/lib/honey-census";
@@ -51,7 +53,7 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
     hits.push(hit);
   };
 
-  let mesh = new Map<string, number>();
+  let meshCells: RadarCell[] = [];
   try {
     const rows = historyDb()
       .prepare(
@@ -83,18 +85,29 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
   }
 
   try {
-    const cells = historyDb()
+    // The fresh week is read in full. A global limit was keeping older bins and
+    // dropping this week's radar, so every chase row showed a dash.
+    const fresh = historyDb()
       .prepare(
         `SELECT storm_date, lat_q, lon_q, max_in FROM mesh_cells
-         WHERE storm_date >= ? AND storm_date <= ? AND max_in >= 0.75
+         WHERE storm_date >= ? AND storm_date <= ? AND max_in >= 0.5`,
+      )
+      .all(window.start, window.end) as MeshCellRow[];
+    const older = historyDb()
+      .prepare(
+        `SELECT storm_date, lat_q, lon_q, max_in FROM mesh_cells
+         WHERE storm_date >= ? AND storm_date < ? AND max_in >= 0.5
+         ORDER BY storm_date DESC
          LIMIT 25000`,
       )
-      .all(window.lookback, window.end) as MeshCellRow[];
-    mesh = new Map();
-    for (const cell of cells) {
-      const key = `${cell.storm_date}|${cell.lat_q}|${cell.lon_q}`;
-      mesh.set(key, Math.max(mesh.get(key) ?? 0, cell.max_in));
-    }
+      .all(window.lookback, window.start) as MeshCellRow[];
+    const cells = [...fresh, ...older];
+    meshCells = cells.map((cell) => ({
+      stormDate: cell.storm_date,
+      latQ: cell.lat_q,
+      lonQ: cell.lon_q,
+      maxIn: cell.max_in,
+    }));
     const buckets = new Map<string, { lat: number; lon: number; inches: number; date: string }>();
     for (const cell of cells) {
       const lat = cell.lat_q / 10;
@@ -123,19 +136,6 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
     console.error("[hailmap] chase mesh", error instanceof Error ? error.message : error);
   }
 
-  const stampRadar = (hit: ChaseHit) => {
-    const latQ = Math.round(hit.lat * 10);
-    const lonQ = Math.round(hit.lon * 10);
-    let max = hit.radarIn ?? 0;
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) {
-        max = Math.max(max, mesh.get(`${hit.stormDate}|${latQ + dy}|${lonQ + dx}`) ?? 0);
-      }
-    }
-    if (max >= 0.75) hit.radarIn = Math.round(max * 100) / 100;
-  };
-  for (const hit of hits) stampRadar(hit);
-
   try {
     for (const report of listRecentReports(CHASE_LOOKBACK_DAYS)) {
       if (report.source === "seed" || report.hazard !== "hail" || report.sizeIn == null || report.sizeIn < 0.75) continue;
@@ -156,17 +156,30 @@ export function loadChaseHits(now = new Date()): ChaseHit[] {
         radarIn: confidence === "mesh" ? report.sizeIn : null,
         confidence,
       };
-      stampRadar(hit);
       push(hit);
     }
   } catch (error) {
     console.error("[hailmap] chase live", error instanceof Error ? error.message : error);
   }
 
-  return hits.flatMap((hit) => {
+  return stampChaseRadar(hits, meshCells).flatMap((hit) => {
     const placed = placeChaseHit(hit);
     return placed ? [placed] : [];
   });
+}
+
+/** Index this week's radar before the list is ranked, so spotter rows can show a real size. */
+async function ensureChaseWindowMesh(now: Date): Promise<void> {
+  const window = chaseWindow(now);
+  const { meshCellTotal, meshDayReady } = await import("@/lib/history-db");
+  const { indexMeshDay } = await import("@/lib/mesh-cache");
+  let date = window.start;
+  while (date <= window.end) {
+    if (!meshDayReady(date)) {
+      await indexMeshDay(date, { existingCells: meshCellTotal() });
+    }
+    date = addIsoDays(date, 1);
+  }
 }
 
 type ChaseCluster = ReturnType<typeof clusterChaseHits>[number];
@@ -282,6 +295,7 @@ async function loadMeasuredPlaces(hits: ChaseHit[], now: Date): Promise<{ places
 
 /** Build this week's chase list from stored hail, with lots and homes counted first. */
 export async function computeChase(now = new Date()): Promise<ChasePayload> {
+  await ensureChaseWindowMesh(now);
   const hits = loadChaseHits(now);
   const measured = await loadMeasuredPlaces(hits, now);
   const payload = rankChaseWeek({ hits, places: measured.places, now, partial: measured.partial });

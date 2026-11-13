@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHASE_MAP_GAP_PX, chaseMapPadding, DEFAULT_HOME_VIEW, homeViewAfterChase } from "@/lib/map-home";
+import { CHASE_MAP_GAP_PX, chaseMapPadding, DEFAULT_HOME_VIEW, homeViewAfterChase, initialCamera } from "@/lib/map-home";
 
 describe("chase map padding", () => {
   it("fills the phone gap above the sheet instead of shrinking the country", () => {
@@ -30,5 +30,13 @@ describe("home view after the chase sheet", () => {
     expect(homeViewAfterChase({ lat: 15, lon: -90, zoom: 1.7 })).toEqual(DEFAULT_HOME_VIEW);
     expect(DEFAULT_HOME_VIEW.zoom).toBeGreaterThanOrEqual(3.5);
     expect(DEFAULT_HOME_VIEW.zoom).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("first visit camera", () => {
+  it("opens a plain visit on the continental US and follows an explicit map link", () => {
+    expect(initialCamera(new URLSearchParams())).toEqual(DEFAULT_HOME_VIEW);
+    expect(initialCamera(new URLSearchParams("lat=25.8&lon=-80.2&z=10"))).toEqual({ lat: 25.8, lon: -80.2, zoom: 10 });
+    expect(initialCamera(new URLSearchParams("zoom=8"))).toEqual(DEFAULT_HOME_VIEW);
   });
 });

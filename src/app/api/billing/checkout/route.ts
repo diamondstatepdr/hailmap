@@ -1,5 +1,6 @@
+import type Stripe from "stripe";
 import { readSession } from "@/lib/auth";
-import { billingEnabled, priceIdFor, tierById } from "@/lib/billing";
+import { billingEnabled, canStartTrial, priceIdFor, tierById, TRIAL_DAYS } from "@/lib/billing";
 import { publicOrigin } from "@/lib/public-origin";
 import { getStripe } from "@/lib/stripe-server";
 import { getAccountById, updateBilling } from "@/lib/user-accounts";
@@ -38,6 +39,11 @@ export async function POST(request: Request) {
       updateBilling(account.id, { stripeCustomerId: customerId });
     }
     const origin = publicOrigin(request);
+    const trial = canStartTrial(account) ? !(await customerHadSubscription(stripe, customerId)) : false;
+    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+      metadata: { userId: account.id, tier: tier.id, priceId },
+    };
+    if (trial) subscriptionData.trial_period_days = TRIAL_DAYS;
     const checkout = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -46,8 +52,9 @@ export async function POST(request: Request) {
       success_url: `${origin}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/pricing?checkout=cancel`,
       allow_promotion_codes: true,
+      payment_method_collection: "always",
       metadata: { userId: account.id, tier: tier.id, priceId },
-      subscription_data: { metadata: { userId: account.id, tier: tier.id, priceId } },
+      subscription_data: subscriptionData,
     });
     if (!checkout.url) return Response.json({ error: "Stripe did not return a checkout link." }, { status: 502 });
     return Response.json({ url: checkout.url });
@@ -55,4 +62,10 @@ export async function POST(request: Request) {
     console.error("[hailmap] checkout", error instanceof Error ? error.message : "failed");
     return Response.json({ error: "Could not start checkout." }, { status: 502 });
   }
+}
+
+/** Any Stripe subscription, including a canceled one, means the trial was already used. */
+async function customerHadSubscription(stripe: Stripe, customerId: string): Promise<boolean> {
+  const listed = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 1 });
+  return listed.data.length > 0;
 }

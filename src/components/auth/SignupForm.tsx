@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { SIGNUP_LEDE } from "@/lib/pitch";
 
 const inputClass = "mt-1 w-full rounded-xl border border-line bg-app px-3 py-3 text-base";
 
@@ -40,8 +41,13 @@ export default function SignupForm() {
 
   return (
     <section className="rounded-3xl border border-line bg-panel p-5 shadow-float">
-      <h2 className="text-2xl font-semibold tracking-tight">Create account</h2>
-      <p className="mt-1 text-sm text-muted">One login for you. The live hail map stays free.</p>
+      <h2 className="pitch-title text-2xl font-semibold tracking-tight">Create account</h2>
+      <p className="pitch-copy mt-2 text-sm leading-relaxed text-muted">{SIGNUP_LEDE}</p>
+      <p className="mt-2 text-sm">
+        <Link href="/pricing" className="inline-flex min-h-11 items-center font-semibold text-accent">
+          See plans
+        </Link>
+      </p>
       <form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">
         <label className="block text-sm font-medium" htmlFor="full-name">
           Name

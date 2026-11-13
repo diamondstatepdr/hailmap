@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const sessionId = body && typeof body === "object" ? String((body as { sessionId?: unknown }).sessionId ?? "") : "";
   if (!sessionId.startsWith("cs_")) return Response.json({ error: "Missing checkout session." }, { status: 400 });
   try {
-    const checkout = await getStripe().checkout.sessions.retrieve(sessionId);
+    const checkout = await getStripe().checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
     const owner = checkout.client_reference_id || checkout.metadata?.userId;
     if (owner !== sessionUser.id) return Response.json({ error: "That checkout belongs to another account." }, { status: 403 });
     const notice = noticeFromStripeEvent({

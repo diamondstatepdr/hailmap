@@ -34,6 +34,17 @@ function priceIdFrom(object: Record<string, unknown>, metadata: Record<string, u
   return null;
 }
 
+/** A $0 trial invoice is payment_status "paid". Prefer the subscription status when Stripe sent it. */
+function checkoutStatus(object: Record<string, unknown>): string {
+  const subscription = object.subscription;
+  if (subscription && typeof subscription === "object" && "status" in subscription) {
+    const status = (subscription as { status?: unknown }).status;
+    if (typeof status === "string" && status.trim()) return status.trim();
+  }
+  const paid = object.payment_status === "paid" || object.payment_status === "no_payment_required";
+  return paid ? "active" : "incomplete";
+}
+
 function periodEnd(object: Record<string, unknown>): string | null {
   const direct = object.current_period_end;
   if (typeof direct === "number" && direct > 0) return new Date(direct * 1000).toISOString();
@@ -53,14 +64,13 @@ export function noticeFromStripeEvent(event: { type: string; data?: { object?: R
   const customerId = idOf(object.customer);
   const priceId = priceIdFrom(object, metadata);
   if (event.type === "checkout.session.completed") {
-    const paid = object.payment_status === "paid" || object.payment_status === "no_payment_required";
     return {
       type: "checkout.completed",
       userId,
       customerId,
       subscriptionId: idOf(object.subscription),
       priceId,
-      status: paid ? "active" : "incomplete",
+      status: checkoutStatus(object),
       currentPeriodEnd: null,
     };
   }
@@ -135,10 +145,18 @@ export function applyBillingNotice(notice: BillingNotice): boolean {
     return true;
   }
   if (!notice.status) return false;
+  const current = getAccountById(userId);
+  // Checkout's $0 trial invoice looks paid. Don't replace a trial the subscription event already recorded.
+  const status =
+    notice.type === "checkout.completed" &&
+    current?.subscriptionStatus === "trialing" &&
+    (notice.status === "active" || notice.status === "incomplete")
+      ? "trialing"
+      : notice.status;
   updateBilling(userId, {
     stripeCustomerId: keep(notice.customerId),
     stripeSubscriptionId: keep(notice.subscriptionId),
-    subscriptionStatus: notice.status,
+    subscriptionStatus: status,
     subscriptionPriceId: keep(notice.priceId),
     currentPeriodEnd: notice.currentPeriodEnd,
   });

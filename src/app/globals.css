@@ -4597,3 +4597,47 @@ html.dark .address-search ul {
 .send-lead {
   font-size: 15px;
 }
+
+.pitch {
+  container-type: inline-size;
+}
+
+.pitch-title {
+  text-wrap: balance;
+}
+
+.pitch-copy {
+  text-wrap: pretty;
+}
+
+.feature-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.plan-cta {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+@container (min-width: 40rem) {
+  .feature-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@container (min-width: 52rem) {
+  .plan-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}

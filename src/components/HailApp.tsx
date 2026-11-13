@@ -76,7 +76,7 @@ import { frameChaseStop } from "@/lib/chase-aim";
 import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, linkedBounds, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { chaseDotUnseen, chaseTopKey } from "@/lib/list-freshness";
-import { UNITED_STATES_FRAME, CHASE_LANDING_MAX_ZOOM, chaseLandingPadding, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase, initialCamera } from "@/lib/map-home";
+import { UNITED_STATES_FRAME, CHASE_LANDING_MAX_ZOOM, chaseLandingPadding, chaseMapPadding, conusPhoneCamera, frameInsideUnitedStates, homeViewAfterChase, initialCamera } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
@@ -86,7 +86,8 @@ import { circlePolygon, compactBands, hailAlongStops, knockHailLabel, routeLine,
 import { lotBands, rankDealersByHail } from "@/lib/dealer-hit";
 import { bandsForSelection, type ForecastQuery } from "@/lib/forecast";
 import { collectionAtTime, frameReplayBounds } from "@/lib/replay-time";
-import { reportsToSwaths } from "@/lib/swath";
+import { mergeSwathPoints, reportsToSwaths, type SwathPoint } from "@/lib/swath";
+import { shouldRetargetSwath, snapSwathCenter, SWATH_WINDOW_DEG, swathBoundsForView, swathViewCenter, viewSpanDeg } from "@/lib/swath-bounds";
 import type { Confidence } from "@/lib/confidence";
 import { OUTLOOK_LEVELS, SIGNIFICANT_COLOR, type ThreatInfo, type ThreatsResponse } from "@/lib/threats";
 import type { PinStatus } from "@/lib/field";
@@ -206,6 +207,10 @@ export default function HailApp() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [holdSplash, setHoldSplash] = useState(false);
   const [reports, setReports] = useState<HailReport[]>([]);
+  const [swathPoints, setSwathPoints] = useState<SwathPoint[]>([]);
+  const swathKey = useRef("");
+  const swathAnchor = useRef<{ key: string; center: { lat: number; lon: number } } | null>(null);
+  const swathAbort = useRef<AbortController | null>(null);
   const [rawCount, setRawCount] = useState(0);
   const [status, setStatus] = useState<SourceStatus | null>(null);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
@@ -272,6 +277,7 @@ export default function HailApp() {
   const [meshLoading, setMeshLoading] = useState(false);
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [dealers, setDealers] = useState<DealerPin[]>([]);
+  const [dealerLoaded, setDealerLoaded] = useState(false);
   const [dealerNote, setDealerNote] = useState<string | null>(null);
   const [dealerError, setDealerError] = useState<string | null>(null);
   const [dealerLoading, setDealerLoading] = useState(false);
@@ -495,13 +501,22 @@ export default function HailApp() {
       lockFrame.current = true;
       setFocus({ lat: camera.lat, lon: camera.lon, zoom: camera.zoom, nonce: Date.now() });
     } else if (!params.get("focusLat") && params.get("honey") !== "1" && !linkedBounds(params)) {
-      // Fit the country inside the chrome. A fixed zoom crops the coasts on a phone.
-      setFrame({
-        ...UNITED_STATES_FRAME,
-        nonce: Date.now(),
-        maxZoom: 5.2,
-        padding: { top: 196, bottom: 78, left: 14, right: 62 },
-      });
+      if (window.innerWidth < 768) {
+        const stage = mapStageRef.current;
+        const camera = conusPhoneCamera({
+          width: stage?.clientWidth || window.innerWidth,
+          height: stage?.clientHeight || window.innerHeight,
+          chromePx: 176,
+        });
+        setFocus({ ...camera, nonce: Date.now() });
+      } else {
+        setFrame({
+          ...UNITED_STATES_FRAME,
+          nonce: Date.now(),
+          maxZoom: 5.2,
+          padding: { top: 96, bottom: 48, left: 28, right: 28 },
+        });
+      }
     }
     function onMessage(event: MessageEvent) {
       const data = event.data as { type?: string; url?: string } | null;
@@ -627,6 +642,7 @@ export default function HailApp() {
           setReports(payload.reports ?? []);
           setRawCount(payload.rawCount ?? payload.reports?.length ?? 0);
           setServerClusters(false);
+          rememberSwaths(payload.reports ?? [], `window:${filter.hours}`);
         }
         setStatus(payload.sourceStatus);
         setSyncedAt(payload.syncedAt);
@@ -926,6 +942,51 @@ export default function HailApp() {
   }, [historyActive, historyMode, viewBounds, filter.state, filter.hours, replay.active]);
 
   useEffect(() => {
+    if (!historyActive || replay.active) return;
+    const span = modeSpan(historyMode, filter.hours);
+    const bounds = viewBounds;
+    if (!span || !bounds) return;
+    const key = `history:${span.start}:${span.end}:${filter.state}`;
+    const anchor = swathAnchor.current;
+    const samePlace = anchor?.key === key && !shouldRetargetSwath(anchor.center, bounds);
+    if (samePlace) return;
+    if (viewSpanDeg(bounds) > SWATH_WINDOW_DEG + 0.25) {
+      if (!anchor || anchor.key !== key) {
+        swathAnchor.current = null;
+        swathKey.current = key;
+        setSwathPoints([]);
+      }
+      return;
+    }
+    const center = snapSwathCenter(swathViewCenter(bounds));
+    const query = swathBoundsForView(bounds);
+    swathAnchor.current = { key, center };
+    swathAbort.current?.abort();
+    const controller = new AbortController();
+    swathAbort.current = controller;
+    const params = new URLSearchParams({
+      start: span.start,
+      end: span.end,
+      west: String(query.west),
+      south: String(query.south),
+      east: String(query.east),
+      north: String(query.north),
+      points: "1",
+    });
+    if (filter.state) params.set("state", filter.state);
+    fetch(`/api/history/reports?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as { error?: string; mode?: string; reports?: HailReport[] };
+        if (!response.ok) throw new Error(payload.error ?? "Storm history is unavailable");
+        if (controller.signal.aborted || payload.mode === "clusters") return;
+        rememberSwaths(payload.reports ?? [], key, "replace");
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+      });
+  }, [historyActive, historyMode, viewBounds, filter.state, filter.hours, replay.active]);
+
+  useEffect(() => {
     if (!hailDaysOpen) return;
     const span = modeSpan(historyMode, filter.hours);
     const bounds = viewBounds;
@@ -1096,6 +1157,29 @@ export default function HailApp() {
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [reports, filter]);
+  function rememberSwaths(list: HailReport[], key: string, mode: "merge" | "replace" = "merge") {
+    const incoming: SwathPoint[] = [];
+    for (const report of list) {
+      if (hazardOf(report.hazard) !== "hail") continue;
+      incoming.push({
+        id: report.id,
+        lat: report.lat,
+        lon: report.lon,
+        occurredAt: report.occurredAt,
+        sizeIn: report.sizeIn,
+        confidence: report.confidence,
+      });
+    }
+    const reset = mode === "replace" || swathKey.current !== key;
+    swathKey.current = key;
+    setSwathPoints((current) => {
+      const base = reset ? [] : current;
+      const merged = mergeSwathPoints(base, incoming);
+      if (!reset && merged.length === base.length) return current;
+      return merged;
+    });
+  }
+
   const swaths = useMemo(
     () =>
       reportsToSwaths(
@@ -1112,6 +1196,10 @@ export default function HailApp() {
       ),
     [filtered],
   );
+  const footprintSwaths = useMemo(() => {
+    if ((meshCollection?.features.length ?? 0) > 0) return { type: "FeatureCollection" as const, features: [] };
+    return reportsToSwaths(swathPoints);
+  }, [meshCollection, swathPoints]);
   const heat = useMemo(
     () => (showHeat ? damageHeatGrid(filtered, { swaths }) : null),
     [showHeat, filtered, swaths],
@@ -1143,7 +1231,14 @@ export default function HailApp() {
     const features = area.source === "reports" ? [...(meshCollection?.features ?? []), ...(swaths?.features ?? [])] : (meshCollection?.features ?? []);
     return readoutForSelection(area, features);
   }, [area, meshCollection, swaths]);
-  const swathWhen = historyMode.kind === "day" ? formatDay(historyMode.date) : null;
+  const swathWhen =
+    historyMode.kind === "day"
+      ? formatDay(historyMode.date)
+      : historyMode.kind === "days"
+        ? `Last ${historyMode.days} days`
+        : historyMode.kind === "custom"
+          ? `${formatDay(historyMode.start)} – ${formatDay(historyMode.end)}`
+          : windowPhrase(filter.hours);
   const swathSubtitle = [swathWhen, swathPlace].filter(Boolean).join(" · ");
   const sheetTitle = useMemo(() => {
     if (!area) return "";
@@ -1674,7 +1769,6 @@ export default function HailApp() {
   async function loadDealers(selection: AreaSelection) {
     if (denySales()) return;
     setArea(selection);
-    setDealersOpen(false);
     setDealerLoading(true);
     setDealerError(null);
     setDealerNote(null);
@@ -1707,6 +1801,7 @@ export default function HailApp() {
       if (response.status === 402 || payload.code === "subscription_required") setPaywallOpen(true);
       if (!response.ok) throw new Error(payload.error ?? "Could not search dealerships. Try again.");
       setDealers(payload.dealers ?? []);
+      setDealerLoaded(true);
       setDealerNote(payload.note ?? null);
     } catch (reason) {
       setDealers([]);
@@ -2230,7 +2325,7 @@ export default function HailApp() {
           <HailMap
             theme={theme}
             points={points}
-            swaths={replay.active || (historyActive && serverClusters) ? { type: "FeatureCollection", features: [] } : swaths}
+            swaths={replay.active ? { type: "FeatureCollection", features: [] } : footprintSwaths}
             mesh={replay.active ? replay.radar.collection : meshCollection}
             meshPulse={replay.active ? replay.radar.pulse : null}
             emphasizeMesh={replay.active}
@@ -2297,6 +2392,9 @@ export default function HailApp() {
                 return;
               }
               setSelectedId(id);
+              setArea(null);
+              setDealers([]);
+              setDealersOpen(false);
               setCounty(null);
               setThreat(null);
               const report = reports.find((item) => item.id === id);
@@ -2329,7 +2427,15 @@ export default function HailApp() {
               setSelectedId(null);
               setThreat(null);
               setCounty(null);
-              void loadDealers(sourceSwath(selection, meshCollection, swaths));
+              // Public swath info. Dealer lookup waits for the button so a logged-out tap is not a paywall.
+              const next = sourceSwath(selection, meshCollection, swaths);
+              setArea(next);
+              setDealers([]);
+              setDealersOpen(false);
+              setDealerLoaded(false);
+              setDealerError(null);
+              setDealerNote(null);
+              setDealerLoading(false);
             }}
             onSelectDealer={(id) => {
               focusDealer(id);
@@ -2961,129 +3067,41 @@ export default function HailApp() {
             />
           ) : null}
           {section === "map" && !honeyOpen && !replay.active && area && !knock && !forecast && !(placeCardOpen && place) ? (
-            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3">
-              <MapDetailSheet label={sheetTitle || area.label} onClose={closeMapDetail} expandedMax="min(58dvh, 26rem)">
-                <h2 className="text-lg font-semibold tracking-tight" data-swath-title>
+            <div className="sheet-dock pointer-events-none absolute inset-x-0 bottom-0 z-30 md:inset-x-3" data-hail-info>
+              <MapDetailSheet label="Hail" onClose={closeMapDetail}>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Hail path</p>
+                <p className="mt-1 text-lg font-semibold tracking-tight" data-swath-size>
                   {sheetTitle || area.label}
-                </h2>
-                {swathSubtitle ? (
-                  <p className="swath-kicker" data-swath-place>
-                    {swathSubtitle}
-                  </p>
-                ) : null}
-                {tappedGlance ? <MoneyGlanceCard sheet score={tappedGlance.score} hint={tappedGlance.hint} /> : null}
-                {swathReadout ? (
-                  <div className="swath-stats" data-swath-stats>
-                    {swathReadout.bands.map((band) => (
-                      <p key={band.label}>
-                        <span>{band.label}</span>
-                        {statLine(band)}
-                      </p>
-                    ))}
-                    {swathReadout.bands.length > 1 ? (
-                      <p className="swath-total">
-                        <span>Total</span>
-                        {statLine(swathReadout.total)}
-                      </p>
-                    ) : null}
-                    {swathReadout.motion.direction || swathReadout.motion.startedAt ? (
-                      <p className="swath-motion">
-                        {[swathReadout.motion.direction, formatClockRange(swathReadout.motion.startedAt, swathReadout.motion.endedAt)]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
+                </p>
+                <p className="text-sm" data-swath-place>
+                  {swathPlace || "This hail path"}
+                </p>
+                <p className="text-sm text-muted" data-swath-when>
+                  {[swathWhen, swathReadout?.motion.startedAt ? formatClockRange(swathReadout.motion.startedAt, swathReadout.motion.endedAt) : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
                 <button
                   type="button"
-                  className="swath-dealers press"
+                  className="btn btn-secondary press mt-3"
                   data-dealer-open
-                  aria-expanded={dealersOpen}
-                  onClick={() => setDealersOpen((open) => !open)}
+                  onClick={() => {
+                    if (denySales()) return;
+                    void loadDealers(area);
+                    setDealersOpen(true);
+                  }}
                 >
-                  <span>
-                    {dealerLoading
-                      ? "Looking up dealerships…"
-                      : dealerError
-                        ? dealerError
-                        : `${dealers.length} dealership${dealers.length === 1 ? "" : "s"} and auto lot${dealers.length === 1 ? "" : "s"}`}
-                  </span>
-                  <span>{dealersOpen ? "Hide" : "Open"}</span>
+                  {dealerLoading ? "Looking up dealerships…" : "Look up dealerships"}
                 </button>
-                {dealersOpen ? (
+                {dealersOpen && dealerLoaded ? (
                   dealerHits.length ? (
                     <DealerHitList dealers={dealerHits} selectedId={selectedDealerId} onSelect={focusDealer} />
                   ) : !dealerLoading ? (
                     <p className="mt-2 text-sm text-muted" data-dealer-empty>
-                      No dealerships in this swath.
+                      {dealerError || "No dealerships in this swath."}
                     </p>
                   ) : null
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-primary press"
-                    onClick={() => {
-                      const center = ringCenter(area.geometry);
-                      if (!center) return;
-                      setAlertDraft({ lat: center.lat, lon: center.lon, label: area.label });
-                    }}
-                  >
-                    Alert me here
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary press"
-                    onClick={() => {
-                      const center = ringCenter(area.geometry);
-                      if (center) enterField({ lat: center.lat, lon: center.lon, source: "selection" });
-                      else enterField();
-                    }}
-                  >
-                    Open in field mode
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary press"
-                    data-forecast-open
-                    onClick={() => {
-                      const hail = area.minIn ?? area.maxIn ?? 0.75;
-                      openForecast({
-                        label: area.label,
-                        query: {
-                          selection: area.geometry,
-                          selectionHail: hail,
-                          selectionIsBand: true,
-                          bands: bandsForSelection(meshCollection?.features, area.geometry, hail),
-                          vehicles: null,
-                          homes: null,
-                        },
-                      });
-                    }}
-                  >
-                    Storm-to-cash estimate
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary press mt-2 w-full"
-                  data-knock-route
-                  disabled={knockBusy}
-                  onClick={() => {
-                    const center = ringCenter(area.geometry);
-                    if (!center) return;
-                    void buildKnockRoute({
-                      label: area.label,
-                      geometry: area.geometry,
-                      focus: center,
-                      fallbackHail: area.maxIn ?? area.minIn ?? 0.75,
-                    });
-                  }}
-                >
-                  {knockBusy ? "Building the route…" : "Door-knock route"}
-                </button>
-                {knockError ? <p className="mt-2 text-sm text-muted">{knockError}</p> : null}
               </MapDetailSheet>
             </div>
           ) : null}

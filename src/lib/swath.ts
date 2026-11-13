@@ -156,6 +156,21 @@ function bestConfidence(points: SwathPoint[]): Confidence {
   return best;
 }
 
+function swathPointKey(point: SwathPoint): string {
+  return point.id ?? `${point.lat.toFixed(4)}|${point.lon.toFixed(4)}|${point.occurredAt}`;
+}
+
+/**
+ * Union hail reports for one time span. A viewport slice must not replace the
+ * set, or the buffered polygon jumps to a new footprint every time the map zooms.
+ */
+export function mergeSwathPoints(current: SwathPoint[], incoming: SwathPoint[]): SwathPoint[] {
+  const byId = new Map<string, SwathPoint>();
+  for (const point of current) byId.set(swathPointKey(point), point);
+  for (const point of incoming) byId.set(swathPointKey(point), point);
+  return [...byId.values()];
+}
+
 export function reportsToSwaths(reports: SwathPoint[], options: SwathOptions = {}): GeoJSON.FeatureCollection {
   const radiusKm = options.radiusKm ?? SWATH_RADIUS_KM;
   const windowHours = options.windowHours ?? SWATH_WINDOW_HOURS;

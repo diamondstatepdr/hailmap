@@ -3,7 +3,7 @@ import { clusterReports, shouldCluster } from "@/lib/history-cluster";
 import { groupEvents, isLossCandidate, lossCandidates, defaultScoreDate, rangeMaxHail, type AddressEvent } from "@/lib/history-place";
 import { hailCalendarBand, monthCells } from "@/lib/hail-calendar";
 import { DEFAULT_MAP_DAYS, HISTORY_CHIPS, lastDays, parseSpan } from "@/lib/history-range";
-import { parseHistoryBounds } from "@/lib/history-query";
+import { historyUsesClusters, parseHistoryBounds } from "@/lib/history-query";
 import { MESH_ARCHIVE_START } from "@/lib/history-coverage";
 import { pickMeshArchiveName, planMesh } from "@/lib/mesh-plan";
 import { parseSvrgisCsv, spcCstToIso } from "@/lib/spc-archive";
@@ -101,6 +101,8 @@ describe("history ranges and clusters", () => {
     }));
     expect(shouldCluster(20, 1)).toBe(false);
     expect(shouldCluster(3000, 2)).toBe(true);
+    expect(historyUsesClusters({ count: 3000, spanDeg: 2, total: 3000 })).toBe(true);
+    expect(historyUsesClusters({ count: 3000, spanDeg: 2, total: 3000, points: true })).toBe(false);
     const clusters = clusterReports(points, 1);
     expect(clusters).toHaveLength(1);
     expect(clusters[0].count).toBe(20);

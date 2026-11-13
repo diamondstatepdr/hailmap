@@ -11,7 +11,12 @@ export async function GET(request: Request) {
   const bounds = parseHistoryBounds(url.searchParams);
   if ("error" in bounds) return Response.json({ error: bounds.error }, { status: 400 });
   try {
-    const result = await queryHistoryMap({ span, bounds, state: url.searchParams.get("state") ?? "" });
+    const result = await queryHistoryMap({
+      span,
+      bounds,
+      state: url.searchParams.get("state") ?? "",
+      points: url.searchParams.get("points") === "1",
+    });
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[hailmap] history reports", error instanceof Error ? error.message : error);

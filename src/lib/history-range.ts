@@ -6,6 +6,9 @@ export interface DateSpan {
   end: string;
 }
 
+/** First visit shows this many days of hail, not the short live window. */
+export const DEFAULT_MAP_DAYS = 30;
+
 export const HISTORY_CHIPS: ReadonlyArray<{ id: "30" | "90" | "365"; days: number; label: string }> = [
   { id: "30", days: 30, label: "30 days" },
   { id: "90", days: 90, label: "90 days" },

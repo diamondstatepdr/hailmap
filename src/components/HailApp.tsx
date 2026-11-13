@@ -64,7 +64,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import useMediaQuery from "@/components/useMediaQuery";
 import { useReplayPlayer } from "@/components/useReplayPlayer";
 import { beginAddressSelection } from "@/lib/address-lookup";
-import { ADDRESS_SPANS, HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
+import { ADDRESS_SPANS, DEFAULT_MAP_DAYS, HISTORY_CHIPS, formatDay, lastDays, type DateSpan } from "@/lib/history-range";
 import { nearbyLines, ringsNearPoint, stormsFromDaily, swathCaptionNearPoint } from "@/lib/hail-proof";
 import { damageHeatGrid } from "@/lib/heat";
 import { hazardOf, magnitudeLabel } from "@/lib/hazard";
@@ -72,10 +72,10 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { boundsCenter, fieldPinPoint, resolveFieldAnchor, FIELD_LOOKUP_MS, type FieldAnchor } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
-import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
+import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, linkedBounds, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { chaseDotUnseen, chaseTopKey } from "@/lib/list-freshness";
-import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase } from "@/lib/map-home";
+import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase, initialCamera } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
@@ -242,7 +242,7 @@ export default function HailApp() {
   const [areaPick, setAreaPick] = useState<HoneySpotView | null>(null);
   const [showMesh, setShowMesh] = useState(true);
   const [meshDate, setMeshDate] = useState("");
-  const [historyMode, setHistoryMode] = useState<HistoryMode>({ kind: "window" });
+  const [historyMode, setHistoryMode] = useState<HistoryMode>({ kind: "days", days: DEFAULT_MAP_DAYS });
   const [serverClusters, setServerClusters] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNote, setHistoryNote] = useState<string | null>(null);
@@ -489,27 +489,18 @@ export default function HailApp() {
       setSection("map");
       setOverlay(null);
     }
-    const mapLink = parseMapLink(params);
-    if (mapLink && params.get("honey") !== "1") {
+    const camera = initialCamera(params);
+    if (parseMapLink(params) && params.get("honey") !== "1") {
       lockFrame.current = true;
-      setFocus({ lat: mapLink.lat, lon: mapLink.lon, zoom: mapLink.zoom, nonce: Date.now() });
-    } else if (!params.get("focusLat") && params.get("honey") !== "1") {
-      if (savedView) {
-        lockFrame.current = true;
-        setFocus({ lat: savedView.lat, lon: savedView.lon, zoom: savedView.zoom, nonce: Date.now() });
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            if (lockFrame.current) return;
-            lockFrame.current = true;
-            const next = { lat: position.coords.latitude, lon: position.coords.longitude, zoom: 10 };
-            writeSavedView(next);
-            setFocus({ ...next, nonce: Date.now() });
-          },
-          () => undefined,
-          { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 4000 },
-        );
-      }
+      setFocus({ lat: camera.lat, lon: camera.lon, zoom: camera.zoom, nonce: Date.now() });
+    } else if (!params.get("focusLat") && params.get("honey") !== "1" && !linkedBounds(params)) {
+      // Fit the country inside the chrome. A fixed zoom crops the coasts on a phone.
+      setFrame({
+        ...UNITED_STATES_FRAME,
+        nonce: Date.now(),
+        maxZoom: 5.2,
+        padding: { top: 196, bottom: 78, left: 14, right: 62 },
+      });
     }
     function onMessage(event: MessageEvent) {
       const data = event.data as { type?: string; url?: string } | null;

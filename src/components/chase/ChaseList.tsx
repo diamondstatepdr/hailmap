@@ -82,7 +82,9 @@ export function ChaseRows({ mode, payload, preview, onSelect }: RowsProps) {
                     {stop.source === "mesh" ? <span className="chase-radar">Radar size only</span> : null}
                   </span>
                   <span className="honey-meta">
-                    {formatDay(stop.date)} · Radar size {radar ?? "—"} · {spotter ? `Spotter size ${spotter}` : "No spotter report"}
+                    {[formatDay(stop.date), radar ? `Radar size ${radar}` : null, spotter ? `Spotter size ${spotter}` : "No spotter report"]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                   {count ? <span className="honey-meta">{count}</span> : null}
                 </span>

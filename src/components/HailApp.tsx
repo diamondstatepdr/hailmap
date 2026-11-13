@@ -72,10 +72,11 @@ import type { PlaceHistory } from "@/lib/place";
 import { parseAlertLink } from "@/lib/alert-model";
 import { boundsCenter, fieldPinPoint, resolveFieldAnchor, FIELD_LOOKUP_MS, type FieldAnchor } from "@/lib/field-status";
 import { haversineKm, boundsOf, mapBoundsMessage } from "@/lib/geo";
+import { frameChaseStop } from "@/lib/chase-aim";
 import { chaseBlockedBySheet, chaseFrameResult, describeOpening, linkClaimsCamera, linkedBounds, suppressesWeeklyChase, weeklyChaseShouldAutoOpen } from "@/lib/chase-frame";
 import { chasePopupKey, chaseViewedKey, shouldShowWeeklyChase, type ChasePayload, type ChaseStop } from "@/lib/chase-week";
 import { chaseDotUnseen, chaseTopKey } from "@/lib/list-freshness";
-import { UNITED_STATES_FRAME, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase, initialCamera } from "@/lib/map-home";
+import { UNITED_STATES_FRAME, CHASE_LANDING_MAX_ZOOM, chaseLandingPadding, chaseMapPadding, frameInsideUnitedStates, homeViewAfterChase, initialCamera } from "@/lib/map-home";
 import { stormsForList } from "@/lib/storm-scope";
 import { DEFAULT_RADIUS_MI, formatHailSources, milesToKm, nearestRadiusMi, type SearchRadiusMi } from "@/lib/units";
 import { parseMapLink, readSavedView, viewScopeLabel, writeSavedView, zoomFromBounds } from "@/lib/view-scope";
@@ -1347,9 +1348,15 @@ export default function HailApp() {
     setShowPoints(true);
     lockFrame.current = true;
     pickStormDay(stop.date);
-    // Drop the country fit so a deferred fitBounds cannot pull the camera back.
-    setFrame(null);
-    setFocus({ lat: stop.lat, lon: stop.lon, zoom: 9.5, nonce: Date.now() });
+    // Fit the hail itself. A point fly at zoom 9.5, with the sheet's old bottom
+    // padding, left the swath small or off the phone.
+    const box = frameChaseStop(stop);
+    setFrame({
+      ...box,
+      nonce: Date.now(),
+      maxZoom: CHASE_LANDING_MAX_ZOOM,
+      padding: chaseLandingPadding(mobile),
+    });
   }
 
   function pickStormDay(date: string) {
@@ -2731,7 +2738,7 @@ export default function HailApp() {
               </details>
             </div>
           ) : null}
-          {!loading && !replay.active && !honeyOpen && !knock && !canvassBoard && !chasePopup && !area && !placeCardOpen && !selected && !threat && !dealersOpen && !overlay && !filtersOpen && !alertDraft && !forecast && !county && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
+          {!loading && !meshLoading && !replay.active && !honeyOpen && !knock && !canvassBoard && !chasePopup && !area && !placeCardOpen && !selected && !threat && !dealersOpen && !overlay && !filtersOpen && !alertDraft && !forecast && !county && filtered.length === 0 && !reportOpen && !(showMesh && (meshCollection?.features.length ?? 0) > 0) && section === "map" ? (
             <div className="map-empty glass pointer-events-auto absolute left-1/2 z-10 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-muted">
               <p>
                 {historyLoading

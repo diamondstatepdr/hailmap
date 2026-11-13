@@ -11,6 +11,8 @@ interface RadarHit {
   lat: number;
   lon: number;
   radarIn: number | null;
+  radarLat?: number | null;
+  radarLon?: number | null;
 }
 
 /** Neighborhood, in 0.1° bins, around a spotter. About 30 km, the size of a chase area. */
@@ -33,12 +35,25 @@ export function stampChaseRadar<T extends RadarHit>(hits: T[], cells: RadarCell[
     const latQ = Math.round(hit.lat * 10);
     const lonQ = Math.round(hit.lon * 10);
     let max = hit.radarIn ?? 0;
+    let cellLat = hit.radarLat ?? null;
+    let cellLon = hit.radarLon ?? null;
     for (let dy = -RADAR_BINS; dy <= RADAR_BINS; dy += 1) {
       for (let dx = -RADAR_BINS; dx <= RADAR_BINS; dx += 1) {
-        max = Math.max(max, mesh.get(`${hit.stormDate}|${latQ + dy}|${lonQ + dx}`) ?? 0);
+        const inches = mesh.get(`${hit.stormDate}|${latQ + dy}|${lonQ + dx}`) ?? 0;
+        if (inches > max) {
+          max = inches;
+          cellLat = (latQ + dy) / 10;
+          cellLon = (lonQ + dx) / 10;
+        }
       }
     }
-    if (max >= RADAR_MIN_IN) return { ...hit, radarIn: Math.round(max * 100) / 100 };
+    if (max >= RADAR_MIN_IN) {
+      return {
+        ...hit,
+        radarIn: Math.round(max * 100) / 100,
+        ...(cellLat != null && cellLon != null ? { radarLat: cellLat, radarLon: cellLon } : {}),
+      };
+    }
     return hit;
   });
 }

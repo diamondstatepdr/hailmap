@@ -16,6 +16,9 @@ export interface ChaseHit {
   spotterIn: number | null;
   /** MRMS MESH inches at this hit. */
   radarIn: number | null;
+  /** Center of the MESH bin that supplied radarIn, when it is not this point. */
+  radarLat?: number | null;
+  radarLon?: number | null;
   confidence: "nws" | "spotter" | "community" | "mesh";
 }
 

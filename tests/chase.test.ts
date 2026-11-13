@@ -23,6 +23,7 @@ import {
   type ChaseHit,
   type ChasePayload,
 } from "@/lib/chase";
+import { frameChaseStop, hailAim } from "@/lib/chase-aim";
 import { stampChaseRadar } from "@/lib/chase-radar";
 import { confidenceFor, recencyFactor, scoreHoney, type HoneyPlace } from "@/lib/honey";
 
@@ -39,6 +40,8 @@ function hit(partial: Partial<ChaseHit> & Pick<ChaseHit, "lat" | "lon" | "stormD
     state: partial.state ?? null,
     spotterIn: partial.spotterIn ?? null,
     radarIn: partial.radarIn ?? null,
+    radarLat: partial.radarLat ?? null,
+    radarLon: partial.radarLon ?? null,
     confidence: partial.confidence ?? "spotter",
   };
 }
@@ -597,7 +600,76 @@ describe("chase radar stamp", () => {
       { stormDate: "2026-11-12", latQ: 398, lonQ: -755, maxIn: 1.27 },
     ]);
     expect(stamped.radarIn).toBe(1.27);
+    expect(stamped.radarLat).toBe(39.8);
+    expect(stamped.radarLon).toBe(-75.5);
     expect(stamped.spotterIn).toBe(1.5);
     expect(missed.radarIn).toBeNull();
+    expect(missed.radarLat).toBeNull();
+  });
+});
+
+describe("chase landing", () => {
+  it("aims at the radar bin when that hail is not on the spotter", () => {
+    const spotter = hit({
+      lat: 42.8,
+      lon: -73.9,
+      stormDate: "2026-10-20",
+      location: "Niskayuna",
+      state: "NY",
+      spotterIn: 1,
+      radarIn: 3.59,
+      radarLat: 42.75,
+      radarLon: -73.89,
+    });
+    const aim = hailAim([spotter]);
+    expect(aim?.lat).toBe(42.75);
+    expect(aim?.lon).toBe(-73.89);
+    expect(aim!.bounds.north - aim!.bounds.south).toBeLessThanOrEqual(0.42);
+    expect(aim!.bounds.east - aim!.bounds.west).toBeLessThanOrEqual(0.42);
+    expect(aim!.lat).toBeGreaterThan(aim!.bounds.south);
+    expect(aim!.lat).toBeLessThan(aim!.bounds.north);
+  });
+
+  it("does not rank a point with no hail, and keeps a spotter-only row on that report", () => {
+    expect(hailAim([hit({ lat: 42.8, lon: -73.9, stormDate: "2026-10-20", spotterIn: 0.25 })])).toBeNull();
+    const spotter = hailAim([hit({ lat: 40.08, lon: -74.81, stormDate: "2026-10-20", spotterIn: 1.75, radarIn: null })]);
+    expect(spotter).toMatchObject({ lat: 40.08, lon: -74.81 });
+  });
+
+  it("ranks the row on the day's radar bin instead of a wide cluster peak", () => {
+    const spotter = hit({
+      lat: 42.8,
+      lon: -73.9,
+      stormDate: "2026-10-20",
+      location: "Niskayuna",
+      state: "NY",
+      spotterIn: 1,
+      radarIn: 3.59,
+      radarLat: 42.75,
+      radarLon: -73.89,
+      confidence: "spotter",
+    });
+    const places = [lot({ lat: 42.8, lon: -73.9, vehicles: 4000, homes: 200, city: "Niskayuna" })];
+    const payload = rankChaseWeek({ hits: [spotter], places, now: NOW });
+    const top = payload.fresh.pdr[0];
+    expect(top).toBeTruthy();
+    expect(top.lat).toBe(42.75);
+    expect(top.lon).toBe(-73.89);
+    expect(top.date).toBe("2026-10-20");
+    expect(top.radarIn).toBe(3.59);
+  });
+
+  it("shrinks a metro-wide box so the tap stays on the hail", () => {
+    const wide = frameChaseStop({
+      lat: 42.75,
+      lon: -73.89,
+      bounds: { west: -74.22, south: 42.58, east: -73.28, north: 43.02 },
+    });
+    expect(wide.north - wide.south).toBeLessThanOrEqual(0.26);
+    expect(wide.east - wide.west).toBeLessThanOrEqual(0.26);
+    expect(wide.west).toBeLessThan(-73.89);
+    expect(wide.east).toBeGreaterThan(-73.89);
+    expect(wide.south).toBeLessThan(42.75);
+    expect(wide.north).toBeGreaterThan(42.75);
   });
 });

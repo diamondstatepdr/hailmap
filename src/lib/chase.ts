@@ -1,3 +1,4 @@
+import { hailAim } from "@/lib/chase-aim";
 import { haversineKm } from "@/lib/geo";
 import {
   MIN_HAIL_IN,
@@ -256,14 +257,16 @@ function scoreDay(
     confidence: confidence.factor,
   });
   if (scored.score <= 0) return null;
+  const aim = hailAim(dayHits);
+  if (!aim) return null;
   const date = dayHits[0]?.stormDate ?? "";
   return {
     id: `${cluster.id}:${date}`,
     name: cluster.name,
     date,
-    lat: cluster.lat,
-    lon: cluster.lon,
-    bounds: cluster.bounds,
+    lat: aim.lat,
+    lon: aim.lon,
+    bounds: aim.bounds,
     radarIn: maxOrNull(dayHits.map((hit) => hit.radarIn)),
     spotterIn: maxOrNull(dayHits.map((hit) => hit.spotterIn)),
     vehicles: totals.vehicles,

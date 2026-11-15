@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
 import { sessionCookie, signSession } from "@/lib/auth";
-import { billingSnapshot } from "@/lib/billing";
+import { billingContext } from "@/lib/billing-context";
 import { verifyPassword } from "@/lib/passwords";
 import { clientIp } from "@/lib/photos";
 import { getAccountByEmail, normalizeEmail } from "@/lib/user-accounts";
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if (!account || !match) return Response.json({ error: "That email or password is not right." }, { status: 401 });
   const user = { id: account.id, name: account.name, role: "member" as const, email: account.email };
   return Response.json(
-    { user, billing: billingSnapshot(user, account) },
+    { user, billing: billingContext(user).billing },
     { headers: { "set-cookie": sessionCookie(signSession(user)), "Cache-Control": "no-store" } },
   );
 }

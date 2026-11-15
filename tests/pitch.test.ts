@@ -39,6 +39,12 @@ describe("pricing pitch", () => {
         onPortal: () => undefined,
       }),
     );
+    expect(html).toContain("Same tools on every plan");
+    expect(html).toContain("Solo is one person");
+    expect(html).toContain("Crew is up to 5 people");
+    expect(html).toContain("Storm Team is up to 15 people");
+    expect(html).toContain("Up to 5 people");
+    expect(html).toContain("Up to 15 people");
     expect(html).toContain(TRIAL_LABEL);
     expect(html).toContain(TRIAL_BUTTON);
     expect(html).toContain("Start 7-day free trial on Solo");
@@ -64,10 +70,32 @@ describe("pricing pitch", () => {
     expect(used).not.toContain(TRIAL_BUTTON);
     expect(used).toContain("Subscribe to Solo");
     expect(used).toContain("already used its free trial");
+
+    const covered = renderToStaticMarkup(
+      createElement(PricingOffer, {
+        enabled: true,
+        trialEligible: true,
+        owner: false,
+        subscribedName: "Crew",
+        viaTeamName: "Jordan Tech",
+        busy: null,
+        tiers,
+        onCheckout: () => undefined,
+        onPortal: () => undefined,
+      }),
+    );
+    expect(covered).toContain("Jordan Tech");
+    expect(covered).toContain("Crew plan");
+    expect(covered).toContain("don&#x27;t pay separately");
+    expect(covered).not.toContain("Manage billing");
   });
 
   it("tells a locked tech the plans include a 7-day free trial", () => {
     const html = renderToStaticMarkup(createElement(PaywallDialog, { onClose: () => undefined, onTeamPasscode: () => undefined }));
     expect(html).toContain(TRIAL_LABEL);
+    expect(html).toContain("Solo is one person");
+    expect(html).toContain("up to 5 people");
+    expect(html).toContain("up to 15 people");
+    expect(html).toContain("Same tools on every plan");
   });
 });

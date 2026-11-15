@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { takeActionSlot } from "@/lib/accounts";
 import { authConfigured, sessionCookie, signSession } from "@/lib/auth";
-import { billingEnabled, billingSnapshot } from "@/lib/billing";
+import { billingEnabled } from "@/lib/billing";
+import { billingContext } from "@/lib/billing-context";
 import { passwordProblem } from "@/lib/passwords";
 import { clientIp } from "@/lib/photos";
 import { createAccount, getAccountByEmail, normalizeEmail } from "@/lib/user-accounts";
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     {
       user,
       configured: authConfigured(),
-      billing: billingSnapshot(user, account),
+      billing: billingContext(user).billing,
       billingEnabled: billingEnabled(),
     },
     { status: 201, headers: { "set-cookie": sessionCookie(signSession(user)), "Cache-Control": "no-store" } },

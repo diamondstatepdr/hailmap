@@ -5,7 +5,8 @@ import SignupForm from "@/components/auth/SignupForm";
 
 export const metadata: Metadata = {
   title: "Create account · Swathline",
-  description: "Create a Swathline account. Plans for the sales tools include a 7-day free trial.",
+  description:
+    "Create a Swathline account. Solo is one person, Crew is up to 5 people, and Storm Team is up to 15 people. Each plan starts with a 7-day free trial.",
 };
 
 export default function SignupPage() {

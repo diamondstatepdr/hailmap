@@ -9,7 +9,9 @@ export const TIERS = [
     name: "Solo",
     audience: "individual",
     featured: true,
-    blurb: "For one tech. The live map plus the sales tools on a single login.",
+    seats: 1,
+    people: "One person",
+    blurb: "One person. Same sales tools as every plan, on a single login.",
     env: "STRIPE_PRICE_SOLO",
   },
   {
@@ -17,7 +19,9 @@ export const TIERS = [
     name: "Crew",
     audience: "team",
     featured: false,
-    blurb: "For a crew. The same sales tools, priced for more than one person.",
+    seats: 5,
+    people: "Up to 5 people",
+    blurb: "Up to 5 people on one subscription. Same tools as Solo.",
     env: "STRIPE_PRICE_CREW",
   },
   {
@@ -25,7 +29,9 @@ export const TIERS = [
     name: "Storm Team",
     audience: "team",
     featured: false,
-    blurb: "For a larger crew working the same storms.",
+    seats: 15,
+    people: "Up to 15 people",
+    blurb: "Up to 15 people on one subscription. Same tools as Solo.",
     env: "STRIPE_PRICE_STORM",
   },
 ] as const;
@@ -59,6 +65,10 @@ export function tierById(id: string): Tier | null {
   return TIERS.find((tier) => tier.id === id) ?? null;
 }
 
+export function peopleLabel(id: string): string {
+  return tierById(id)?.people ?? "One person";
+}
+
 export function priceIdFor(id: TierId): string | null {
   const tier = tierById(id);
   if (!tier) return null;
@@ -77,6 +87,13 @@ export function subscriptionGrantsAccess(status: string | null | undefined): boo
   return value === "active" || value === "trialing";
 }
 
+/** The account that pays, when this login is using someone else's plan. */
+export interface TeamPayer {
+  name: string;
+  subscriptionStatus: string | null;
+  subscriptionPriceId: string | null;
+}
+
 export function billingSnapshot(
   user: { role?: string } | null,
   account: {
@@ -84,10 +101,24 @@ export function billingSnapshot(
     subscriptionPriceId: string | null;
     stripeSubscriptionId?: string | null;
   } | null,
+  teamPayer?: TeamPayer | null,
 ) {
   const enabled = billingEnabled();
-  const status = account?.subscriptionStatus ?? null;
-  const tier = tierForPrice(account?.subscriptionPriceId ?? null);
+  let status = account?.subscriptionStatus ?? null;
+  let priceId = account?.subscriptionPriceId ?? null;
+  let viaTeam: { ownerName: string } | null = null;
+  if (
+    enabled &&
+    user?.role === "member" &&
+    !subscriptionGrantsAccess(status) &&
+    teamPayer &&
+    subscriptionGrantsAccess(teamPayer.subscriptionStatus)
+  ) {
+    status = teamPayer.subscriptionStatus;
+    priceId = teamPayer.subscriptionPriceId;
+    viaTeam = { ownerName: teamPayer.name };
+  }
+  const tier = tierForPrice(priceId);
   const access = !enabled || Boolean(user && (user.role !== "member" || subscriptionGrantsAccess(status)));
   return {
     enabled,
@@ -96,6 +127,7 @@ export function billingSnapshot(
     tier: tier?.id ?? null,
     tierName: tier?.name ?? null,
     trialEligible: canStartTrial(account),
+    viaTeam,
   };
 }
 

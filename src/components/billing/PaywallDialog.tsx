@@ -18,11 +18,11 @@ export default function PaywallDialog({ onClose, onTeamPasscode }: Props) {
           <LogoMark size={40} />
           <div>
             <h2 className="text-lg font-semibold tracking-tight">This is a sales tool</h2>
-            <p className="text-xs text-muted">Solo is the plan for one person</p>
+            <p className="text-xs text-muted">Same tools on every plan</p>
           </div>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          The live hail map stays free. These tools need a plan. Every plan starts with a {TRIAL_LABEL}. Solo is one person. Crew and Storm Team are for a crew.
+          The live hail map stays free. These tools need a plan. Same tools on every plan. Solo is one person. Crew is up to 5 people. Storm Team is up to 15 people. Every plan starts with a {TRIAL_LABEL}.
         </p>
         <ul className="mt-3 grid grid-cols-2 gap-1.5 text-sm">
           {SALES_TOOLS.map((tool) => (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import TeamPanel from "@/components/billing/TeamPanel";
 
 interface SessionPayload {
   user: { id: string; name: string; role?: string; email?: string } | null;
@@ -14,6 +15,7 @@ export default function AccountPanel() {
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [teamRole, setTeamRole] = useState<"owner" | "mate" | "passcode" | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -100,7 +102,7 @@ export default function AccountPanel() {
           ) : null}
           {note ? <p className="text-sm text-muted">{note}</p> : null}
           <div className="flex flex-col gap-2">
-            {billing?.enabled && user.role === "member" ? (
+            {billing?.enabled && user.role === "member" && teamRole === "owner" ? (
               billing.access ? (
                 <button type="button" className="btn btn-primary press w-full" onClick={() => void portal()} disabled={busy}>
                   {busy ? "Opening…" : "Manage billing"}
@@ -118,6 +120,7 @@ export default function AccountPanel() {
               Sign out
             </button>
           </div>
+          {user.role === "member" ? <TeamPanel onRole={setTeamRole} /> : null}
         </div>
       ) : null}
     </section>

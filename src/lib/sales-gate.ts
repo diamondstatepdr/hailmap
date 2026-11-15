@@ -1,5 +1,6 @@
 import { readSession, type SessionUser } from "@/lib/auth";
 import { billingEnabled, subscriptionGrantsAccess } from "@/lib/billing";
+import { teamPayer } from "@/lib/team-store";
 import { getAccountById } from "@/lib/user-accounts";
 
 function denied(status: 401 | 402, error: string): Response {
@@ -16,6 +17,8 @@ export function salesDenied(user: SessionUser | null): Response | null {
   if (user.role !== "member") return null;
   const account = getAccountById(user.id);
   if (subscriptionGrantsAccess(account?.subscriptionStatus)) return null;
+  const owner = teamPayer(user.id);
+  if (owner && subscriptionGrantsAccess(owner.subscriptionStatus)) return null;
   return denied(402, "Subscribe to use this sales tool.");
 }
 

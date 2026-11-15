@@ -44,9 +44,9 @@ SQLite is created in `HAILMAP_DATA_DIR`, or in `.data/` when that variable is un
 | `HAILMAP_AUTH_SECRET` | Signs the session cookie. Falls back to the team passcode when unset. Set this before email accounts go live. |
 | `STRIPE_SECRET_KEY` | Stripe secret key. Billing stays off until this, the webhook secret, and all three price ids are set. |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for `POST /api/billing/webhook`. |
-| `STRIPE_PRICE_SOLO` | Stripe Price id for Solo, the single-person plan. The amount is whatever that price is in Stripe. |
-| `STRIPE_PRICE_CREW` | Stripe Price id for Crew, a team price. |
-| `STRIPE_PRICE_STORM` | Stripe Price id for Storm Team, the larger team price. |
+| `STRIPE_PRICE_SOLO` | Stripe Price id for Solo. One person. The amount is whatever that price is in Stripe. |
+| `STRIPE_PRICE_CREW` | Stripe Price id for Crew. Up to 5 people on one subscription. |
+| `STRIPE_PRICE_STORM` | Stripe Price id for Storm Team. Up to 15 people on one subscription. |
 | `HAILMAP_PUBLIC_URL` | Optional HTTPS origin used for Checkout return links. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Optional Web Push keys. When unset, the first boot writes `vapid.json` in the data directory. |
 | `VAPID_SUBJECT` | `mailto:` or `https:` contact on each push. Defaults to the project mailbox. |
@@ -147,7 +147,7 @@ Set `HAILMAP_AUTH_SECRET` in production so the cookie key is not the passcode it
 
 Email accounts are optional. Passwords are stored as scrypt hashes. The session cookie stays `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Password reset by email is not wired up yet.
 
-Stripe billing stays completely off until `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SOLO`, `STRIPE_PRICE_CREW`, and `STRIPE_PRICE_STORM` are all set. Until then the map and the sales tools behave as they do today. When billing is on, the live map, address history, replay, and phone alerts stay free. Door-knock routes, the dealership hit list, canvass, hail proof PDFs, storm-to-cash, lead export, Money Hole, and field mode need an active or trialing subscription. A team-passcode session skips that check. Solo is the single-person plan. Crew and Storm Team are separate Stripe prices for a crew. Dollar amounts are read from Stripe, not from the app. Any of those prices unlocks the same tools for that one login. The app does not count seats.
+Stripe billing stays completely off until `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SOLO`, `STRIPE_PRICE_CREW`, and `STRIPE_PRICE_STORM` are all set. Until then the map and the sales tools behave as they do today. When billing is on, the live map, address history, replay, and phone alerts stay free. Door-knock routes, the dealership hit list, canvass, hail proof PDFs, storm-to-cash, lead export, Money Hole, and field mode need an active or trialing subscription. A team-passcode session skips that check. Solo is one person. Crew is up to 5 people. Storm Team is up to 15 people. The owner counts as one. Same tools on every plan, and the 7-day free trial is unchanged. Dollar amounts and Stripe price ids stay in Stripe. The owner invites people from the account page with a link they can copy and text. There is no invite email. Invited people sign up or sign in with that email and use the owner's subscription. They do not pay separately. If the owner's subscription ends, teammates lose paid access too. A downgrade does not remove anyone. It blocks new invites while the team is over the plan. Teammates share the canvass tracker, the lead list, storm-to-cash prices, and the hail-proof company name and phone. CRM credentials and field notes stay on the person who created them.
 
 ## Money holes
 

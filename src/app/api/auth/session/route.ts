@@ -1,6 +1,7 @@
 import { clearSessionCookie, normalizeUserName, readSession, sessionCookie, signSession, verifyPasscode, authConfigured } from "@/lib/auth";
 import { upsertUser } from "@/lib/accounts";
 import { billingSnapshot } from "@/lib/billing";
+import { billingContext } from "@/lib/billing-context";
 import { getAccountById } from "@/lib/user-accounts";
 
 export const runtime = "nodejs";
@@ -8,13 +9,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   let user = readSession(request);
-  const account = user?.role === "member" ? getAccountById(user.id) : null;
   if (user?.role === "member") {
+    const account = getAccountById(user.id);
     if (!account) user = null;
     else user = { ...user, name: account.name, email: account.email };
   }
+  const { billing } = billingContext(user);
   return Response.json(
-    { user, configured: authConfigured(), billing: billingSnapshot(user, account) },
+    { user, configured: authConfigured(), billing: user ? billing : billingSnapshot(null, null) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

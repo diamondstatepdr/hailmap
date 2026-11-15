@@ -1,8 +1,8 @@
 import { readSession } from "@/lib/auth";
-import { billingEnabled, billingSnapshot } from "@/lib/billing";
+import { billingEnabled } from "@/lib/billing";
+import { billingContext } from "@/lib/billing-context";
 import { applyBillingNotice, noticeFromStripeEvent } from "@/lib/billing-sync";
 import { getStripe } from "@/lib/stripe-server";
-import { getAccountById } from "@/lib/user-accounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +31,7 @@ export async function POST(request: Request) {
       data: { object: checkout as unknown as Record<string, unknown> },
     });
     if (notice) applyBillingNotice(notice);
-    const account = getAccountById(sessionUser.id);
-    return Response.json({ billing: billingSnapshot(sessionUser, account) });
+    return Response.json({ billing: billingContext(sessionUser).billing });
   } catch (error) {
     console.error("[hailmap] confirm", error instanceof Error ? error.message : "failed");
     return Response.json({ error: "Could not confirm that checkout." }, { status: 502 });

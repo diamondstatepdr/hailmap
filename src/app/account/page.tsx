@@ -5,7 +5,7 @@ import AccountPanel from "@/components/billing/AccountPanel";
 
 export const metadata: Metadata = {
   title: "Account · Swathline",
-  description: "Your Swathline account and subscription.",
+  description: "Your Swathline account, plan, and team.",
 };
 
 export default function AccountPage() {

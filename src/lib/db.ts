@@ -251,6 +251,22 @@ function migrate(db: Database.Database) {
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_stripe_customer ON users(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS team_members (
+      owner_id TEXT NOT NULL,
+      member_id TEXT NOT NULL PRIMARY KEY,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_members_owner ON team_members(owner_id, created_at);
+    CREATE TABLE IF NOT EXISTS team_invites (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      accepted_at TEXT,
+      revoked_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_invites_owner ON team_invites(owner_id, created_at);
     CREATE TABLE IF NOT EXISTS crm_accounts (
       scope TEXT PRIMARY KEY,
       provider TEXT NOT NULL,

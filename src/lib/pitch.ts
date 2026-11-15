@@ -13,7 +13,7 @@ export const PITCH_FREE = "The live map, address history, and storm replay stay 
 export const PITCH_PAID = "A plan opens the tools you use to work the storm.";
 
 export const SIGNUP_LEDE =
-  "One login for you. The live hail map stays free. Sales tools come with a plan, and every plan starts with a 7-day free trial.";
+  "The live hail map stays free. Sales tools come with a plan. Solo is one person. Crew is up to 5 people. Storm Team is up to 15 people. Every plan starts with a 7-day free trial.";
 
 export const PITCH_FEATURES = [
   {

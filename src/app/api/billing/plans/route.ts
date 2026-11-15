@@ -26,6 +26,7 @@ export async function GET() {
         id: tier.id,
         name: tier.name,
         blurb: tier.blurb,
+        people: tier.people,
         audience: tier.audience,
         featured: tier.featured,
         amountLabel: formatPlanAmount(amount, currency, interval),

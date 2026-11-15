@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { peopleLabel } from "@/lib/billing";
 import { PITCH_FEATURES, PITCH_FREE, PITCH_LEDE, PITCH_PAID, PITCH_TITLE, TRIAL_BUTTON, TRIAL_LABEL } from "@/lib/pitch";
 
 export interface OfferTier {
@@ -15,6 +16,7 @@ interface Props {
   trialEligible: boolean;
   owner: boolean;
   subscribedName: string | null;
+  viaTeamName?: string | null;
   busy: string | null;
   portalBusy?: boolean;
   tiers: OfferTier[];
@@ -28,6 +30,7 @@ export default function PricingOffer({
   trialEligible,
   owner,
   subscribedName,
+  viaTeamName = null,
   busy,
   portalBusy = false,
   tiers,
@@ -56,7 +59,7 @@ export default function PricingOffer({
 
       <p className="pitch-title mt-8 text-xl font-semibold tracking-tight">Solo, Crew, and Storm Team</p>
       <p className="pitch-copy mt-1 max-w-2xl text-sm leading-relaxed text-muted">
-        Same tools on every plan. Solo is one person. Crew and Storm Team are the higher prices for a crew.
+        Same tools on every plan. Solo is one person. Crew is up to 5 people. Storm Team is up to 15 people.
         {trialEligible ? ` Each plan starts with a ${TRIAL_LABEL}.` : ""}
       </p>
       {!enabled ? (
@@ -71,10 +74,14 @@ export default function PricingOffer({
       ) : null}
       {subscribedName ? (
         <p className="mt-4 text-sm text-muted">
-          Current plan: {subscribedName}.{" "}
-          <button type="button" className="font-semibold text-accent" onClick={onPortal} disabled={portalBusy}>
-            {portalBusy ? "Opening…" : "Manage billing"}
-          </button>
+          {viaTeamName
+            ? `You're on ${viaTeamName}'s ${subscribedName} plan. You don't pay separately.`
+            : `Current plan: ${subscribedName}. `}
+          {viaTeamName ? null : (
+            <button type="button" className="font-semibold text-accent" onClick={onPortal} disabled={portalBusy}>
+              {portalBusy ? "Opening…" : "Manage billing"}
+            </button>
+          )}
         </p>
       ) : null}
       {enabled && !trialEligible && !owner && !subscribedName ? (
@@ -93,9 +100,7 @@ export default function PricingOffer({
                 : "flex min-w-0 flex-col rounded-3xl border border-line bg-panel p-5"
             }
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-              {tier.featured ? "One person" : "For a crew"}
-            </p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{peopleLabel(tier.id)}</p>
             <h3 className="pitch-title mt-2 text-xl font-semibold tracking-tight">{tier.name}</h3>
             <p className={`mt-2 font-semibold tracking-tight ${tier.featured ? "text-3xl" : "text-2xl"}`}>
               {tier.amountLabel ?? "Monthly"}

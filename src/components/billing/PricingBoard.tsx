@@ -5,7 +5,13 @@ import PricingOffer, { type OfferTier } from "@/components/billing/PricingOffer"
 
 interface SessionPayload {
   user: { role?: string; name?: string } | null;
-  billing?: { enabled?: boolean; access?: boolean; tierName?: string | null; trialEligible?: boolean };
+  billing?: {
+    enabled?: boolean;
+    access?: boolean;
+    tierName?: string | null;
+    trialEligible?: boolean;
+    viaTeam?: { ownerName: string } | null;
+  };
 }
 
 export default function PricingBoard() {
@@ -40,8 +46,9 @@ export default function PricingBoard() {
   }, []);
 
   const owner = session?.user?.role === "owner";
+  const viaTeamName = session?.billing?.viaTeam?.ownerName ?? null;
   const subscribed = Boolean(session?.user?.role === "member" && session.billing?.access && enabled);
-  const trialEligible = enabled && session?.billing?.trialEligible !== false;
+  const trialEligible = enabled && !viaTeamName && session?.billing?.trialEligible !== false;
 
   async function checkout(tierId: string) {
     setError(null);
@@ -97,6 +104,7 @@ export default function PricingBoard() {
       trialEligible={trialEligible}
       owner={owner}
       subscribedName={subscribed ? (session?.billing?.tierName ?? "Active") : null}
+      viaTeamName={viaTeamName}
       busy={busy}
       portalBusy={portalBusy}
       tiers={tiers}

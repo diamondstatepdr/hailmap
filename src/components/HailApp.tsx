@@ -7,7 +7,7 @@ import InstallPrompt from "@/components/InstallPrompt";
 import AppMenu from "@/components/shell/AppMenu";
 import HelpGuide from "@/components/help/HelpGuide";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
-import { chipWhen, friendlyWhen, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
+import { chipWhen, friendlyWhen, introSeenCookie, shouldShowWelcome, WELCOME_KEY, WELCOME_SESSION_KEY, welcomeBlocksChase } from "@/lib/plain";
 import { hailYearChoices, hailYearSpan } from "@/lib/hail-year";
 import type { AddressHit } from "@/components/AddressSearch";
 import AddressSearch from "@/components/AddressSearch";
@@ -200,7 +200,7 @@ function readTheme(): "light" | "dark" {
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
-export default function HailApp() {
+export default function HailApp({ intro = false }: { intro?: boolean }) {
   const [section, setSection] = useState<AppSection>("map");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [palette, setPalette] = useState<PaletteId>("a");
@@ -228,7 +228,7 @@ export default function HailApp() {
   const [crmOpen, setCrmOpen] = useState(false);
   const [fieldSendMessage, setFieldSendMessage] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(intro);
   const [knock, setKnock] = useState<{ label: string; stops: KnockStop[]; mode: KnockMode; note: string | null } | null>(null);
   const [knockBusy, setKnockBusy] = useState(false);
   const [knockError, setKnockError] = useState<string | null>(null);
@@ -532,11 +532,12 @@ export default function HailApp() {
 
   useEffect(() => {
     try {
-      setWelcomeOpen(shouldShowWelcome(localStorage.getItem(WELCOME_KEY), window.location.search));
+      const show = intro && shouldShowWelcome(localStorage.getItem(WELCOME_KEY), window.location.search, false);
+      setWelcomeOpen(show);
     } catch {
       setWelcomeOpen(false);
     }
-  }, []);
+  }, [intro]);
 
   useEffect(() => {
     if (!chase || chaseAutoDecided.current || section !== "map") return;
@@ -1382,6 +1383,7 @@ export default function HailApp() {
     try {
       localStorage.setItem(WELCOME_KEY, "1");
       sessionStorage.setItem(WELCOME_SESSION_KEY, "1");
+      document.cookie = introSeenCookie(window.location.protocol === "https:");
     } catch {
       // The intro still closes for this visit.
     }

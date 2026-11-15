@@ -267,6 +267,11 @@ function migrate(db: Database.Database) {
       revoked_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_team_invites_owner ON team_invites(owner_id, created_at);
+    CREATE TABLE IF NOT EXISTS mail_sends (
+      dedupe_key TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      sent_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS crm_accounts (
       scope TEXT PRIMARY KEY,
       provider TEXT NOT NULL,

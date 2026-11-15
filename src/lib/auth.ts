@@ -10,7 +10,7 @@ export interface SessionUser {
   email?: string;
 }
 
-const COOKIE = "hailmap_session";
+export const SESSION_COOKIE = "hailmap_session";
 const MAX_AGE_SEC = 60 * 60 * 24 * 30;
 
 export function authConfigured(): boolean {
@@ -94,14 +94,14 @@ export function verifySessionToken(token: string | null | undefined): SessionUse
 export function readSession(request: Request): SessionUser | null {
   const header = request.headers.get("cookie") ?? "";
   const parts = header.split(";").map((part) => part.trim());
-  const raw = parts.find((part) => part.startsWith(`${COOKIE}=`));
+  const raw = parts.find((part) => part.startsWith(`${SESSION_COOKIE}=`));
   if (!raw) return null;
-  return verifySessionToken(decodeURIComponent(raw.slice(COOKIE.length + 1)));
+  return verifySessionToken(decodeURIComponent(raw.slice(SESSION_COOKIE.length + 1)));
 }
 
 function cookieBase(value: string, maxAge: number): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${COOKIE}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  return `${SESSION_COOKIE}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
 export function sessionCookie(token: string): string {

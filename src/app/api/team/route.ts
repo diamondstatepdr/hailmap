@@ -1,6 +1,10 @@
 import { readSession } from "@/lib/auth";
+import { tierForPrice } from "@/lib/billing";
+import { sendMail } from "@/lib/mail";
+import { inviteEmail } from "@/lib/mail-copy";
 import { publicOrigin } from "@/lib/public-origin";
 import { createInvite, teamOverview, type OpenInvite } from "@/lib/team-store";
+import { getAccountById } from "@/lib/user-accounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,5 +48,18 @@ export async function POST(request: Request) {
   const result = createInvite(auth.user.id, email);
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
   const [invite] = withUrls([result.invite], request);
-  return Response.json({ invite }, { status: result.created ? 201 : 200, headers: { "Cache-Control": "no-store" } });
+  let emailed = false;
+  if (invite && process.env.RESEND_API_KEY?.trim()) {
+    const owner = getAccountById(auth.user.id);
+    const sent = await sendMail(
+      inviteEmail({
+        to: invite.email,
+        ownerName: owner?.name || auth.user.name,
+        planName: tierForPrice(owner?.subscriptionPriceId)?.name ?? "plan",
+        joinUrl: invite.url,
+      }),
+    );
+    emailed = sent.sent;
+  }
+  return Response.json({ invite, emailed }, { status: result.created ? 201 : 200, headers: { "Cache-Control": "no-store" } });
 }

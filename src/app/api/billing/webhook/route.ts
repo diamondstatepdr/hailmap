@@ -1,6 +1,8 @@
 import { billingEnabled } from "@/lib/billing";
 import { applyBillingNotice, noticeFromStripeEvent } from "@/lib/billing-sync";
+import { publicOrigin } from "@/lib/public-origin";
 import { getStripe } from "@/lib/stripe-server";
+import { deliverTrialReminder } from "@/lib/trial-mail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,5 +23,7 @@ export async function POST(request: Request) {
   }
   const notice = noticeFromStripeEvent(event);
   if (notice) applyBillingNotice(notice);
+  const reminder = await deliverTrialReminder(event, publicOrigin(request));
+  if (reminder === "failed") return Response.json({ error: "Could not send the trial reminder." }, { status: 500 });
   return Response.json({ received: true });
 }

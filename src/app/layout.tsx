@@ -3,6 +3,8 @@ import { Inter, Montserrat } from "next/font/google";
 import type { ReactNode } from "react";
 import RegisterSw from "@/components/RegisterSw";
 import { themeBootScript } from "@/lib/palette";
+import { introBootScript } from "@/lib/plain";
+import { SHARE_IMAGE, SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site-meta";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,11 +20,10 @@ const montserrat = Montserrat({
   variable: "--font-mark",
 });
 
-const description = "Live US hail, wind, and tornado reports, property storm history, field notes, and phone hail alerts.";
-
 export const metadata: Metadata = {
-  title: "Swathline",
-  description,
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   applicationName: "Swathline",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -38,13 +39,25 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   openGraph: {
-    title: "Swathline",
-    description,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     siteName: "Swathline",
+    type: "website",
+    url: SITE_URL,
+    images: [
+      {
+        url: SHARE_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: "Swathline hail swath across the central United States",
+      },
+    ],
   },
   twitter: {
-    title: "Swathline",
-    description,
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SHARE_IMAGE],
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -62,6 +75,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-palette="a" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: introBootScript() }} />
         <RegisterSw />
         {children}
       </body>

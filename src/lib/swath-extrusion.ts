@@ -97,11 +97,12 @@ export function depthFrame(
   depth: boolean,
   pose: DepthPose | null,
   current: { pitch: number; bearing: number },
+  targetPitch = SWATH_3D_PITCH,
 ): { pitch: number; bearing: number } {
   if (!depth) return { pitch: 0, bearing: 0 };
   const cinematic = pose ? pose.bearing + pose.offset : current.bearing;
   const drifted = pose != null && Math.abs(angleDelta(current.bearing, cinematic)) > 8;
-  const pitch = current.pitch > SWATH_3D_PITCH ? current.pitch : SWATH_3D_PITCH;
+  const pitch = Math.max(current.pitch, targetPitch);
   return { pitch, bearing: drifted ? current.bearing : cinematic };
 }
 

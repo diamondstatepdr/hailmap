@@ -20,7 +20,7 @@ const BLUR_SIGMA = 1.55;
  */
 export function hillMeters(inches: number): number {
   const rise = Math.max(0, inches - 0.22);
-  return rise * rise * 42000;
+  return rise * rise * 10000;
 }
 
 const COLOR_STOPS = MESH_LEGEND.map((band) => ({
@@ -31,9 +31,9 @@ const COLOR_STOPS = MESH_LEGEND.map((band) => ({
 /** RGBA 0–1. Green at the foot, legend colors up the slope, clear at the ground. */
 export function hillColor(inches: number): [number, number, number, number] {
   const rgb = sampleColor(inches);
-  if (inches <= 0.2) return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0];
-  const fade = Math.min(1, (inches - 0.2) / 1.7);
-  const alpha = 0.34 + 0.5 * fade;
+  if (inches <= 0.1) return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0];
+  const fade = Math.min(1, (inches - 0.1) / 1.8);
+  const alpha = 0.72 * fade * fade;
   return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, alpha];
 }
 
@@ -116,12 +116,22 @@ function distanceToSkirt(values: Float64Array, width: number, height: number): F
   return dist;
 }
 
+function padZeros(values: Float64Array, width: number, height: number, pad: number): { values: Float64Array; width: number; height: number } {
+  const nextWidth = width + pad * 2;
+  const nextHeight = height + pad * 2;
+  const next = new Float64Array(nextWidth * nextHeight);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) next[(y + pad) * nextWidth + (x + pad)] = values[y * width + x];
+  }
+  return { values: next, width: nextWidth, height: nextHeight };
+}
+
 function downsample(values: Float64Array, width: number, height: number): { values: Float64Array; width: number; height: number; factor: number } {
   let grid = values;
   let w = width;
   let h = height;
   let factor = 1;
-  while (w > 110 || h > 110) {
+  while (w > 280 || h > 280) {
     const nw = Math.ceil(w / 2);
     const nh = Math.ceil(h / 2);
     const next = new Float64Array(nw * nh);
@@ -204,11 +214,13 @@ export function hailPatches(cells: MeshCell[], shape: MeshGridShape): HailPatch[
       raw[(iy - minY) * width + (ix - minX)] = inches;
     }
     const reduced = downsample(raw, width, height);
-    const smooth = blur(reduced.values, reduced.width, reduced.height, BLUR_SIGMA);
-    const distance = distanceToSkirt(reduced.values, reduced.width, reduced.height);
+    const skirt = 6;
+    const padded = padZeros(reduced.values, reduced.width, reduced.height, skirt);
+    const smooth = blur(padded.values, padded.width, padded.height, BLUR_SIGMA);
+    const distance = distanceToSkirt(padded.values, padded.width, padded.height);
     let maxDistance = 0;
     let rawPeak = 0;
-    for (let i = 0; i < reduced.values.length; i += 1) rawPeak = Math.max(rawPeak, reduced.values[i]);
+    for (let i = 0; i < padded.values.length; i += 1) rawPeak = Math.max(rawPeak, padded.values[i]);
     for (let i = 0; i < distance.length; i += 1) maxDistance = Math.max(maxDistance, distance[i]);
     const shaped = new Float64Array(smooth.length);
     let shapedPeak = 0;
@@ -226,12 +238,13 @@ export function hailPatches(cells: MeshCell[], shape: MeshGridShape): HailPatch[
       if (inches > peak) peak = inches;
     }
     if (peak < 0.55) continue;
+    const coarse = shape.step * reduced.factor;
     patches.push({
-      west: shape.west + minX * shape.step,
-      south: shape.south + minY * shape.step,
-      step: shape.step * reduced.factor,
-      columns: reduced.width,
-      rows: reduced.height,
+      west: shape.west + minX * shape.step - skirt * coarse,
+      south: shape.south + minY * shape.step - skirt * coarse,
+      step: coarse,
+      columns: padded.width,
+      rows: padded.height,
       values,
     });
   }

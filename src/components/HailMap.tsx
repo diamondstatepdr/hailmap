@@ -434,6 +434,13 @@ export default function HailMap({
     canvassPins?.features.length ? "canvass-hit" : "",
   ].filter(Boolean);
 
+  function viewPitch(): number {
+    if (typeof window === "undefined") return SWATH_3D_PITCH;
+    const raw = Number(new URLSearchParams(window.location.search).get("pitch"));
+    if (!Number.isFinite(raw)) return SWATH_3D_PITCH;
+    return Math.min(SWATH_MAX_PITCH, Math.max(0, raw));
+  }
+
   function syncSwathDepth(map: MapLibreMap, next: boolean) {
     if (depthSynced.current === next) return;
     depthSynced.current = next;
@@ -447,7 +454,7 @@ export default function HailMap({
       map.touchZoomRotate.enable();
       map.touchZoomRotate.enableRotation();
       const pose = poseRef.current;
-      const view = { pitch: SWATH_3D_PITCH, bearing: pose.bearing + pose.offset };
+      const view = { pitch: viewPitch(), bearing: pose.bearing + pose.offset };
       if (duration === 0) map.jumpTo(view);
       else map.easeTo({ ...view, duration, easing: tiltEase, essential: true });
       map.setLight(lightMove(SWATH_LIGHT, duration));
@@ -539,7 +546,7 @@ export default function HailMap({
           }
         : padding;
     try {
-      const pose = depthFrame(depthRef.current, poseRef.current, { pitch: raw.getPitch(), bearing: raw.getBearing() });
+      const pose = depthFrame(depthRef.current, poseRef.current, { pitch: raw.getPitch(), bearing: raw.getBearing() }, viewPitch());
       map.fitBounds(
         [
           [safe.west, safe.south],

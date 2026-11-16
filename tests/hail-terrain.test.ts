@@ -52,8 +52,8 @@ describe("hail terrain", () => {
     const patches = hailPatches(cells, { west: -105, south: 32, step: 0.02, nx: 240, ny: 240 });
     expect(patches.length).toBeGreaterThan(0);
     for (const patch of patches) {
-      expect(patch.columns).toBeLessThanOrEqual(110);
-      expect(patch.rows).toBeLessThanOrEqual(110);
+      expect(patch.columns).toBeLessThanOrEqual(300);
+      expect(patch.rows).toBeLessThanOrEqual(300);
     }
   });
 });

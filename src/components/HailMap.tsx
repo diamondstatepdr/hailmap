@@ -41,6 +41,8 @@ import {
   tiltEase,
   type DepthPose,
 } from "@/lib/swath-extrusion";
+import HailRidge from "@/components/HailRidge";
+import type { HailPatch } from "@/lib/hail-terrain";
 import { toggleMapCredit } from "@/lib/map-credit";
 import { relaxPlaceLabels } from "@/lib/place-labels";
 import stateOverlay from "@/data/us-states.json";
@@ -181,6 +183,8 @@ interface Props {
   points: GeoJSON.FeatureCollection;
   swaths: GeoJSON.FeatureCollection;
   mesh?: GeoJSON.FeatureCollection | null;
+  /** Smoothed hail field drawn as sloped terrain while 3D is on. */
+  meshField?: HailPatch[] | null;
   meshPulse?: GeoJSON.FeatureCollection | null;
   dealers?: GeoJSON.FeatureCollection | null;
   selectedDealerId?: string | null;
@@ -283,6 +287,7 @@ export default function HailMap({
   points,
   swaths,
   mesh = null,
+  meshField = null,
   meshPulse = null,
   dealers = null,
   selectedDealerId = null,
@@ -337,6 +342,8 @@ export default function HailMap({
   const [depth, setDepth] = useState(false);
   const [volume, setVolume] = useState(false);
   const [risen, setRisen] = useState(false);
+  const relief = volume && (meshField?.length ?? 0) > 0;
+  const extruded = volume && !relief;
   const depthRef = useRef(false);
   const poseRef = useRef<DepthPose | null>(null);
   const depthSynced = useRef<boolean | null>(null);
@@ -406,12 +413,12 @@ export default function HailMap({
     showPoints ? "hail-points" : "",
     showPoints ? "hail-point-hit" : "",
     ...(emphasizeMesh
-      ? [swathHitLayer("mesh-a-fill", volume), swathHitLayer("mesh-b-fill", volume), "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
+      ? [swathHitLayer("mesh-a-fill", extruded), swathHitLayer("mesh-b-fill", extruded), "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
       : [
-          showMesh && mesh?.features.length ? swathHitLayer("mesh-fill", volume) : "",
+          showMesh && mesh?.features.length ? swathHitLayer("mesh-fill", extruded) : "",
           showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : "",
         ]),
-    showSwaths ? swathHitLayer("swath-fill", volume) : "",
+    showSwaths ? swathHitLayer("swath-fill", extruded) : "",
     dealers?.features.length ? "dealer-clusters" : "",
     dealers?.features.length ? "dealer-pins" : "",
     dealers?.features.length ? "dealer-hit" : "",
@@ -799,7 +806,21 @@ export default function HailMap({
       }
       return;
     }
-    const features = event.features ?? [];
+    const features = [...(event.features ?? [])];
+    if (relief && map && point) {
+      const layers = ["mesh-fill", "mesh-a-fill", "mesh-b-fill", "swath-fill"].filter((id) => map.getLayer(id));
+      if (layers.length) {
+        features.push(
+          ...map.queryRenderedFeatures(
+            [
+              [point.x - 42, point.y - 12],
+              [point.x + 42, point.y + 96],
+            ],
+            { layers },
+          ),
+        );
+      }
+    }
     for (const feature of features) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
@@ -1136,8 +1157,9 @@ export default function HailMap({
           riseMs={moveMs}
         />
       ) : null}
+      <HailRidge patches={meshField} active={relief} />
       {showMesh && !emphasizeMesh ? (
-        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} volume={volume} risen={risen} riseMs={moveMs} />
+        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} volume={volume} relief={relief} risen={risen} riseMs={moveMs} />
       ) : null}
       {showThreats && alertData.features.length ? (
         <Source id="alerts" type="geojson" data={alertData}>
@@ -1264,7 +1286,7 @@ export default function HailMap({
         />
       </Source>
       {showMesh && emphasizeMesh ? (
-        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis faded={showHoney} volume={volume} risen={risen} riseMs={moveMs} />
+        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis faded={showHoney} volume={volume} relief={relief} risen={risen} riseMs={moveMs} />
       ) : null}
       {showHoney && honey?.features.length ? (
         <Source id="honey" type="geojson" data={honey}>
@@ -1804,6 +1826,7 @@ function MeshContours({
   emphasis,
   faded = false,
   volume = false,
+  relief = false,
   risen = false,
   riseMs = SWATH_MOVE_MS,
 }: {
@@ -1813,6 +1836,8 @@ function MeshContours({
   emphasis: boolean;
   faded?: boolean;
   volume?: boolean;
+  /** Keep the polygons for taps, and let the sloped surface draw the hail. */
+  relief?: boolean;
   risen?: boolean;
   riseMs?: number;
 }) {
@@ -1825,7 +1850,7 @@ function MeshContours({
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels volume={volume} risen={risen} riseMs={riseMs} />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels volume={volume} relief={relief} risen={risen} riseMs={riseMs} />
         <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={lineWidth} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
@@ -1845,6 +1870,7 @@ function MeshContours({
           labels={meshFade.current === index}
           theme={theme}
           volume={volume}
+          relief={relief}
           risen={risen}
           riseMs={riseMs}
         />
@@ -1877,6 +1903,7 @@ function SwathSource({
   labels = false,
   theme,
   volume = false,
+  relief = false,
   risen = false,
   riseMs = SWATH_MOVE_MS,
 }: {
@@ -1891,6 +1918,8 @@ function SwathSource({
   theme: "light" | "dark";
   /** Draw this swath as a volume. Pulse overlays stay flat. */
   volume?: boolean;
+  /** The sloped surface is showing, so this source is only a tap target. */
+  relief?: boolean;
   /** False on the first frame so the opacity bloom has a start value. */
   risen?: boolean;
   riseMs?: number;
@@ -1899,7 +1928,8 @@ function SwathSource({
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
   const halo = theme === "dark" ? "#f7fbff" : "#102033";
   const contour = theme === "dark" ? "#f8fafc" : "#102033";
-  const volumeActive = volume && fill > 0;
+  const volumeActive = volume && fill > 0 && !relief;
+  const hitOnly = Boolean(relief && fill > 0);
   const extrusionOpacity = !volumeActive ? 0 : risen ? SWATH_EXTRUSION_OPACITY : SWATH_EXTRUSION_OPACITY_START;
   // Pixel simplification and a short tile buffer shift the same polygon between zooms.
   return (
@@ -1912,12 +1942,12 @@ function SwathSource({
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": zoomFill(fill) as never,
+            "fill-opacity": (hitOnly ? 0.02 : zoomFill(fill)) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }
       />
-      {volume ? (
+      {volume && !relief ? (
         <Layer
           id={`${id}-extrusion`}
           type="fill-extrusion"
@@ -1944,7 +1974,7 @@ function SwathSource({
           {
             "line-color": (volumeActive ? swathColor : halo) as never,
             "line-width": (volumeActive ? ["interpolate", ["linear"], ["zoom"], 5, 10, 9, 16, 13, 20] : zoomLine(lineWidth + 2.4)) as never,
-            "line-opacity": volumeActive ? 0.38 : lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
+            "line-opacity": hitOnly ? 0 : volumeActive ? 0.38 : lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
             "line-blur": volumeActive ? 5 : Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
@@ -1959,7 +1989,7 @@ function SwathSource({
           {
             "line-color": contour,
             "line-width": zoomLine(lineWidth) as never,
-            "line-opacity": volumeActive ? 0 : lineOpacity,
+            "line-opacity": volumeActive || hitOnly ? 0 : lineOpacity,
             "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never

@@ -5,6 +5,7 @@ import { dataDir } from "@/lib/db";
 import { userAgent } from "@/lib/ingest";
 import type { RadarSample } from "@/lib/area-selection";
 import { gunzipIfNeeded, readGribMesh } from "@/lib/grib-mesh";
+import { hailPatches } from "@/lib/hail-terrain";
 import {
   cellsToSwaths,
   indexCells,
@@ -371,6 +372,7 @@ export async function meshLayerFor(plan: MeshRequestPlan, now = new Date()) {
     validTime,
     note,
     legend: MESH_LEGEND.map((band) => ({ ...band })),
+    field: merged ? hailPatches(merged.cells, merged.shape) : [],
     collection,
     bounds: bounds
       ? {

@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, Polygon } from "geojson";
+import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import { project, unproject } from "@/lib/geo";
 import { MESH_LEGEND, MESH_STEP } from "@/lib/mesh-legend";
 import { separateBandFills } from "@/lib/swath-bands";
@@ -379,10 +379,14 @@ export function cellsToSwaths(
   return { type: "FeatureCollection", features: [...other, ...polygons, ...edges] };
 }
 
+function asPairs(points: Position[]): Array<[number, number]> {
+  return points.map((point) => [point[0], point[1]]);
+}
+
 function softenMeshPolygons(features: Feature[], step: number): void {
   const polygons = features.filter((feature): feature is Feature<Polygon> => feature.geometry?.type === "Polygon");
   for (const feature of polygons) {
-    const ring = feature.geometry.coordinates[0];
+    const ring = asPairs(feature.geometry.coordinates[0]);
     const holdsCore = feature.geometry.coordinates.length > 1;
     if (!holdsCore && isSmallSpiky(ring, step)) {
       feature.geometry = { type: "Polygon", coordinates: [blobRing(ring)] };
@@ -395,7 +399,7 @@ function softenMeshPolygons(features: Feature[], step: number): void {
       gentle ? chaikinClosed(simplifyRing(points, Math.max(step * 0.3, 0.004)), 5) : flowRing(points, step);
     feature.geometry = {
       type: "Polygon",
-      coordinates: [smooth(ring), ...feature.geometry.coordinates.slice(1).map((hole) => smooth(hole))],
+      coordinates: [smooth(ring), ...feature.geometry.coordinates.slice(1).map((hole) => smooth(asPairs(hole)))],
     };
   }
 }

@@ -2,6 +2,7 @@ import { deflateSync, crc32 } from "node:zlib";
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cellsToSwaths, DEFAULT_MESH_SHAPE, sampleIndexed, indexCells, type MeshCell } from "@/lib/mesh-contour";
+import { ridgeColor } from "@/lib/swath-bands";
 import { gunzipIfNeeded, meshInches, readGribMesh, sampleGribInches } from "@/lib/grib-mesh";
 import { dayFetchUrls, planMesh } from "@/lib/mesh-plan";
 import { buildStormReport } from "@/lib/storm-report";
@@ -168,6 +169,26 @@ describe("MESH contours", () => {
     const mid = collection.features.find((feature) => feature.properties?.minIn === 1.5 && feature.geometry.type === "Polygon");
     expect(mid?.geometry.type === "Polygon" ? mid.geometry.coordinates.length : 0).toBeGreaterThan(1);
     expect(collection.features.some((feature) => feature.properties?.minIn === 2 && feature.geometry.type === "Polygon")).toBe(false);
+  });
+
+  it("blends the edge toward green and keeps the core color", () => {
+    expect(ridgeColor(2.5, 2.8)).toBe("#d946ef");
+    expect(ridgeColor(0.75, 2.8)).toBe("#16a34a");
+    const mid = ridgeColor(1.5, 2.8);
+    expect(mid).not.toBe("#16a34a");
+    expect(mid).not.toBe("#d946ef");
+  });
+
+  it("drops a lone green speck and keeps a real hail area", () => {
+    const meta = { product: "MESH_Max_1440min", validTime: null, label: "test" };
+    const speck = cellsToSwaths([{ ix: 1, iy: 1, inches: 0.8 }], shape, meta);
+    expect(speck.features.some((feature) => feature.geometry.type === "Polygon")).toBe(false);
+    const block: MeshCell[] = [];
+    for (let ix = 1; ix <= 3; ix += 1) {
+      for (let iy = 1; iy <= 3; iy += 1) block.push({ ix, iy, inches: 1.4 });
+    }
+    const kept = cellsToSwaths(block, shape, meta);
+    expect(kept.features.some((feature) => feature.geometry.type === "Polygon")).toBe(true);
   });
 
   it("uses the default CONUS bin for an empty sample", () => {

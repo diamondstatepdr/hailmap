@@ -25,13 +25,8 @@ describe("3D swath extrusion", () => {
     expect(swathExtrusionMeters(1)).toBeLessThan(swathExtrusionMeters(1.5));
     expect(swathExtrusionMeters(1.5)).toBeLessThan(swathExtrusionMeters(2));
     expect(swathExtrusionMeters(2)).toBeLessThan(swathExtrusionMeters(2.5));
-    expect(swathExtrusionMeters(2.5)).toBeGreaterThan(swathExtrusionMeters(0.75) * 3);
-    const reviewed = (inches: number) => {
-      const size = Math.min(6, Math.max(0, inches));
-      return 5000 + size ** 1.4 * 16000;
-    };
-    expect(swathExtrusionMeters(2.5)).toBeCloseTo(reviewed(2.5) / 5, -2);
-    expect(swathExtrusionMeters(4)).toBeCloseTo(reviewed(4) / 5, -2);
+    expect(swathExtrusionMeters(2.5)).toBeGreaterThan(swathExtrusionMeters(0.75) * 1.3);
+    expect(swathExtrusionMeters(2.5)).toBeLessThan(swathExtrusionMeters(0.75) * 2.2);
     const height = JSON.stringify(swathExtrusionHeight());
     expect(height).toContain("maxSizeIn");
     expect(height).toContain("maxIn");

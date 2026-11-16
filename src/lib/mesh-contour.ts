@@ -192,12 +192,22 @@ export function cellsToSwaths(
   properties: { product: string; validTime: string | null; label: string },
 ): FeatureCollection {
   const features: Feature[] = [];
-  const tolerance = Math.max(shape.step * 0.55, 0.008);
+  // Keep the stair-step outline, then round it. Smoothing happens once here,
+  // so the same curve is used at every zoom.
+  const tolerance = Math.max(shape.step * 0.28, 0.004);
+  const cellArea = shape.step * shape.step;
   for (const band of MESH_LEGEND) {
-    const rings = traceRings(cells, band.minIn, shape).map((ring) => ({
-      ...ring,
-      points: chaikinClosed(simplifyRing(ring.points, tolerance), 2),
-    }));
+    const rings = traceRings(cells, band.minIn, shape)
+      .filter((ring) => {
+        const cellsInRing = Math.abs(ring.area) / cellArea;
+        // Lone green specks clutter the map. A one-cell core of real hail stays.
+        if (band.minIn <= MESH_LEGEND[0].minIn) return cellsInRing >= 3.5;
+        return cellsInRing >= 0.6;
+      })
+      .map((ring) => ({
+        ...ring,
+        points: chaikinClosed(simplifyRing(ring.points, tolerance), 4),
+      }));
     const outers = rings.filter((ring) => ring.area > 0 && ring.points.length >= 4);
     const holes = rings.filter((ring) => ring.area < 0 && ring.points.length >= 4);
     outers.forEach((outer, index) => {

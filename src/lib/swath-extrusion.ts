@@ -1,13 +1,14 @@
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 
 /**
- * Meters of extrusion at {@link SWATH_HEIGHT_ZOOM}. One fifth of the slabs in
- * the first 3D screenshots, so the biggest hail is a low raised slab.
- * The curve still steps up clearly: 2.5" is several times the height of 0.75".
+ * Meters of extrusion at {@link SWATH_HEIGHT_ZOOM}. A low slab: 2.5" hail is
+ * clearly taller than the green edge, but the steps between sizes are small
+ * enough to read as one ridge.
  */
 export function swathExtrusionMeters(inches: number): number {
   const size = Number.isFinite(inches) ? Math.min(6, Math.max(0, inches)) : 0;
-  return Math.round((5000 + size ** 1.4 * 16000) / 5);
+  const t = Math.min(1, Math.max(0, (size - 0.5) / 2.2));
+  return Math.round(5200 + 4600 * t ** 0.75);
 }
 
 /** Zoom the reviewed screenshots used. Other zooms scale from here. */
@@ -25,7 +26,7 @@ export function swathExtrusionMetersAtZoom(inches: number, zoom: number): number
 const HEIGHT_STOPS = [0, 0.75, 1, 1.5, 2, 2.5, 4] as const;
 
 function sizeHeight(scale: number): unknown[] {
-  const size = ["to-number", ["coalesce", ["get", "maxSizeIn"], ["get", "maxIn"], ["get", "minIn"], 0]];
+  const size = ["to-number", ["coalesce", ["get", "minIn"], ["get", "maxSizeIn"], ["get", "maxIn"], 0]];
   const expression: unknown[] = ["interpolate", ["linear"], size];
   for (const stop of HEIGHT_STOPS) expression.push(stop, Math.round(swathExtrusionMeters(stop) * scale));
   return expression;

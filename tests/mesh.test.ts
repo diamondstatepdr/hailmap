@@ -179,6 +179,61 @@ describe("MESH contours", () => {
     expect(mid).not.toBe("#d946ef");
   });
 
+  it("turns a small spiky patch into a round blob", () => {
+    const collection = cellsToSwaths(
+      [
+        { ix: 1, iy: 1, inches: 1.7 },
+        { ix: 2, iy: 1, inches: 1.7 },
+        { ix: 2, iy: 2, inches: 1.7 },
+      ],
+      shape,
+      { product: "MESH_Max_1440min", validTime: null, label: "test" },
+    );
+    const patch = collection.features.find((feature) => feature.properties?.minIn === 1.5 && feature.geometry.type === "Polygon");
+    const ring = patch?.geometry.type === "Polygon" ? patch.geometry.coordinates[0] : [];
+    expect(ring.length).toBeGreaterThan(8);
+    let lon = 0;
+    let lat = 0;
+    for (let i = 0; i < ring.length - 1; i += 1) {
+      lon += ring[i][0];
+      lat += ring[i][1];
+    }
+    const count = ring.length - 1;
+    const latScale = Math.cos(((lat / count) * Math.PI) / 180);
+    const radii = ring.slice(0, -1).map((point) => Math.hypot((point[0] - lon / count) * latScale, point[1] - lat / count));
+    const mean = radii.reduce((sum, radius) => sum + radius, 0) / radii.length;
+    const drift = Math.max(...radii.map((radius) => Math.abs(radius - mean) / mean));
+    expect(drift).toBeLessThan(0.12);
+  });
+
+  it("rounds a wide swath so corners are not right angles", () => {
+    const cells: MeshCell[] = [];
+    for (let ix = 0; ix < 10; ix += 1) {
+      for (let iy = 0; iy < 4; iy += 1) cells.push({ ix, iy, inches: 1.3 });
+    }
+    const collection = cellsToSwaths(cells, { ...shape, nx: 12, ny: 8 }, {
+      product: "MESH_Max_1440min",
+      validTime: null,
+      label: "test",
+    });
+    const polygon = collection.features.find((feature) => feature.geometry.type === "Polygon");
+    const ring = polygon?.geometry.type === "Polygon" ? polygon.geometry.coordinates[0] : [];
+    expect(ring.length).toBeGreaterThan(8);
+    let sharpest = 0;
+    const open = ring.slice(0, -1);
+    for (let i = 0; i < open.length; i += 1) {
+      const a = open[(i + open.length - 1) % open.length];
+      const b = open[i];
+      const c = open[(i + 1) % open.length];
+      const ab = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const bc = Math.atan2(c[1] - b[1], c[0] - b[0]);
+      let turn = Math.abs(bc - ab);
+      if (turn > Math.PI) turn = Math.PI * 2 - turn;
+      sharpest = Math.max(sharpest, turn);
+    }
+    expect(sharpest).toBeLessThan((70 * Math.PI) / 180);
+  });
+
   it("drops a lone green speck and keeps a real hail area", () => {
     const meta = { product: "MESH_Max_1440min", validTime: null, label: "test" };
     const speck = cellsToSwaths([{ ix: 1, iy: 1, inches: 0.8 }], shape, meta);

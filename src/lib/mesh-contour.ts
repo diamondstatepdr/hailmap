@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
+import { project, unproject } from "@/lib/geo";
 import { MESH_LEGEND, MESH_STEP } from "@/lib/mesh-legend";
 import { separateBandFills } from "@/lib/swath-bands";
 
@@ -81,6 +82,135 @@ function simplifyRing(points: Array<[number, number]>, tolerance: number): Array
   const simplified = simplifyOpen(open, tolerance);
   if (simplified.length < 3) return points;
   return [...simplified, simplified[0]];
+}
+
+function round5(value: number): number {
+  return Math.round(value * 1e5) / 1e5;
+}
+
+function ringCentroid(points: Array<[number, number]>): [number, number] {
+  let lon = 0;
+  let lat = 0;
+  const count = Math.max(1, points.length - 1);
+  for (let i = 0; i < points.length - 1; i += 1) {
+    lon += points[i][0];
+    lat += points[i][1];
+  }
+  return [lon / count, lat / count];
+}
+
+/** A soft dot. Same area as the patch, never a sharp corner. */
+function circleRing(center: [number, number], radiusDeg: number, count = 24): Array<[number, number]> {
+  const ring: Array<[number, number]> = [];
+  const lonScale = Math.max(0.25, Math.cos((center[1] * Math.PI) / 180));
+  for (let i = 0; i < count; i += 1) {
+    const angle = (i / count) * Math.PI * 2;
+    ring.push([
+      round5(center[0] + (radiusDeg * Math.cos(angle)) / lonScale),
+      round5(center[1] + radiusDeg * Math.sin(angle)),
+    ]);
+  }
+  ring.push(ring[0]);
+  return ring;
+}
+
+function blobRing(points: Array<[number, number]>): Array<[number, number]> {
+  const center = ringCentroid(points);
+  const area = Math.abs(ringArea(points));
+  const radius = Math.max(Math.sqrt(area / Math.PI) * 1.08, 0.012);
+  const ring = circleRing(center, radius);
+  return ringArea(points) < 0 ? reverseClosed(ring) : ring;
+}
+
+function reverseClosed(points: Array<[number, number]>): Array<[number, number]> {
+  const open = points.slice(0, -1).reverse();
+  return [...open, open[0]];
+}
+
+/**
+ * Move a closed ring by `km` (positive grows it). The shift follows the
+ * corner bisector and is capped, so a sharp notch cannot throw a spike.
+ */
+function offsetRing(points: Array<[number, number]>, km: number): Array<[number, number]> {
+  const open = points.slice(0, -1);
+  if (open.length < 3 || km === 0) return points;
+  const originLon = open.reduce((sum, point) => sum + point[0], 0) / open.length;
+  const originLat = open.reduce((sum, point) => sum + point[1], 0) / open.length;
+  const local = open.map((point) => project(point[0], point[1], originLon, originLat));
+  let area = 0;
+  for (let i = 0; i < local.length; i += 1) {
+    const a = local[i];
+    const b = local[(i + 1) % local.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  const outward = area >= 0 ? -1 : 1;
+  const result: Array<[number, number]> = [];
+  for (let i = 0; i < local.length; i += 1) {
+    const prev = local[(i - 1 + local.length) % local.length];
+    const curr = local[i];
+    const next = local[(i + 1) % local.length];
+    const inDx = curr.x - prev.x;
+    const inDy = curr.y - prev.y;
+    const inLen = Math.hypot(inDx, inDy) || 1e-6;
+    const outDx = next.x - curr.x;
+    const outDy = next.y - curr.y;
+    const outLen = Math.hypot(outDx, outDy) || 1e-6;
+    const left1 = { x: -inDy / inLen, y: inDx / inLen };
+    const left2 = { x: -outDy / outLen, y: outDx / outLen };
+    let bx = left1.x + left2.x;
+    let by = left1.y + left2.y;
+    const length = Math.hypot(bx, by);
+    if (length < 1e-6) {
+      bx = left1.x;
+      by = left1.y;
+    } else {
+      bx /= length;
+      by /= length;
+    }
+    const align = Math.abs(left1.x * bx + left1.y * by);
+    const miter = Math.min(Math.abs(km) * 1.35, Math.abs(km) / Math.max(0.45, align));
+    const side = outward * Math.sign(km);
+    const geo = unproject(curr.x + bx * miter * side, curr.y + by * miter * side, originLon, originLat);
+    result.push([round5(geo.lon), round5(geo.lat)]);
+  }
+  result.push(result[0]);
+  return result;
+}
+
+function cellCount(points: Array<[number, number]>, step: number): number {
+  return Math.abs(ringArea(points)) / (step * step);
+}
+
+function isSmallSpiky(points: Array<[number, number]>, step: number): boolean {
+  const cells = cellCount(points, step);
+  if (cells < 24) return true;
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const [lon, lat] of points) {
+    west = Math.min(west, lon);
+    east = Math.max(east, lon);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  }
+  const span = Math.max(east - west, north - south);
+  const area = Math.abs(ringArea(points));
+  // A long thin jag has little area for its reach. A real swath is wider.
+  return cells < 70 && area < span * span * 0.2;
+}
+
+/** Buffer out, buffer back in, then round. The shape stays; the corners do not. */
+function flowRing(points: Array<[number, number]>, step: number): Array<[number, number]> {
+  const simplified = simplifyRing(points, Math.max(step * 0.42, 0.006));
+  const km = step * 111 * 1.45;
+  const grown = offsetRing(simplified, km);
+  const shrunk = offsetRing(grown, -km);
+  const area = Math.abs(ringArea(shrunk));
+  const source = area > Math.abs(ringArea(simplified)) * 0.35 ? shrunk : simplified;
+  let smooth = chaikinClosed(source, 5);
+  if (smooth.length > 220) smooth = simplifyRing(smooth, Math.max(step * 0.1, 0.0025));
+  return smooth.length >= 4 ? smooth : points;
 }
 
 /** Round stair-step grid corners into a smooth closed ring. */
@@ -192,22 +322,14 @@ export function cellsToSwaths(
   properties: { product: string; validTime: string | null; label: string },
 ): FeatureCollection {
   const features: Feature[] = [];
-  // Keep the stair-step outline, then round it. Smoothing happens once here,
-  // so the same curve is used at every zoom.
-  const tolerance = Math.max(shape.step * 0.28, 0.004);
   const cellArea = shape.step * shape.step;
   for (const band of MESH_LEGEND) {
-    const rings = traceRings(cells, band.minIn, shape)
-      .filter((ring) => {
-        const cellsInRing = Math.abs(ring.area) / cellArea;
-        // Lone green specks clutter the map. A one-cell core of real hail stays.
-        if (band.minIn <= MESH_LEGEND[0].minIn) return cellsInRing >= 3.5;
-        return cellsInRing >= 0.6;
-      })
-      .map((ring) => ({
-        ...ring,
-        points: chaikinClosed(simplifyRing(ring.points, tolerance), 4),
-      }));
+    const rings = traceRings(cells, band.minIn, shape).filter((ring) => {
+      const cellsInRing = Math.abs(ring.area) / cellArea;
+      // Lone green specks clutter the map. A one-cell core of real hail stays.
+      if (band.minIn <= MESH_LEGEND[0].minIn) return cellsInRing >= 3.5;
+      return cellsInRing >= 0.6;
+    });
     const outers = rings.filter((ring) => ring.area > 0 && ring.points.length >= 4);
     const holes = rings.filter((ring) => ring.area < 0 && ring.points.length >= 4);
     outers.forEach((outer, index) => {
@@ -241,7 +363,41 @@ export function cellsToSwaths(
       });
     });
   }
-  return { type: "FeatureCollection", features: separateBandFills(features) };
+  // Nest the bands on the raw rings, then smooth. Doing it in this order keeps a
+  // heavy core inside its parent, and the stored curve does not change with zoom.
+  const nested = separateBandFills(features);
+  const polygons = nested.filter((feature): feature is Feature<Polygon> => feature.geometry?.type === "Polygon");
+  softenMeshPolygons(polygons, shape.step);
+  const other = nested.filter((feature) => feature.geometry?.type !== "Polygon" && feature.geometry?.type !== "LineString");
+  const edges: Feature[] = polygons
+    .filter((feature) => feature.properties?.halo === true)
+    .map((feature) => ({
+      type: "Feature",
+      properties: { halo: true, kind: "edge", color: feature.properties?.color ?? "#64748b" },
+      geometry: { type: "LineString", coordinates: feature.geometry.coordinates[0] },
+    }));
+  return { type: "FeatureCollection", features: [...other, ...polygons, ...edges] };
+}
+
+function softenMeshPolygons(features: Feature[], step: number): void {
+  const polygons = features.filter((feature): feature is Feature<Polygon> => feature.geometry?.type === "Polygon");
+  for (const feature of polygons) {
+    const ring = feature.geometry.coordinates[0];
+    const holdsCore = feature.geometry.coordinates.length > 1;
+    if (!holdsCore && isSmallSpiky(ring, step)) {
+      feature.geometry = { type: "Polygon", coordinates: [blobRing(ring)] };
+      continue;
+    }
+    // A small ring that still wraps a heavier core only gets its corners rounded.
+    // A full buffer there can shrink the ring off the core and lose the nest.
+    const gentle = cellCount(ring, step) < 40;
+    const smooth = (points: Array<[number, number]>) =>
+      gentle ? chaikinClosed(simplifyRing(points, Math.max(step * 0.3, 0.004)), 5) : flowRing(points, step);
+    feature.geometry = {
+      type: "Polygon",
+      coordinates: [smooth(ring), ...feature.geometry.coordinates.slice(1).map((hole) => smooth(hole))],
+    };
+  }
 }
 
 export function sampleGrid(cells: MeshCell[], shape: MeshGridShape, lat: number, lon: number): number | null {

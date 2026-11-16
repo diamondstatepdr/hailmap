@@ -89,14 +89,14 @@ export default function TeamPanel({ onRole }: { onRole?: (role: TeamPayload["rol
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as { error?: string; emailed?: boolean };
       if (!response.ok) {
         setError(payload.error ?? "Could not create that invite.");
         return;
       }
       setEmail("");
       await load();
-      setCopied("Invite link ready. Copy it and text it.");
+      setCopied(payload.emailed ? "Emailed the link. You can still copy it." : "Invite link ready. Copy it and text it.");
     } catch {
       setError("Could not reach the server.");
     } finally {
@@ -209,7 +209,7 @@ export default function TeamPanel({ onRole }: { onRole?: (role: TeamPayload["rol
               {team.invites.map((invite) => (
                 <li key={invite.id} className="rounded-2xl bg-app px-3 py-3">
                   <p className="text-sm font-semibold">{invite.email}</p>
-                  <p className="text-xs text-muted">Waiting. Text them this link. There is no invite email.</p>
+                  <p className="text-xs text-muted">Waiting. Copy the link if you want to text it too.</p>
                   <label className="mt-2 block text-xs font-medium" htmlFor={`invite-link-${invite.id}`}>
                     Invite link
                     <input

@@ -3776,7 +3776,6 @@ html.dark .money-glance-kicker {
   box-shadow: var(--shadow);
 }
 
-.welcome,
 .help-guide {
   position: fixed;
   inset: 0;
@@ -4135,8 +4134,172 @@ html.dark .money-glance-kicker {
   line-clamp: 2;
 }
 
-.welcome {
-  background: rgba(2, 6, 14, 0.84);
+html[data-intro="skip"] dialog.welcome {
+  display: none !important;
+}
+
+dialog.welcome[open] {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding:
+    max(0.85rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(0.9rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  background:
+    radial-gradient(880px 420px at 0% -8%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 58%),
+    radial-gradient(640px 380px at 110% 0%, color-mix(in srgb, var(--swath) 42%, transparent), transparent 54%),
+    linear-gradient(165deg, var(--chrome) 0%, var(--chrome-2) 58%, #07111c 100%);
+  color: var(--chrome-ink);
+}
+
+dialog.welcome:modal {
+  overscroll-behavior: contain;
+}
+
+dialog.welcome::backdrop {
+  background: rgba(2, 6, 14, 0.72);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.welcome-sheet {
+  position: relative;
+  width: min(28rem, 100%);
+  margin: auto;
+}
+
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.15rem 0 0.85rem;
+  padding-right: 4.5rem;
+}
+
+.welcome-brand .swath-name {
+  color: var(--chrome-ink);
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+}
+
+.welcome-for {
+  margin: 0;
+  color: color-mix(in srgb, var(--chrome-ink) 78%, transparent);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.welcome-sheet h1 {
+  margin: 0.4rem 0 0.35rem;
+  color: var(--chrome-ink);
+  font-size: clamp(1.85rem, 8vw, 2.35rem);
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+}
+
+.welcome-sheet .welcome-copy {
+  margin: 0;
+  max-width: 34rem;
+  color: color-mix(in srgb, var(--chrome-ink) 88%, transparent);
+}
+
+.welcome-sheet .welcome-art {
+  height: auto;
+  margin: 0.85rem 0 0.45rem;
+  aspect-ratio: 320 / 168;
+}
+
+.welcome-sizes,
+.welcome-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-sizes li,
+.welcome-tools li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--chrome-line);
+  border-radius: 999px;
+  background: var(--chrome-fill);
+  padding: 0.28rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 720;
+}
+
+.welcome-sizes span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+}
+
+.welcome-price {
+  margin: 0.8rem 0 0;
+  color: color-mix(in srgb, var(--chrome-ink) 84%, transparent);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.welcome-actions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  padding-top: 0.65rem;
+  background: linear-gradient(180deg, transparent, var(--chrome) 32%);
+}
+
+.welcome-go,
+.welcome-trial {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.02rem;
+}
+
+.welcome-trial {
+  border: 1px solid var(--chrome-line);
+  background: transparent;
+  color: var(--chrome-ink);
+}
+
+.welcome-sheet .welcome-skip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  float: none;
+  color: color-mix(in srgb, var(--chrome-ink) 78%, transparent);
+}
+
+.welcome-town circle {
+  fill: var(--chrome);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.welcome-town text {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .welcome-frame {

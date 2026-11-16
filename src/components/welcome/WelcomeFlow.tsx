@@ -1,146 +1,134 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { WELCOME_SCREENS } from "@/lib/plain";
+import { useLayoutEffect, useRef } from "react";
+import { LogoMark, Wordmark } from "@/components/brand/Logo";
+import { INTRO } from "@/lib/plain";
 
 interface Props {
   onDone: () => void;
 }
 
-export default function WelcomeFlow({ onDone }: Props) {
-  const [step, setStep] = useState(0);
-  const screen = WELCOME_SCREENS[step] ?? WELCOME_SCREENS[0];
-  const last = step >= WELCOME_SCREENS.length - 1;
-  return (
-    <div className="welcome" data-welcome data-welcome-step={step + 1} role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <div className="welcome-card">
-        <button type="button" className="welcome-skip" onClick={onDone}>
-          Skip
-        </button>
-        <WelcomeArt id={screen.id} />
-        <h1 id="welcome-title">{screen.title}</h1>
-        <p className="welcome-copy">{screen.body}</p>
-        <div className="welcome-dots" aria-hidden="true">
-          {WELCOME_SCREENS.map((item, index) => (
-            <span key={item.id} data-on={index === step ? "true" : "false"} />
-          ))}
-        </div>
-        {last ? (
-          <button type="button" className="btn btn-primary welcome-next" data-welcome-done onClick={onDone}>
-            Let's go
-          </button>
-        ) : (
-          <button type="button" className="btn btn-primary welcome-next" data-welcome-next onClick={() => setStep((value) => value + 1)}>
-            Next
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const BANDS = [
-  { color: "#16a34a", d: "M34 112 C78 74 112 122 156 96 C198 72 220 112 250 84 L250 126 C206 140 156 116 104 132 C58 144 38 124 34 128 Z" },
-  { color: "#facc15", d: "M50 108 C86 80 114 116 158 94 C194 76 216 104 238 88 L234 118 C198 128 160 108 112 122 C74 132 54 116 50 118 Z" },
-  { color: "#f97316", d: "M68 102 C96 84 120 110 160 94 C188 82 208 100 226 92 L222 110 C192 116 164 104 122 114 C92 122 74 110 68 112 Z" },
-  { color: "#e11d48", d: "M86 98 C108 86 126 104 162 94 C184 86 200 98 214 94 L210 106 C188 110 168 102 132 108 C108 114 94 104 86 106 Z" },
-  { color: "#d946ef", d: "M104 96 C120 90 132 100 164 94 C180 90 192 98 204 96 L202 104 C184 106 170 100 140 104 C122 108 110 100 104 102 Z" },
+  { color: "#16a34a", d: "M18 118 C62 78 108 124 160 92 C210 62 248 108 302 74 L302 128 C240 146 188 112 128 136 C72 154 36 132 18 136 Z" },
+  { color: "#facc15", d: "M36 112 C74 82 112 118 164 92 C206 72 240 100 286 80 L282 118 C230 132 184 106 124 124 C80 138 50 122 36 124 Z" },
+  { color: "#f97316", d: "M58 106 C90 84 122 112 168 92 C204 78 232 96 270 86 L266 110 C222 120 184 102 128 114 C96 124 72 112 58 114 Z" },
+  { color: "#e11d48", d: "M84 100 C108 86 132 106 170 92 C198 82 220 94 252 90 L248 104 C214 110 186 100 140 108 C112 114 94 106 84 108 Z" },
+  { color: "#d946ef", d: "M108 96 C126 88 142 100 172 92 C194 86 210 94 234 92 L232 102 C208 106 186 98 150 104 C128 108 116 100 108 102 Z" },
 ];
 
-function WelcomeArt({ id }: { id: string }) {
-  if (id === "money") {
-    return (
-      <MapScene id="money" label="A hail map with the best stops ranked">
-        <SteppedBands />
-        <Pin x={168} y={78} glow="money" />
-        <g className="welcome-ranks">
-          <Rank y={30} n="1" label="Best stop" wide />
-          <Rank y={64} n="2" label="Next lot" />
-          <Rank y={98} n="3" label="Neighborhood" short />
-        </g>
-      </MapScene>
-    );
+const SIZES = [
+  { label: '<1"', color: "#16a34a" },
+  { label: '1"', color: "#facc15" },
+  { label: '1.5"', color: "#f97316" },
+  { label: '2"', color: "#e11d48" },
+  { label: '2.5"+', color: "#d946ef" },
+];
+
+const TOWN_DOTS = [
+  { name: "Lubbock", x: 24, y: 38 },
+  { name: "Amarillo", x: 140, y: 32 },
+  { name: "Wichita", x: 228, y: 46 },
+];
+
+export default function WelcomeFlow({ onDone }: Props) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const upgrading = useRef(false);
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || document.documentElement.dataset.intro === "skip" || dialog.matches(":modal")) return;
+    upgrading.current = true;
+    if (dialog.open) dialog.close();
+    dialog.showModal();
+    requestAnimationFrame(() => {
+      upgrading.current = false;
+    });
+    dialog.querySelector<HTMLButtonElement>("[data-welcome-done]")?.focus();
+  }, []);
+
+  function closed() {
+    // close() during the modal upgrade fires this, then showModal() opens it again.
+    if (upgrading.current || dialogRef.current?.open) return;
+    onDone();
   }
-  if (id === "work") {
-    return (
-      <MapScene id="work" label="A hail map with the stop to work">
-        <SteppedBands />
-        <path d="M48 118 C92 96 124 108 156 90 C188 72 206 84 228 70" className="welcome-route" />
-        <Pin x={228} y={70} glow="work" />
-        <g className="welcome-work-card">
-          <rect x="36" y="28" width="118" height="40" rx="12" />
-          <text x="50" y="46" className="welcome-rank-label">Work this stop</text>
-          <text x="50" y="60" className="welcome-rank-sub">Search, then go</text>
-        </g>
-      </MapScene>
-    );
+
+  function dismiss() {
+    const dialog = dialogRef.current;
+    if (dialog) dialog.close();
+    else onDone();
   }
-  return (
-    <MapScene id="see" label="A map with a hail path and a pin">
-      <SteppedBands />
-      <Pin x={186} y={86} glow="see" />
-    </MapScene>
-  );
-}
 
-function MapScene({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return (
-    <svg className="welcome-art" viewBox="0 0 280 156" role="img" aria-label={label}>
-      <defs>
-        <filter id={`${id}-glow`} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3.2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <radialGradient id={`${id}-wash`} cx="72%" cy="42%" r="58%">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect x="8" y="6" width="264" height="144" rx="22" className="welcome-frame" />
-      <rect x="18" y="16" width="244" height="124" rx="16" className="welcome-ground" />
-      <rect x="18" y="16" width="244" height="124" rx="16" fill={`url(#${id}-wash)`} />
-      <g className="welcome-grid" aria-hidden="true">
-        <path d="M18 52 H262 M18 88 H262 M18 120 H262 M78 16 V140 M148 16 V140 M214 16 V140" />
-      </g>
-      {children}
-    </svg>
-  );
-}
+  function startTrial() {
+    onDone();
+    window.location.assign("/pricing");
+  }
 
-function SteppedBands() {
   return (
-    <g className="welcome-bands">
-      {BANDS.map((band) => (
-        <path key={band.color} className="welcome-band" d={band.d} fill={band.color} />
-      ))}
-    </g>
-  );
-}
-
-function Pin({ x, y, glow }: { x: number; y: number; glow: string }) {
-  return (
-    <g className="welcome-pin-mark" filter={`url(#${glow}-glow)`} transform={`translate(${x - 12} ${y - 30})`}>
-      <path className="welcome-pin-shape" d="M12 0C5.4 0 0 5.2 0 11.6 0 20.4 12 32 12 32s12-11.6 12-20.4C24 5.2 18.6 0 12 0z" />
-      <circle className="welcome-pin-core" cx="12" cy="12" r="4.2" />
-    </g>
-  );
-}
-
-function Rank({ y, n, label, wide, short }: { y: number; n: string; label: string; wide?: boolean; short?: boolean }) {
-  const width = wide ? 128 : short ? 108 : 118;
-  return (
-    <g className="welcome-rank" transform={`translate(28 ${y})`}>
-      <rect width={width} height="28" rx="10" />
-      <circle className="welcome-rank-dot" cx="16" cy="14" r="8" />
-      <text className="welcome-rank-num" x="16" y="18" textAnchor="middle">
-        {n}
-      </text>
-      <text className="welcome-rank-label" x="30" y="18">
-        {label}
-      </text>
-    </g>
+    <dialog
+      ref={dialogRef}
+      className="welcome"
+      open
+      data-welcome
+      aria-labelledby="welcome-title"
+      onClose={closed}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      }}
+    >
+      <div className="welcome-sheet">
+        <button type="button" className="welcome-skip" onClick={dismiss}>
+          Skip
+        </button>
+        <p className="welcome-brand">
+          <LogoMark size={32} title="Swathline" />
+          <Wordmark />
+        </p>
+        <p className="welcome-for">{INTRO.kicker}</p>
+        <h1 id="welcome-title">{INTRO.title}</h1>
+        <p className="welcome-copy">{INTRO.body}</p>
+        <svg className="welcome-art" viewBox="0 0 320 168" role="img" aria-label="A hail swath across Amarillo, Lubbock, and Wichita">
+          <rect x="0" y="0" width="320" height="168" rx="18" className="welcome-frame" />
+          <rect x="8" y="8" width="304" height="152" rx="14" className="welcome-ground" />
+          <g className="welcome-grid" aria-hidden="true">
+            <path d="M8 46 H312 M8 84 H312 M8 122 H312 M72 8 V160 M148 8 V160 M228 8 V160" />
+          </g>
+          <g className="welcome-bands">
+            {BANDS.map((band) => (
+              <path key={band.color} className="welcome-band" d={band.d} fill={band.color} />
+            ))}
+          </g>
+          {TOWN_DOTS.map((town) => (
+            <g key={town.name} className="welcome-town" transform={`translate(${town.x} ${town.y})`}>
+              <circle r="4.5" />
+              <text x="8" y="4">
+                {town.name}
+              </text>
+            </g>
+          ))}
+        </svg>
+        <ul className="welcome-sizes" aria-label="Hail size">
+          {SIZES.map((size) => (
+            <li key={size.label}>
+              <span style={{ background: size.color }} />
+              {size.label}
+            </li>
+          ))}
+        </ul>
+        <ul className="welcome-tools">
+          {INTRO.tools.map((tool) => (
+            <li key={tool}>{tool}</li>
+          ))}
+        </ul>
+        <p className="welcome-price">{INTRO.price}</p>
+        <div className="welcome-actions">
+          <button type="button" className="btn btn-primary welcome-go" data-welcome-done autoFocus onClick={dismiss}>
+            {INTRO.map}
+          </button>
+          <button type="button" className="btn welcome-trial" onClick={startTrial}>
+            {INTRO.trial}
+          </button>
+        </div>
+      </div>
+    </dialog>
   );
 }

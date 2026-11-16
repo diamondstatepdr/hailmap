@@ -23,6 +23,9 @@ describe("map click target", () => {
   it("leaves a swath tap as a swath, not a report, when no dot is under the finger", () => {
     expect(chooseMapClick([{ layerId: "mesh-fill", id: "mesh-1" }])).toEqual({ type: "swath" });
     expect(chooseMapClick([{ layerId: "swath-fill", id: "swath-1" }])).toEqual({ type: "swath" });
+    expect(chooseMapClick([{ layerId: "swath-extrusion", id: "swath-1" }])).toEqual({ type: "swath" });
+    expect(chooseMapClick([{ layerId: "mesh-extrusion", id: "mesh-1" }])).toEqual({ type: "swath" });
+    expect(chooseMapClick([{ layerId: "mesh-a-extrusion", id: "mesh-1" }])).toEqual({ type: "swath" });
     expect(chooseMapClick([])).toEqual({ type: "other" });
   });
 

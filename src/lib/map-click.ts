@@ -14,8 +14,8 @@ export type MapClickChoice =
 const REPORT_LAYERS = new Set(["hail-points", "hail-point-hit"]);
 
 function isSwathLayer(layerId: string): boolean {
-  if (layerId === "swath-fill") return true;
-  if (layerId === "mesh-fill" || layerId === "mesh-pulse-fill") return true;
+  if (layerId === "swath-fill" || layerId === "swath-extrusion") return true;
+  if (layerId === "mesh-fill" || layerId === "mesh-extrusion" || layerId === "mesh-pulse-fill") return true;
   return layerId.startsWith("mesh-a") || layerId.startsWith("mesh-b") || layerId.startsWith("mesh-pulse-");
 }
 

@@ -45,6 +45,7 @@ import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
 import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { swathHeightLegend } from "@/lib/swath-extrusion";
 import { formatClockRange, readoutForSelection, statLine, swathTitle } from "@/lib/swath-measure";
 import {
   applyReportFilter,
@@ -219,6 +220,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
   const [showSwaths, setShowSwaths] = useState(true);
+  const [swathDepth, setSwathDepth] = useState(false);
   const [showIncome, setShowIncome] = useState(false);
   const [showThreats, setShowThreats] = useState(true);
   const [showOutlook, setShowOutlook] = useState(true);
@@ -2347,6 +2349,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
             heat={heat}
             showHoney={showHoney}
             honeyPanel={honeyOpen && section === "map"}
+            onSwathDepth={setSwathDepth}
             visible={showMap}
             honey={honeyCollection}
             moneyGlance={section === "map" && !replay.active ? moneyGlanceContext : null}
@@ -2789,6 +2792,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
                   </button>
                 </div>
               ) : null}
+              {swathDepth ? <SwathHeightKey /> : null}
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
                   <span className="map-key-dots" aria-hidden="true">
@@ -3536,6 +3540,25 @@ function MobileOrPage({
       <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax={expandedMax} peekHeight={108}>
         {children}
       </BottomSheet>
+    </div>
+  );
+}
+
+function SwathHeightKey() {
+  const bars = swathHeightLegend();
+  return (
+    <div className="map-height-key" data-height-legend>
+      <p>Taller means bigger hail</p>
+      <div className="map-height-bars">
+        {bars.map((bar) => (
+          <span key={bar.label}>
+            <b className="map-height-track">
+              <i style={{ height: `${bar.percent}%`, backgroundColor: bar.color }} />
+            </b>
+            {bar.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -347,6 +347,70 @@ button {
   filter: invert(1);
 }
 
+.maplibregl-ctrl-group button.swath-depth-toggle {
+  color: var(--chrome-ink);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+}
+
+.maplibregl-ctrl-group button.swath-depth-toggle[aria-pressed="true"] {
+  color: #ffe1cc;
+  box-shadow: inset 0 -2px 0 #ff7a3c;
+}
+
+.map-height-key {
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, #ff5a00 48%, transparent);
+  border-radius: 1rem;
+  padding: 0.42rem 0.62rem 0.38rem;
+  color: var(--chrome-ink);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
+  box-shadow: 0 10px 22px color-mix(in srgb, #071433 28%, transparent);
+}
+
+.map-height-key p {
+  margin: 0 0 0.32rem;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.map-height-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.46rem;
+}
+
+.map-height-bars span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.16rem;
+  font-size: 0.62rem;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.map-height-track {
+  display: flex;
+  align-items: flex-end;
+  width: 0.78rem;
+  height: 1.9rem;
+  font-weight: 400;
+}
+
+.map-height-track i {
+  display: block;
+  width: 100%;
+  min-height: 0.28rem;
+  border-radius: 0.22rem 0.22rem 0.08rem 0.08rem;
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.62), transparent 46%, rgba(0, 0, 0, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 7px 10px rgba(0, 0, 0, 0.22);
+}
+
 .maplibregl-ctrl-bottom-right {
   right: 0.5rem;
   bottom: 0.4rem;

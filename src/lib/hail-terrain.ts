@@ -225,40 +225,115 @@ export function hailPatches(cells: MeshCell[], shape: MeshGridShape): HailPatch[
       const inches = index.get(ix + iy * shape.nx) ?? 0;
       raw[(iy - minY) * width + (ix - minX)] = inches;
     }
-    const reduced = downsample(raw, width, height);
-    const skirt = 6;
-    const padded = padZeros(reduced.values, reduced.width, reduced.height, skirt);
-    const smooth = blur(padded.values, padded.width, padded.height, BLUR_SIGMA);
-    const distance = distanceToSkirt(padded.values, padded.width, padded.height);
-    let maxDistance = 0;
-    let rawPeak = 0;
-    for (let i = 0; i < padded.values.length; i += 1) rawPeak = Math.max(rawPeak, padded.values[i]);
-    for (let i = 0; i < distance.length; i += 1) maxDistance = Math.max(maxDistance, distance[i]);
-    const shaped = new Float64Array(smooth.length);
-    let shapedPeak = 0;
-    for (let i = 0; i < smooth.length; i += 1) {
-      const dome = maxDistance > 0 ? distance[i] / maxDistance : 0;
-      shaped[i] = smooth[i] * dome ** 0.8;
-      if (shaped[i] > shapedPeak) shapedPeak = shaped[i];
+    const patch = finishPatch(raw, width, height, shape.west + minX * shape.step, shape.south + minY * shape.step, shape.step);
+    if (patch) patches.push(patch);
+  }
+  return patches;
+}
+
+function finishPatch(
+  raw: Float64Array,
+  width: number,
+  height: number,
+  west: number,
+  south: number,
+  step: number,
+): HailPatch | null {
+  const reduced = downsample(raw, width, height);
+  const skirt = 6;
+  const padded = padZeros(reduced.values, reduced.width, reduced.height, skirt);
+  const smooth = blur(padded.values, padded.width, padded.height, BLUR_SIGMA);
+  const distance = distanceToSkirt(padded.values, padded.width, padded.height);
+  let maxDistance = 0;
+  let rawPeak = 0;
+  for (let i = 0; i < padded.values.length; i += 1) rawPeak = Math.max(rawPeak, padded.values[i]);
+  for (let i = 0; i < distance.length; i += 1) maxDistance = Math.max(maxDistance, distance[i]);
+  const shaped = new Float64Array(smooth.length);
+  let shapedPeak = 0;
+  for (let i = 0; i < smooth.length; i += 1) {
+    const dome = maxDistance > 0 ? distance[i] / maxDistance : 0;
+    shaped[i] = smooth[i] * dome ** 0.8;
+    if (shaped[i] > shapedPeak) shapedPeak = shaped[i];
+  }
+  const gain = shapedPeak > 0 ? rawPeak / shapedPeak : 1;
+  let peak = 0;
+  const values: number[] = [];
+  for (let i = 0; i < shaped.length; i += 1) {
+    const inches = Math.round(Math.min(rawPeak, shaped[i] * gain) * 100) / 100;
+    values.push(inches);
+    if (inches > peak) peak = inches;
+  }
+  if (peak < 0.55) return null;
+  const coarse = step * reduced.factor;
+  return {
+    west: west - skirt * coarse,
+    south: south - skirt * coarse,
+    step: coarse,
+    columns: padded.width,
+    rows: padded.height,
+    values,
+  };
+}
+
+function insideRing(lon: number, lat: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = ring[i]?.[0] ?? 0;
+    const yi = ring[i]?.[1] ?? 0;
+    const xj = ring[j]?.[0] ?? 0;
+    const yj = ring[j]?.[1] ?? 0;
+    const crosses = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function polygonInches(properties: GeoJSON.GeoJsonProperties): number {
+  const props = properties ?? {};
+  for (const key of ["maxSizeIn", "maxIn", "minIn"] as const) {
+    const value = Number(props[key]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 0.85;
+}
+
+/** Hills for hail drawn from report polygons, when the radar field is not loaded. */
+export function patchesFromPolygons(features: Array<{ geometry?: GeoJSON.Geometry | null; properties?: GeoJSON.GeoJsonProperties }>): HailPatch[] {
+  const patches: HailPatch[] = [];
+  for (const feature of features) {
+    if (feature.geometry?.type !== "Polygon") continue;
+    const coordinates = feature.geometry.coordinates;
+    const outer = coordinates[0];
+    if (!outer || outer.length < 4) continue;
+    const inches = polygonInches(feature.properties ?? null);
+    let west = Infinity;
+    let east = -Infinity;
+    let south = Infinity;
+    let north = -Infinity;
+    for (const point of outer) {
+      west = Math.min(west, point[0]);
+      east = Math.max(east, point[0]);
+      south = Math.min(south, point[1]);
+      north = Math.max(north, point[1]);
     }
-    const gain = shapedPeak > 0 ? rawPeak / shapedPeak : 1;
-    let peak = 0;
-    const values: number[] = [];
-    for (let i = 0; i < shaped.length; i += 1) {
-      const inches = Math.round(Math.min(rawPeak, shaped[i] * gain) * 100) / 100;
-      values.push(inches);
-      if (inches > peak) peak = inches;
+    if (!Number.isFinite(west) || east - west < 1e-6 || north - south < 1e-6) continue;
+    const span = Math.max(east - west, north - south);
+    const step = Math.max(0.04, span / 36);
+    const columns = Math.max(2, Math.ceil((east - west) / step) + 1);
+    const rows = Math.max(2, Math.ceil((north - south) / step) + 1);
+    const raw = new Float64Array(columns * rows);
+    const holes = coordinates.slice(1);
+    for (let y = 0; y < rows; y += 1) {
+      const lat = south + y * step;
+      for (let x = 0; x < columns; x += 1) {
+        const lon = west + x * step;
+        if (!insideRing(lon, lat, outer)) continue;
+        if (holes.some((hole) => insideRing(lon, lat, hole))) continue;
+        raw[y * columns + x] = inches;
+      }
     }
-    if (peak < 0.55) continue;
-    const coarse = shape.step * reduced.factor;
-    patches.push({
-      west: shape.west + minX * shape.step - skirt * coarse,
-      south: shape.south + minY * shape.step - skirt * coarse,
-      step: coarse,
-      columns: padded.width,
-      rows: padded.height,
-      values,
-    });
+    const patch = finishPatch(raw, columns, rows, west, south, step);
+    if (patch) patches.push(patch);
   }
   return patches;
 }

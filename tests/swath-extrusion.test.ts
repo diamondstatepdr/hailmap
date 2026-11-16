@@ -105,6 +105,7 @@ describe("3D swath extrusion", () => {
     const source = readFileSync(new URL("../src/components/HailMap.tsx", import.meta.url), "utf8");
     expect(source).toContain("tolerance={0}");
     expect(source).toContain("buffer={512}");
-    expect(source).toContain("fill-extrusion");
+    expect(source).toContain("HailRidge");
+    expect(source).not.toContain("fill-extrusion");
   });
 });

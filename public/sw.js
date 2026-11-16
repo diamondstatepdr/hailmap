@@ -1,4 +1,4 @@
-const CACHE = "swathline-shell-v5";
+const CACHE = "swathline-shell-v6";
 const SHELL = ["/", "/privacy", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {

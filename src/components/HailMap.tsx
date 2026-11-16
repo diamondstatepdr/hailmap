@@ -1935,6 +1935,26 @@ function SwathSource({
           }
         />
       ) : null}
+      {volume ? (
+        <Layer
+          id={`${id}-glow`}
+          type="line"
+          filter={["==", ["geometry-type"], "Polygon"]}
+          layout={{
+            visibility: volumeActive ? "visible" : "none",
+            "line-join": "round",
+            "line-cap": "round",
+          }}
+          paint={
+            {
+              "line-color": swathColor as never,
+              "line-width": 7,
+              "line-blur": 3.2,
+              "line-opacity": 0.5,
+            } as never
+          }
+        />
+      ) : null}
       <Layer
         id={`${id}-halo`}
         type="line"
@@ -1959,7 +1979,7 @@ function SwathSource({
           {
             "line-color": contour,
             "line-width": zoomLine(lineWidth) as never,
-            "line-opacity": lineOpacity,
+            "line-opacity": volumeActive ? 0 : lineOpacity,
             "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never

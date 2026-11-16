@@ -1,44 +1,61 @@
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 
 /**
- * Meters of extrusion for a hail size in inches. The curve is steeper than a
- * straight line so 2" stands clearly above 1" at a city zoom, without a lip so
- * tall that a street zoom becomes a wall.
- *
- * Height is baked into the extrusion once. Animating it every frame would
- * rebuild those polygons on the worker. The rise the eye sees is the camera
- * tilt plus the opacity bloom, which stay on the GPU.
+ * Meters of extrusion at {@link SWATH_HEIGHT_ZOOM}. One fifth of the slabs in
+ * the first 3D screenshots, so the biggest hail is a low raised slab.
+ * The curve still steps up clearly: 2.5" is several times the height of 0.75".
  */
 export function swathExtrusionMeters(inches: number): number {
   const size = Number.isFinite(inches) ? Math.min(6, Math.max(0, inches)) : 0;
-  // About 20px for sub-inch hail and about 90px for 4" hail at a city zoom,
-  // so the volume reads without covering the towns around it.
-  return Math.round(5000 + size ** 1.4 * 16000);
+  return Math.round((5000 + size ** 1.4 * 16000) / 5);
+}
+
+/** Zoom the reviewed screenshots used. Other zooms scale from here. */
+export const SWATH_HEIGHT_ZOOM = 7.4;
+
+/** Halve the real-world height for each zoom level in, so the slab stays a similar size on screen. */
+export function swathZoomScale(zoom: number): number {
+  return 2 ** (SWATH_HEIGHT_ZOOM - zoom);
+}
+
+export function swathExtrusionMetersAtZoom(inches: number, zoom: number): number {
+  return swathExtrusionMeters(inches) * swathZoomScale(zoom);
 }
 
 const HEIGHT_STOPS = [0, 0.75, 1, 1.5, 2, 2.5, 4] as const;
 
-/** MapLibre expression. Uses the feature's max hail size, then the band minimum. */
-export function swathExtrusionHeight(): unknown[] {
+function sizeHeight(scale: number): unknown[] {
   const size = ["to-number", ["coalesce", ["get", "maxSizeIn"], ["get", "maxIn"], ["get", "minIn"], 0]];
   const expression: unknown[] = ["interpolate", ["linear"], size];
-  for (const stop of HEIGHT_STOPS) expression.push(stop, swathExtrusionMeters(stop));
+  for (const stop of HEIGHT_STOPS) expression.push(stop, Math.round(swathExtrusionMeters(stop) * scale));
+  return expression;
+}
+
+/**
+ * Top-level zoom interpolate, with the hail-size curve at each stop.
+ * MapLibre fades between the two nearest zoom stops on the GPU, so the slab
+ * does not jump as you scroll in.
+ */
+export function swathExtrusionHeight(): unknown[] {
+  const expression: unknown[] = ["interpolate", ["linear"], ["zoom"]];
+  for (let zoom = 3; zoom <= 16; zoom += 1) expression.push(zoom, sizeHeight(swathZoomScale(zoom)));
   return expression;
 }
 
 /** Same colors as the flat swath and the hail-size legend. */
 export const swathExtrusionColor = ["coalesce", ["get", "color"], "#64748b"] as const;
 
-/** Settled volume. Low enough that towns stay readable through the walls. */
+/** Side walls. About half transparent so the base map and towns show through. */
 export const SWATH_EXTRUSION_OPACITY = 0.5;
 
 /** First frame of a rise, before the bloom. Still clearly the hail color. */
 export const SWATH_EXTRUSION_OPACITY_START = 0.24;
 
-export const SWATH_3D_PITCH = 48;
+/** A gentle tilt. Enough to see the slab, not enough to turn it into a wall. */
+export const SWATH_3D_PITCH = 30;
 
-/** A small turn so the lit side of a swath is visible, not just the top. */
-export const SWATH_BEARING_OFFSET = -16;
+/** A small turn so the lit edge of a slab shows, while town names stay easy to read. */
+export const SWATH_BEARING_OFFSET = -8;
 
 /** Shared timing for the tilt, the light, and the opacity bloom. */
 export const SWATH_MOVE_MS = 1100;
@@ -98,13 +115,14 @@ export function swathHitLayer(id: string, volume: boolean): string {
 /**
  * Viewport light, slightly warm, low enough that the legend colors stay true
  * and high enough that the sides of a swath read as shaded.
- * Azimuth is clockwise from the top of the screen. Polar 0 is overhead.
+ * Azimuth is clockwise from the top of the screen. Polar 0 is overhead, so a
+ * lower polar angle lights the top of each slab and leaves the sides softer.
  */
 export const SWATH_LIGHT = {
   anchor: "viewport" as const,
-  color: "#fff4e6",
-  intensity: 0.62,
-  position: [1.35, 132, 58] as [number, number, number],
+  color: "#fff8ef",
+  intensity: 0.72,
+  position: [1.2, 140, 42] as [number, number, number],
 };
 
 /** MapLibre's own light, restored when the map goes flat. */

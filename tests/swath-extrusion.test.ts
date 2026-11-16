@@ -13,6 +13,7 @@ import {
   swathExtrusionColor,
   swathExtrusionHeight,
   swathExtrusionMeters,
+  swathExtrusionMetersAtZoom,
   swathHeightLegend,
   swathHitLayer,
   tiltEase,
@@ -25,21 +26,39 @@ describe("3D swath extrusion", () => {
     expect(swathExtrusionMeters(1.5)).toBeLessThan(swathExtrusionMeters(2));
     expect(swathExtrusionMeters(2)).toBeLessThan(swathExtrusionMeters(2.5));
     expect(swathExtrusionMeters(2.5)).toBeGreaterThan(swathExtrusionMeters(0.75) * 3);
+    const reviewed = (inches: number) => {
+      const size = Math.min(6, Math.max(0, inches));
+      return 5000 + size ** 1.4 * 16000;
+    };
+    expect(swathExtrusionMeters(2.5)).toBeCloseTo(reviewed(2.5) / 5, -2);
+    expect(swathExtrusionMeters(4)).toBeCloseTo(reviewed(4) / 5, -2);
     const height = JSON.stringify(swathExtrusionHeight());
     expect(height).toContain("maxSizeIn");
     expect(height).toContain("maxIn");
+    expect(height).toContain("zoom");
     expect(JSON.stringify(swathExtrusionColor)).toContain("color");
   });
 
-  it("keeps the volume see-through and blooms in from a fainter start", () => {
-    expect(SWATH_EXTRUSION_OPACITY_START).toBeGreaterThan(0.15);
-    expect(SWATH_EXTRUSION_OPACITY_START).toBeLessThan(SWATH_EXTRUSION_OPACITY);
-    expect(SWATH_EXTRUSION_OPACITY).toBeLessThan(0.7);
+  it("keeps the slab about the same size on screen as the zoom changes", () => {
+    const low = swathExtrusionMetersAtZoom(2.5, 6.4);
+    const city = swathExtrusionMetersAtZoom(2.5, 7.4);
+    const street = swathExtrusionMetersAtZoom(2.5, 9.4);
+    expect(city).toBeCloseTo(swathExtrusionMeters(2.5), 5);
+    expect(low / city).toBeCloseTo(2, 1);
+    expect(city / street).toBeCloseTo(4, 1);
+    const screen = (zoom: number) => swathExtrusionMetersAtZoom(2.5, zoom) * 2 ** zoom;
+    expect(screen(6.4) / screen(9.4)).toBeCloseTo(1, 5);
   });
 
-  it("tilts to a readable pitch, with side light that does not blow out the legend colors", () => {
-    expect(SWATH_3D_PITCH).toBeGreaterThanOrEqual(45);
-    expect(SWATH_3D_PITCH).toBeLessThanOrEqual(50);
+  it("keeps the walls see-through and blooms in from a fainter start", () => {
+    expect(SWATH_EXTRUSION_OPACITY).toBeCloseTo(0.5, 2);
+    expect(SWATH_EXTRUSION_OPACITY_START).toBeGreaterThan(0.15);
+    expect(SWATH_EXTRUSION_OPACITY_START).toBeLessThan(SWATH_EXTRUSION_OPACITY);
+  });
+
+  it("uses a subtle tilt, with light on the top of each slab", () => {
+    expect(SWATH_3D_PITCH).toBeGreaterThanOrEqual(26);
+    expect(SWATH_3D_PITCH).toBeLessThanOrEqual(36);
     expect(SWATH_BEARING_OFFSET).toBeLessThan(0);
     expect(SWATH_BEARING_OFFSET).toBeGreaterThan(-30);
     expect(SWATH_LIGHT.anchor).toBe("viewport");

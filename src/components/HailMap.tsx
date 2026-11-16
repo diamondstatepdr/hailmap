@@ -26,8 +26,6 @@ import { MESH_LEGEND } from "@/lib/mesh-legend";
 import {
   SWATH_3D_PITCH,
   SWATH_BEARING_OFFSET,
-  SWATH_EXTRUSION_OPACITY,
-  SWATH_EXTRUSION_OPACITY_START,
   SWATH_FLAT_LIGHT,
   SWATH_LIGHT,
   SWATH_MAX_PITCH,
@@ -36,13 +34,12 @@ import {
   defaultSwathExtrusion,
   depthFrame,
   swathExtrusionColor,
-  swathExtrusionHeight,
   swathHitLayer,
   tiltEase,
   type DepthPose,
 } from "@/lib/swath-extrusion";
 import HailRidge from "@/components/HailRidge";
-import type { HailPatch } from "@/lib/hail-terrain";
+import { patchesFromPolygons, type HailPatch } from "@/lib/hail-terrain";
 import { toggleMapCredit } from "@/lib/map-credit";
 import { relaxPlaceLabels } from "@/lib/place-labels";
 import stateOverlay from "@/data/us-states.json";
@@ -342,8 +339,12 @@ export default function HailMap({
   const [depth, setDepth] = useState(false);
   const [volume, setVolume] = useState(false);
   const [risen, setRisen] = useState(false);
-  const relief = volume && (meshField?.length ?? 0) > 0;
-  const extruded = volume && !relief;
+  const terrain = useMemo(() => {
+    if (meshField?.length) return meshField;
+    return patchesFromPolygons([...(mesh?.features ?? []), ...(swaths?.features ?? [])]);
+  }, [meshField, mesh, swaths]);
+  const relief = volume && terrain.length > 0;
+  const extruded = false;
   const depthRef = useRef(false);
   const poseRef = useRef<DepthPose | null>(null);
   const depthSynced = useRef<boolean | null>(null);
@@ -590,7 +591,7 @@ export default function HailMap({
     const pose = depthFrame(depthRef.current, poseRef.current, {
       pitch: map.getMap().getPitch(),
       bearing: map.getMap().getBearing(),
-    });
+    }, viewPitch());
     const camera = {
       center: [focus.lon, focus.lat] as [number, number],
       zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
@@ -1164,7 +1165,7 @@ export default function HailMap({
           riseMs={moveMs}
         />
       ) : null}
-      <HailRidge patches={meshField} active={relief} />
+      <HailRidge patches={terrain} active={relief} />
       {showMesh && !emphasizeMesh ? (
         <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} volume={volume} relief={relief} risen={risen} riseMs={moveMs} />
       ) : null}
@@ -1937,7 +1938,6 @@ function SwathSource({
   const contour = theme === "dark" ? "#f8fafc" : "#102033";
   const volumeActive = volume && fill > 0 && !relief;
   const hitOnly = Boolean(relief && fill > 0);
-  const extrusionOpacity = !volumeActive ? 0 : risen ? SWATH_EXTRUSION_OPACITY : SWATH_EXTRUSION_OPACITY_START;
   // Pixel simplification and a short tile buffer shift the same polygon between zooms.
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION} tolerance={0} buffer={512}>
@@ -1945,7 +1945,7 @@ function SwathSource({
         id={`${id}-fill`}
         type="fill"
         filter={["==", ["geometry-type"], "Polygon"]}
-        layout={{ visibility: volumeActive ? "none" : "visible" }}
+        layout={{ visibility: "visible" }}
         paint={
           {
             "fill-color": swathColor as never,
@@ -1954,24 +1954,6 @@ function SwathSource({
           } as never
         }
       />
-      {volume && !relief ? (
-        <Layer
-          id={`${id}-extrusion`}
-          type="fill-extrusion"
-          filter={["==", ["geometry-type"], "Polygon"]}
-          layout={{ visibility: volumeActive ? "visible" : "none" }}
-          paint={
-            {
-              "fill-extrusion-color": swathColor as never,
-              "fill-extrusion-height": swathExtrusionHeight() as never,
-              "fill-extrusion-base": 0,
-              "fill-extrusion-opacity": extrusionOpacity,
-              "fill-extrusion-opacity-transition": { duration: riseMs, delay: 0 },
-              "fill-extrusion-vertical-gradient": true,
-            } as never
-          }
-        />
-      ) : null}
       <Layer
         id={`${id}-halo`}
         type="line"

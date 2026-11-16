@@ -1,7 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { hailPatches, hillColor, hillMeters, hillZoomScale } from "@/lib/hail-terrain";
+import { hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
+  it("turns a straight hail polygon into a hill that meets the ground", () => {
+    const ring = [
+      [-87.7, 37.7],
+      [-87.4, 37.7],
+      [-87.4, 37.95],
+      [-87.7, 37.95],
+      [-87.7, 37.7],
+    ];
+    const patches = patchesFromPolygons([
+      {
+        geometry: { type: "Polygon", coordinates: [ring] },
+        properties: { maxSizeIn: 1.75, minIn: 1.5 },
+      },
+    ]);
+    expect(patches).toHaveLength(1);
+    const patch = patches[0];
+    const peak = Math.max(...patch.values);
+    const edge = Math.max(patch.values[0], patch.values[patch.columns - 1], patch.values.at(-1) ?? 0);
+    expect(peak).toBeGreaterThan(1.2);
+    expect(edge).toBeLessThan(0.2);
+  });
+
   it("slopes from the ground at the edge to a peak over the hardest hail", () => {
     const cells = [];
     for (let y = 0; y < 14; y += 1) {

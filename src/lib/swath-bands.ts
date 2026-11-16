@@ -1,4 +1,5 @@
 import type { Feature, Polygon, Position } from "geojson";
+import { MESH_LEGEND } from "@/lib/mesh-legend";
 
 type Ring = Position[];
 
@@ -61,6 +62,40 @@ function reverseRing(ring: Ring): Ring {
 
 function outerRing(feature: Feature<Polygon>): Ring {
   return feature.geometry.coordinates[0];
+}
+
+const EDGE_GREEN = MESH_LEGEND[0].color;
+
+function colorForInches(inches: number): string {
+  let color: string = EDGE_GREEN;
+  for (const band of MESH_LEGEND) {
+    if (inches + 1e-6 >= band.minIn) color = band.color;
+  }
+  return color;
+}
+
+function mixHex(from: string, to: string, t: number): string {
+  const parse = (hex: string) => {
+    const h = hex.replace("#", "");
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const [ar, ag, ab] = parse(from);
+  const [br, bg, bb] = parse(to);
+  const u = Math.min(1, Math.max(0, t));
+  const channel = (a: number, b: number) => Math.round(a + (b - a) * u).toString(16).padStart(2, "0");
+  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`;
+}
+
+/** Green at the outer band, the hail-size color at the core, blended in between. */
+export function ridgeColor(minIn: number, maxIn: number): string {
+  const floor = MESH_LEGEND[0].minIn;
+  const peak = Math.max(minIn, maxIn);
+  const core = colorForInches(peak);
+  const higherBand = MESH_LEGEND.some((band) => band.minIn > minIn + 1e-6 && band.minIn <= peak + 1e-6);
+  if (!higherBand) return core;
+  const span = peak - floor;
+  const t = span <= 0.05 ? 1 : (minIn - floor) / span;
+  return mixHex(EDGE_GREEN, core, t);
 }
 
 /**
@@ -128,11 +163,14 @@ export function separateBandFills(features: Feature[]): Feature[] {
         if (containsBox(box, bounds(otherRing)) && pointInRing(core[0], core[1], ring)) insideHigher = true;
       }
     }
-    feature.properties = { ...(feature.properties ?? {}), halo: !insideLower, showLabel: !insideHigher };
+    const minIn = Number(feature.properties?.minIn);
+    const maxIn = Number(feature.properties?.maxIn ?? feature.properties?.maxSizeIn ?? minIn);
+    const color = Number.isFinite(minIn) ? ridgeColor(minIn, Number.isFinite(maxIn) ? maxIn : minIn) : String(feature.properties?.color ?? "#64748b");
+    feature.properties = { ...(feature.properties ?? {}), color, halo: !insideLower, showLabel: !insideHigher };
     if (!insideLower) {
       edges.push({
         type: "Feature",
-        properties: { halo: true, kind: "edge", color: feature.properties?.color ?? "#64748b" },
+        properties: { halo: true, kind: "edge", color },
         geometry: { type: "LineString", coordinates: ring },
       });
     }

@@ -44,7 +44,9 @@ import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
 import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection";
+import type { HailPatch } from "@/lib/hail-terrain";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import { swathHeightLegend } from "@/lib/swath-extrusion";
 import { formatClockRange, readoutForSelection, statLine, swathTitle } from "@/lib/swath-measure";
 import {
   applyReportFilter,
@@ -219,6 +221,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
   const [showSwaths, setShowSwaths] = useState(true);
+  const [swathDepth, setSwathDepth] = useState(false);
   const [showIncome, setShowIncome] = useState(false);
   const [showThreats, setShowThreats] = useState(true);
   const [showOutlook, setShowOutlook] = useState(true);
@@ -272,6 +275,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
   const [scoreDate, setScoreDate] = useState<string | null>(null);
   const [addressTick, setAddressTick] = useState(0);
   const [meshCollection, setMeshCollection] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [meshField, setMeshField] = useState<HailPatch[] | null>(null);
   const [meshLabel, setMeshLabel] = useState<string | null>(null);
   const [meshNote, setMeshNote] = useState<string | null>(null);
   const [meshLoading, setMeshLoading] = useState(false);
@@ -847,6 +851,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
     const params = new URLSearchParams();
     if (historyMode.kind === "days" || historyMode.kind === "custom") {
       setMeshCollection({ type: "FeatureCollection", features: [] });
+      setMeshField(null);
       setMeshLabel("Pick a hail day");
       setMeshNote("Hail paths load one storm day at a time. Open Hail days and tap a date.");
       setMeshLoading(false);
@@ -858,6 +863,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
       .then(async (response) => {
         const payload = (await response.json()) as {
           collection?: GeoJSON.FeatureCollection;
+          field?: HailPatch[];
           label?: string;
           note?: string;
           bounds?: { west: number; south: number; east: number; north: number } | null;
@@ -865,6 +871,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
         };
         if (!response.ok) throw new Error(payload.error ?? "Radar hail is unavailable");
         setMeshCollection(payload.collection ?? { type: "FeatureCollection", features: [] });
+        setMeshField(payload.field ?? null);
         setMeshLabel(payload.label ?? null);
         setMeshNote(payload.note ?? null);
         const key = `${meshDate}|${filter.hours}|${payload.label ?? ""}`;
@@ -881,6 +888,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
         setMeshNote("Radar hail is unavailable right now.");
         setMeshCollection({ type: "FeatureCollection", features: [] });
+        setMeshField(null);
       })
       .finally(() => {
         if (!controller.signal.aborted) setMeshLoading(false);
@@ -2329,6 +2337,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
             points={points}
             swaths={replay.active ? { type: "FeatureCollection", features: [] } : footprintSwaths}
             mesh={replay.active ? replay.radar.collection : meshCollection}
+            meshField={replay.active ? null : meshField}
             meshPulse={replay.active ? replay.radar.pulse : null}
             emphasizeMesh={replay.active}
             dealers={dealerCollection}
@@ -2347,6 +2356,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
             heat={heat}
             showHoney={showHoney}
             honeyPanel={honeyOpen && section === "map"}
+            onSwathDepth={setSwathDepth}
             visible={showMap}
             honey={honeyCollection}
             moneyGlance={section === "map" && !replay.active ? moneyGlanceContext : null}
@@ -2789,6 +2799,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
                   </button>
                 </div>
               ) : null}
+              {swathDepth ? <SwathHeightKey /> : null}
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
                   <span className="map-key-dots" aria-hidden="true">
@@ -3536,6 +3547,25 @@ function MobileOrPage({
       <BottomSheet label={label} tone={tone} onClose={onClose} expandedMax={expandedMax} peekHeight={108}>
         {children}
       </BottomSheet>
+    </div>
+  );
+}
+
+function SwathHeightKey() {
+  const bars = swathHeightLegend();
+  return (
+    <div className="map-height-key" data-height-legend>
+      <p>Taller means bigger hail</p>
+      <div className="map-height-bars">
+        {bars.map((bar) => (
+          <span key={bar.label}>
+            <b className="map-height-track">
+              <i style={{ height: `${bar.percent}%`, backgroundColor: bar.color }} />
+            </b>
+            {bar.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

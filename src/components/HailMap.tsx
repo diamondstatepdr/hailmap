@@ -2,13 +2,14 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection } from "geojson";
-import type { GeoJSONSource, FilterSpecification } from "maplibre-gl";
+import type { FilterSpecification, GeoJSONSource, IControl, Map as MapLibreMap } from "maplibre-gl";
 import Map, {
   AttributionControl,
   Layer,
   Marker,
   NavigationControl,
   Source,
+  useControl,
   type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
@@ -22,6 +23,26 @@ import { KNOCK_PIN_GAP, raiseKnockRoute, separateScreenPins, spreadPixelOffsets 
 import { DEFAULT_HOME_VIEW, chaseMapPadding } from "@/lib/map-home";
 import { CANVASS_COLORS, canvassStatusLabel, type CanvassStatus } from "@/lib/canvass";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
+import {
+  SWATH_3D_PITCH,
+  SWATH_BEARING_OFFSET,
+  SWATH_EXTRUSION_OPACITY,
+  SWATH_EXTRUSION_OPACITY_START,
+  SWATH_FLAT_LIGHT,
+  SWATH_LIGHT,
+  SWATH_MAX_PITCH,
+  SWATH_MOVE_MS,
+  angleDelta,
+  defaultSwathExtrusion,
+  depthFrame,
+  swathExtrusionColor,
+  swathExtrusionHeight,
+  swathHitLayer,
+  tiltEase,
+  type DepthPose,
+} from "@/lib/swath-extrusion";
+import HailRidge from "@/components/HailRidge";
+import type { HailPatch } from "@/lib/hail-terrain";
 import { toggleMapCredit } from "@/lib/map-credit";
 import { relaxPlaceLabels } from "@/lib/place-labels";
 import stateOverlay from "@/data/us-states.json";
@@ -117,7 +138,7 @@ const stateCoreWidth = ["interpolate", ["linear"], ["zoom"], 2, 1.5, 3.6, 2.15, 
 const stateCasingWidth = ["interpolate", ["linear"], ["zoom"], 2, 3.6, 3.6, 4.6, 6, 5.4, 9, 6.4];
 const stateTextSize = ["interpolate", ["linear"], ["zoom"], 3, 12, 4.5, 15, 6.5, 18, 9, 23];
 
-const swathColor = ["coalesce", ["get", "color"], "#64748b"] as const;
+const swathColor = swathExtrusionColor;
 
 export interface MapFocus {
   lon: number;
@@ -162,6 +183,8 @@ interface Props {
   points: GeoJSON.FeatureCollection;
   swaths: GeoJSON.FeatureCollection;
   mesh?: GeoJSON.FeatureCollection | null;
+  /** Smoothed hail field drawn as sloped terrain while 3D is on. */
+  meshField?: HailPatch[] | null;
   meshPulse?: GeoJSON.FeatureCollection | null;
   dealers?: GeoJSON.FeatureCollection | null;
   selectedDealerId?: string | null;
@@ -222,6 +245,8 @@ interface Props {
   onBackgroundClick?: () => void;
   /** When false, points are already aggregated and MapLibre should not cluster them again. */
   clusterPoints?: boolean;
+  /** True while hail swaths are drawn as a tilted volume. */
+  onSwathDepth?: (depth: boolean) => void;
 }
 
 function readMapBounds(map: { getBounds: () => { getWest: () => number; getSouth: () => number; getEast: () => number; getNorth: () => number } }): LngLatBounds | null {
@@ -262,6 +287,7 @@ export default function HailMap({
   points,
   swaths,
   mesh = null,
+  meshField = null,
   meshPulse = null,
   dealers = null,
   selectedDealerId = null,
@@ -309,9 +335,53 @@ export default function HailMap({
   onUserMove,
   onBackgroundClick,
   clusterPoints = true,
+  onSwathDepth,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [cameraTick, setCameraTick] = useState(0);
+  const [depth, setDepth] = useState(false);
+  const [volume, setVolume] = useState(false);
+  const [risen, setRisen] = useState(false);
+  const relief = volume && (meshField?.length ?? 0) > 0;
+  const extruded = volume && !relief;
+  const depthRef = useRef(false);
+  const poseRef = useRef<DepthPose | null>(null);
+  const depthSynced = useRef<boolean | null>(null);
+  const choseDepth = useRef(false);
+  depthRef.current = depth;
+  const [moveMs, setMoveMs] = useState(SWATH_MOVE_MS);
+  const moveMsRef = useRef(SWATH_MOVE_MS);
+  moveMsRef.current = moveMs;
+
+  useLayoutEffect(() => {
+    if (choseDepth.current) return;
+    choseDepth.current = true;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) setMoveMs(0);
+    if (defaultSwathExtrusion(window.innerWidth)) setDepth(true);
+  }, []);
+
+  const onSwathDepthRef = useRef(onSwathDepth);
+  onSwathDepthRef.current = onSwathDepth;
+
+  useEffect(() => {
+    onSwathDepthRef.current?.(depth);
+    const map = mapRef.current?.getMap();
+    if (map?.isStyleLoaded()) syncSwathDepth(map, depth);
+    if (!depth) {
+      setRisen(false);
+      const wait = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SWATH_MOVE_MS;
+      const timer = window.setTimeout(() => setVolume(false), wait);
+      return () => window.clearTimeout(timer);
+    }
+    setVolume(true);
+  }, [depth]);
+
+  useEffect(() => {
+    if (!volume || !depth) return;
+    const frame = window.requestAnimationFrame(() => setRisen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [volume, depth]);
   const [moneyHover, setMoneyHover] = useState<(GlanceHit & { key: string; pinned: boolean }) | null>(null);
   const flownNonce = useRef<number | null>(null);
   const mapStyle = useMapStyle(theme);
@@ -343,9 +413,12 @@ export default function HailMap({
     showPoints ? "hail-points" : "",
     showPoints ? "hail-point-hit" : "",
     ...(emphasizeMesh
-      ? ["mesh-a-fill", "mesh-b-fill", "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
-      : [showMesh && mesh?.features.length ? "mesh-fill" : "", showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : ""]),
-    showSwaths ? "swath-fill" : "",
+      ? [swathHitLayer("mesh-a-fill", extruded), swathHitLayer("mesh-b-fill", extruded), "mesh-pulse-a-fill", "mesh-pulse-b-fill"]
+      : [
+          showMesh && mesh?.features.length ? swathHitLayer("mesh-fill", extruded) : "",
+          showMesh && meshPulse?.features.length ? "mesh-pulse-fill" : "",
+        ]),
+    showSwaths ? swathHitLayer("swath-fill", extruded) : "",
     dealers?.features.length ? "dealer-clusters" : "",
     dealers?.features.length ? "dealer-pins" : "",
     dealers?.features.length ? "dealer-hit" : "",
@@ -360,6 +433,49 @@ export default function HailMap({
     canvassPins?.features.length ? "canvass-pins" : "",
     canvassPins?.features.length ? "canvass-hit" : "",
   ].filter(Boolean);
+
+  function viewPitch(): number {
+    if (typeof window === "undefined") return SWATH_3D_PITCH;
+    const raw = Number(new URLSearchParams(window.location.search).get("pitch"));
+    if (!Number.isFinite(raw)) return SWATH_3D_PITCH;
+    return Math.min(SWATH_MAX_PITCH, Math.max(0, raw));
+  }
+
+  function syncSwathDepth(map: MapLibreMap, next: boolean) {
+    if (depthSynced.current === next) return;
+    depthSynced.current = next;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const duration = reduced ? 0 : moveMsRef.current;
+    if (next) {
+      if (!poseRef.current) poseRef.current = { bearing: map.getBearing(), offset: SWATH_BEARING_OFFSET };
+      map.setMaxPitch(SWATH_MAX_PITCH);
+      map.touchPitch.enable();
+      map.dragRotate.enable();
+      map.touchZoomRotate.enable();
+      map.touchZoomRotate.enableRotation();
+      const pose = poseRef.current;
+      const view = { pitch: viewPitch(), bearing: pose.bearing + pose.offset };
+      if (duration === 0) map.jumpTo(view);
+      else map.easeTo({ ...view, duration, easing: tiltEase, essential: true });
+      map.setLight(lightMove(SWATH_LIGHT, duration));
+      return;
+    }
+    const pose = poseRef.current;
+    const bearing = map.getBearing();
+    const cinematic = pose ? pose.bearing + pose.offset : bearing;
+    const restore = pose && Math.abs(angleDelta(bearing, cinematic)) < 8 ? pose.bearing : bearing;
+    poseRef.current = null;
+    if (duration === 0) map.jumpTo({ pitch: 0, bearing: restore });
+    else map.easeTo({ pitch: 0, bearing: restore, duration, easing: tiltEase, essential: true });
+    map.setLight(lightMove(SWATH_FLAT_LIGHT, duration));
+    const lock = () => {
+      if (depthRef.current) return;
+      map.setMaxPitch(0);
+      map.touchPitch.disable();
+    };
+    if (duration === 0) lock();
+    else map.once("moveend", lock);
+  }
 
   function applyFrame(next: MapFrame | null = frameRef.current) {
     const map = mapRef.current;
@@ -430,6 +546,7 @@ export default function HailMap({
           }
         : padding;
     try {
+      const pose = depthFrame(depthRef.current, poseRef.current, { pitch: raw.getPitch(), bearing: raw.getBearing() }, viewPitch());
       map.fitBounds(
         [
           [safe.west, safe.south],
@@ -439,8 +556,15 @@ export default function HailMap({
           padding: fitted,
           duration: 0,
           maxZoom: next.maxZoom ?? 8.2,
+          bearing: pose.bearing,
         },
       );
+      // fitBounds starts a new camera move and would freeze a tilt halfway up.
+      if (depthRef.current && raw.getPitch() + 0.8 < pose.pitch) {
+        raw.easeTo({ pitch: pose.pitch, bearing: pose.bearing, duration: moveMsRef.current, easing: tiltEase, essential: true });
+      } else if (!depthRef.current && raw.getPitch() > 0.4) {
+        raw.jumpTo({ pitch: 0 });
+      }
       publishZoom();
     } catch {
       // A latitude outside the world throws inside MapLibre. Keep the camera where it is.
@@ -463,13 +587,19 @@ export default function HailMap({
       return;
     }
     flownNonce.current = focus.nonce;
+    const pose = depthFrame(depthRef.current, poseRef.current, {
+      pitch: map.getMap().getPitch(),
+      bearing: map.getMap().getBearing(),
+    });
     const camera = {
       center: [focus.lon, focus.lat] as [number, number],
       zoom: focus.zoom ?? Math.max(map.getZoom(), 8),
       duration: 700,
       padding,
+      pitch: pose.pitch,
+      bearing: pose.bearing,
     };
-    map.flyTo(focus.zoom ? camera : { center: camera.center, zoom: camera.zoom, duration: 700 });
+    map.flyTo(focus.zoom ? camera : { center: camera.center, zoom: camera.zoom, duration: 700, pitch: pose.pitch, bearing: pose.bearing });
   }, [focus, honeyPanel]);
 
   useEffect(() => {
@@ -527,6 +657,8 @@ export default function HailMap({
     const zoom = map.getZoom();
     setCameraTick((current) => current + 1);
     root.dataset.mapZoom = zoom.toFixed(2);
+    root.dataset.mapPitch = map.getPitch().toFixed(1);
+    root.dataset.mapBearing = map.getBearing().toFixed(1);
     root.dataset.mapLat = center.lat.toFixed(5);
     root.dataset.mapLon = center.lng.toFixed(5);
   }
@@ -584,7 +716,7 @@ export default function HailMap({
       const id = String(honeyHit.properties.id);
       return { key: `spot:${id}`, lat: event.lngLat.lat, lon: event.lngLat.lng, spotId: id };
     }
-    const hail = features.find((feature) => isRadarLayer(feature.layer?.id) || feature.layer?.id === "swath-fill");
+    const hail = features.find((feature) => isHailPolygon(feature.layer?.id));
     const geometry = hail?.geometry;
     if (!hail || (geometry?.type !== "Polygon" && geometry?.type !== "MultiPolygon")) return null;
     const id = String(hail.properties?.id ?? hail.id ?? hail.layer?.id ?? "hail");
@@ -681,7 +813,21 @@ export default function HailMap({
       }
       return;
     }
-    const features = event.features ?? [];
+    const features = [...(event.features ?? [])];
+    if (relief && map && point) {
+      const layers = ["mesh-fill", "mesh-a-fill", "mesh-b-fill", "swath-fill"].filter((id) => map.getLayer(id));
+      if (layers.length) {
+        features.push(
+          ...map.queryRenderedFeatures(
+            [
+              [point.x - 42, point.y - 12],
+              [point.x + 42, point.y + 96],
+            ],
+            { layers },
+          ),
+        );
+      }
+    }
     for (const feature of features) {
       const props = feature.properties ?? {};
       if (feature.layer?.id === "hail-clusters" && props.cluster_id != null) {
@@ -722,7 +868,7 @@ export default function HailMap({
         onSelectDealer?.(String(props.id));
         return;
       }
-      if ((isRadarLayer(feature.layer?.id) || feature.layer?.id === "swath-fill") && feature.geometry) {
+      if (isHailPolygon(feature.layer?.id) && feature.geometry) {
         const geometry = feature.geometry;
         if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") return;
         const minIn = numberProp(props.minIn);
@@ -857,6 +1003,17 @@ export default function HailMap({
         publishZoom();
         applyFrame();
         const raw = mapRef.current?.getMap();
+        if (raw) {
+          raw.on("style.load", () => {
+            if (!depthRef.current) return;
+            raw.setMaxPitch(SWATH_MAX_PITCH);
+            raw.touchPitch.enable();
+            raw.dragRotate.enable();
+            raw.touchZoomRotate.enableRotation();
+            raw.setLight(lightMove(SWATH_LIGHT, 0));
+          });
+          syncSwathDepth(raw, depthRef.current);
+        }
         const bounds = raw ? readMapBounds(raw) : null;
         if (bounds) onViewChange?.(bounds);
       }}
@@ -896,6 +1053,7 @@ export default function HailMap({
       style={{ width: "100%", height: "100%" }}
     >
       <NavigationControl position="top-right" showCompass={false} />
+      <SwathDepthToggle depth={depth} onToggle={() => setDepth((value) => !value)} />
       <AttributionControl compact position="bottom-right" />
       {showIncome && income ? (
         <Source id="income" type="geojson" data={income}>
@@ -1001,9 +1159,15 @@ export default function HailMap({
           blur={0}
           theme={theme}
           labels
+          volume={volume}
+          risen={risen}
+          riseMs={moveMs}
         />
       ) : null}
-      {showMesh && !emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} /> : null}
+      <HailRidge patches={meshField} active={relief} />
+      {showMesh && !emphasizeMesh ? (
+        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis={false} faded={showHoney} volume={volume} relief={relief} risen={risen} riseMs={moveMs} />
+      ) : null}
       {showThreats && alertData.features.length ? (
         <Source id="alerts" type="geojson" data={alertData}>
           <Layer
@@ -1128,7 +1292,9 @@ export default function HailMap({
           }}
         />
       </Source>
-      {showMesh && emphasizeMesh ? <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis faded={showHoney} /> : null}
+      {showMesh && emphasizeMesh ? (
+        <MeshContours mesh={mesh} meshPulse={meshPulse} theme={theme} emphasis faded={showHoney} volume={volume} relief={relief} risen={risen} riseMs={moveMs} />
+      ) : null}
       {showHoney && honey?.features.length ? (
         <Source id="honey" type="geojson" data={honey}>
           <Layer
@@ -1628,8 +1794,13 @@ function zoomLine(width: number): unknown[] {
 }
 
 function isRadarLayer(id?: string): boolean {
-  if (!id || id.endsWith("-line")) return false;
+  if (!id || id.endsWith("-line") || id.endsWith("-halo") || id.endsWith("-label")) return false;
+  if (id === "mesh-extrusion") return true;
   return id === "mesh-fill" || id === "mesh-pulse-fill" || id.startsWith("mesh-a") || id.startsWith("mesh-b") || id.startsWith("mesh-pulse-");
+}
+
+function isHailPolygon(id?: string): boolean {
+  return isRadarLayer(id) || id === "swath-fill" || id === "swath-extrusion";
 }
 
 function useCrossfade(data: GeoJSON.FeatureCollection | null): { current: 0 | 1; items: [GeoJSON.FeatureCollection, GeoJSON.FeatureCollection] } {
@@ -1661,12 +1832,21 @@ function MeshContours({
   theme,
   emphasis,
   faded = false,
+  volume = false,
+  relief = false,
+  risen = false,
+  riseMs = SWATH_MOVE_MS,
 }: {
   mesh: GeoJSON.FeatureCollection | null;
   meshPulse: GeoJSON.FeatureCollection | null;
   theme: "light" | "dark";
   emphasis: boolean;
   faded?: boolean;
+  volume?: boolean;
+  /** Keep the polygons for taps, and let the sloped surface draw the hail. */
+  relief?: boolean;
+  risen?: boolean;
+  riseMs?: number;
 }) {
   const meshFade = useCrossfade(mesh);
   const pulseFade = useCrossfade(meshPulse);
@@ -1677,7 +1857,7 @@ function MeshContours({
   if (!emphasis) {
     return (
       <>
-        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels />
+        <SwathSource id="mesh" data={mesh} fill={fill} lineWidth={lineWidth} lineOpacity={lineOpacity} blur={0} theme={theme} labels volume={volume} relief={relief} risen={risen} riseMs={riseMs} />
         <SwathSource id="mesh-pulse" data={meshPulse} fill={pulseFill} lineWidth={lineWidth} lineOpacity={0.95} blur={0} theme={theme} />
       </>
     );
@@ -1696,6 +1876,10 @@ function MeshContours({
           fade
           labels={meshFade.current === index}
           theme={theme}
+          volume={volume}
+          relief={relief}
+          risen={risen}
+          riseMs={riseMs}
         />
       ))}
       {pulseFade.items.map((collection, index) => (
@@ -1725,6 +1909,10 @@ function SwathSource({
   fade = false,
   labels = false,
   theme,
+  volume = false,
+  relief = false,
+  risen = false,
+  riseMs = SWATH_MOVE_MS,
 }: {
   id: string;
   data: GeoJSON.FeatureCollection | null;
@@ -1735,11 +1923,21 @@ function SwathSource({
   fade?: boolean;
   labels?: boolean;
   theme: "light" | "dark";
+  /** Draw this swath as a volume. Pulse overlays stay flat. */
+  volume?: boolean;
+  /** The sloped surface is showing, so this source is only a tap target. */
+  relief?: boolean;
+  /** False on the first frame so the opacity bloom has a start value. */
+  risen?: boolean;
+  riseMs?: number;
 }) {
   if (!data?.features.length && !fade) return null;
   const transition = fade ? { duration: SWATH_FADE_MS, delay: 0 } : undefined;
   const halo = theme === "dark" ? "#f7fbff" : "#102033";
   const contour = theme === "dark" ? "#f8fafc" : "#102033";
+  const volumeActive = volume && fill > 0 && !relief;
+  const hitOnly = Boolean(relief && fill > 0);
+  const extrusionOpacity = !volumeActive ? 0 : risen ? SWATH_EXTRUSION_OPACITY : SWATH_EXTRUSION_OPACITY_START;
   // Pixel simplification and a short tile buffer shift the same polygon between zooms.
   return (
     <Source id={id} type="geojson" data={data ?? EMPTY_COLLECTION} tolerance={0} buffer={512}>
@@ -1747,14 +1945,33 @@ function SwathSource({
         id={`${id}-fill`}
         type="fill"
         filter={["==", ["geometry-type"], "Polygon"]}
+        layout={{ visibility: volumeActive ? "none" : "visible" }}
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": zoomFill(fill) as never,
+            "fill-opacity": (hitOnly ? 0.02 : zoomFill(fill)) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }
       />
+      {volume && !relief ? (
+        <Layer
+          id={`${id}-extrusion`}
+          type="fill-extrusion"
+          filter={["==", ["geometry-type"], "Polygon"]}
+          layout={{ visibility: volumeActive ? "visible" : "none" }}
+          paint={
+            {
+              "fill-extrusion-color": swathColor as never,
+              "fill-extrusion-height": swathExtrusionHeight() as never,
+              "fill-extrusion-base": 0,
+              "fill-extrusion-opacity": extrusionOpacity,
+              "fill-extrusion-opacity-transition": { duration: riseMs, delay: 0 },
+              "fill-extrusion-vertical-gradient": true,
+            } as never
+          }
+        />
+      ) : null}
       <Layer
         id={`${id}-halo`}
         type="line"
@@ -1762,10 +1979,10 @@ function SwathSource({
         layout={{ "line-join": "round", "line-cap": "round" }}
         paint={
           {
-            "line-color": halo,
-            "line-width": zoomLine(lineWidth + 2.4) as never,
-            "line-opacity": lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
-            "line-blur": Math.min(blur, 0.15),
+            "line-color": (volumeActive ? swathColor : halo) as never,
+            "line-width": (volumeActive ? ["interpolate", ["linear"], ["zoom"], 5, 10, 9, 16, 13, 20] : zoomLine(lineWidth + 2.4)) as never,
+            "line-opacity": hitOnly ? 0 : volumeActive ? 0.38 : lineOpacity > 0 ? Math.min(0.96, lineOpacity) : 0,
+            "line-blur": volumeActive ? 5 : Math.min(blur, 0.15),
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
         }
@@ -1779,7 +1996,7 @@ function SwathSource({
           {
             "line-color": contour,
             "line-width": zoomLine(lineWidth) as never,
-            "line-opacity": lineOpacity,
+            "line-opacity": volumeActive || hitOnly ? 0 : lineOpacity,
             "line-blur": 0,
             ...(transition ? { "line-opacity-transition": transition } : {}),
           } as never
@@ -1809,6 +2026,69 @@ function SwathSource({
       ) : null}
     </Source>
   );
+}
+
+function lightMove<T extends { anchor: "viewport"; color: string; intensity: number; position: [number, number, number] }>(
+  spec: T,
+  duration: number,
+) {
+  return {
+    ...spec,
+    "position-transition": { duration, delay: 0 },
+    "color-transition": { duration, delay: 0 },
+    "intensity-transition": { duration, delay: 0 },
+  };
+}
+
+class SwathDepthControl implements IControl {
+  private button: HTMLButtonElement | null = null;
+  private container: HTMLDivElement | null = null;
+  depth = false;
+  onToggle = () => {};
+
+  onAdd() {
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swath-depth-toggle";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.onToggle();
+    });
+    container.appendChild(button);
+    this.container = container;
+    this.button = button;
+    this.paint();
+    return container;
+  }
+
+  onRemove() {
+    this.container?.remove();
+    this.button = null;
+    this.container = null;
+  }
+
+  paint() {
+    const button = this.button;
+    if (!button) return;
+    button.textContent = this.depth ? "3D" : "2D";
+    button.dataset.swathView = this.depth ? "3d" : "2d";
+    button.setAttribute("aria-pressed", this.depth ? "true" : "false");
+    button.setAttribute("aria-label", this.depth ? "Show flat hail swaths" : "Show 3D hail swaths");
+    button.title = this.depth ? "Flat hail swaths" : "3D hail swaths";
+  }
+}
+
+function SwathDepthToggle({ depth, onToggle }: { depth: boolean; onToggle: () => void }) {
+  const control = useControl<SwathDepthControl>(() => new SwathDepthControl(), { position: "top-right" });
+  control.depth = depth;
+  control.onToggle = onToggle;
+  useEffect(() => {
+    control.paint();
+  }, [control, depth]);
+  return null;
 }
 
 function subsetThreats(collection: GeoJSON.FeatureCollection | null, kinds: string[]): GeoJSON.FeatureCollection {

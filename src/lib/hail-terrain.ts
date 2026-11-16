@@ -1,5 +1,6 @@
 import { MESH_LEGEND } from "@/lib/mesh-legend";
 import type { MeshCell, MeshGridShape } from "@/lib/mesh-contour";
+import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 /** One smoothed piece of the hail field. Values are inches, row-major, including a zero skirt. */
 export type HailPatch = {
@@ -12,15 +13,26 @@ export type HailPatch = {
 };
 
 const DILATE = 5;
-const BLUR_SIGMA = 1.55;
+const BLUR_SIGMA = 2.6;
 
 /**
- * Meters of relief at the reference zoom. The foot of the hill stays near the
- * ground and the hardest hail is a modest peak, not a tower.
+ * Meters of relief at the reference zoom. About a sixth of the earlier ridge,
+ * and a mild curve so the summit is a rounded hill rather than a needle.
  */
 export function hillMeters(inches: number): number {
   const rise = Math.max(0, inches - 0.22);
-  return rise * rise * 10000;
+  return Math.round(rise ** 1.25 * 4200);
+}
+
+/**
+ * Height scale for the terrain mesh. At a regional zoom the hill stays a
+ * similar modest size. Zooming further out shrinks it again, so a country
+ * view cannot grow spikes.
+ */
+export function hillZoomScale(zoom: number): number {
+  const matched = 2 ** (SWATH_HEIGHT_ZOOM - zoom);
+  if (zoom >= SWATH_HEIGHT_ZOOM) return matched;
+  return matched * 2 ** (0.65 * (zoom - SWATH_HEIGHT_ZOOM));
 }
 
 const COLOR_STOPS = MESH_LEGEND.map((band) => ({
@@ -226,7 +238,7 @@ export function hailPatches(cells: MeshCell[], shape: MeshGridShape): HailPatch[
     let shapedPeak = 0;
     for (let i = 0; i < smooth.length; i += 1) {
       const dome = maxDistance > 0 ? distance[i] / maxDistance : 0;
-      shaped[i] = smooth[i] * dome ** 1.7;
+      shaped[i] = smooth[i] * dome ** 0.8;
       if (shaped[i] > shapedPeak) shapedPeak = shaped[i];
     }
     const gain = shapedPeak > 0 ? rawPeak / shapedPeak : 1;

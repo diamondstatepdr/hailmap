@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { hillColor, hillMeters, type HailPatch } from "@/lib/hail-terrain";
+import { hillColor, hillMeters, hillZoomScale, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
@@ -48,7 +48,7 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: CustomRenderMethodInput) {
       if (!program || !buffer || !indexBuffer || count === 0) return;
       const zoom = this.map?.getZoom() ?? SWATH_HEIGHT_ZOOM;
-      const scale = 2 ** (SWATH_HEIGHT_ZOOM - zoom);
+      const scale = hillZoomScale(zoom);
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);

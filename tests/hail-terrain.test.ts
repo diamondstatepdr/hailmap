@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hailPatches, hillColor, hillMeters } from "@/lib/hail-terrain";
+import { hailPatches, hillColor, hillMeters, hillZoomScale } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("slopes from the ground at the edge to a peak over the hardest hail", () => {
@@ -20,6 +20,10 @@ describe("hail terrain", () => {
     expect(edge).toBeLessThan(0.35);
     expect(hillMeters(peak)).toBeGreaterThan(hillMeters(1));
     expect(hillMeters(0.2)).toBe(0);
+    expect(hillMeters(3.4)).toBeLessThan(22000);
+    const country = hillZoomScale(5.5) * 2 ** 5.5;
+    const regional = hillZoomScale(7.4) * 2 ** 7.4;
+    expect(country).toBeLessThan(regional * 0.6);
     const foot = hillColor(0.5);
     const summit = hillColor(2.6);
     expect(summit[0]).toBeGreaterThan(foot[0]);

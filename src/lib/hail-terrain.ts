@@ -368,22 +368,74 @@ function finishPatch(
     }
   }
   let peak = 0;
-  const values: number[] = [];
   for (let i = 0; i < shaped.length; i += 1) {
-    const inches = Math.round(Math.min(rawPeak, Math.max(0, shaped[i])) * 100) / 100;
+    shaped[i] = Math.min(rawPeak, Math.max(0, shaped[i]));
+    if (shaped[i] > peak) peak = shaped[i];
+  }
+  if (peak < 0.55) return null;
+  const fine = refineField(shaped, padded.width, padded.height);
+  const values: number[] = [];
+  peak = 0;
+  for (let i = 0; i < fine.values.length; i += 1) {
+    const inches = Math.round(Math.min(rawPeak, fine.values[i]) * 100) / 100;
     values.push(inches);
     if (inches > peak) peak = inches;
   }
   if (peak < 0.55) return null;
-  const coarse = step * reduced.factor;
+  const coarse = (step * reduced.factor) / fine.factor;
   return {
-    west: west - skirt * coarse,
-    south: south - skirt * coarse,
+    west: west - skirt * step * reduced.factor,
+    south: south - skirt * step * reduced.factor,
     step: coarse,
-    columns: padded.width,
-    rows: padded.height,
+    columns: fine.width,
+    rows: fine.height,
     values,
   };
+}
+
+/**
+ * Bilinear resample, then a one-cell blur, so the fringe and the color bands
+ * are curves instead of the coarse grid. The result stays under 280 cells so
+ * a phone still draws it. Values under 0.2 are dropped; the visible fade is
+ * the alpha between there and half an inch.
+ */
+function refineField(source: Float64Array, width: number, height: number): { values: Float64Array; width: number; height: number; factor: number } {
+  let factor = 3;
+  while (factor > 1 && ((width - 1) * factor + 1 > 280 || (height - 1) * factor + 1 > 280)) factor -= 1;
+  if (factor === 1) return { values: source, width, height, factor: 1 };
+  const columns = (width - 1) * factor + 1;
+  const rows = (height - 1) * factor + 1;
+  const dense = new Float64Array(columns * rows);
+  for (let y = 0; y < rows; y += 1) {
+    const gy = y / factor;
+    const y0 = Math.min(height - 1, Math.floor(gy));
+    const y1 = Math.min(height - 1, y0 + 1);
+    const ty = gy - y0;
+    const sy = ty * ty * (3 - 2 * ty);
+    for (let x = 0; x < columns; x += 1) {
+      const gx = x / factor;
+      const x0 = Math.min(width - 1, Math.floor(gx));
+      const x1 = Math.min(width - 1, x0 + 1);
+      const tx = gx - x0;
+      const sx = tx * tx * (3 - 2 * tx);
+      const a = source[y0 * width + x0] ?? 0;
+      const b = source[y0 * width + x1] ?? 0;
+      const c = source[y1 * width + x0] ?? 0;
+      const d = source[y1 * width + x1] ?? 0;
+      dense[y * columns + x] = a * (1 - sx) * (1 - sy) + b * sx * (1 - sy) + c * (1 - sx) * sy + d * sx * sy;
+    }
+  }
+  const smoothed = blur(dense, columns, rows, 1.05);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const src = source[y * width + x] ?? 0;
+      if (src < 0.5) continue;
+      const index = y * factor * columns + x * factor;
+      smoothed[index] = Math.max(smoothed[index] ?? 0, src * 0.98);
+    }
+  }
+  for (let i = 0; i < smoothed.length; i += 1) if (smoothed[i] < 0.2) smoothed[i] = 0;
+  return { values: smoothed, width: columns, height: rows, factor };
 }
 
 /** Deterministic fringe wobble, about -1 to 1, so a round buffer is not a perfect circle. */

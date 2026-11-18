@@ -217,7 +217,7 @@ void main() {
   color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
   color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
   float alpha = min(0.66, v_alpha);
-  if (inches < 0.5 || alpha < 0.03) discard;
+  if (alpha < 0.03) discard;
   fragColor = vec4(color * alpha, alpha);
 }`);
   if (!vertex || !fragment) return null;

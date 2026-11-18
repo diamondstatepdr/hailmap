@@ -90,7 +90,6 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
       gl.uniform1f(gl.getUniformLocation(program, "u_world"), worldSize);
-      const ppm = gl.getUniformLocation(program, "u_ppm");
       const field = gl.getUniformLocation(program, "u_field");
       gl.uniform1i(field, 0);
       const depthTest = gl.isEnabled(gl.DEPTH_TEST);
@@ -110,7 +109,6 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
         const draw = draws[index];
         const texture = textures[index];
         if (!draw || !texture || draw.indexCount === 0) continue;
-        gl.uniform1f(ppm, worldPixelsPerMeter(worldSize, draw.lat));
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.drawElements(gl.TRIANGLES, draw.indexCount, gl.UNSIGNED_INT, draw.indexOffset * 4);
       }
@@ -122,11 +120,6 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     },
   };
   return layer;
-}
-
-function worldPixelsPerMeter(worldSize: number, lat: number): number {
-  const circumference = 2 * Math.PI * 6378137 * Math.cos((lat * Math.PI) / 180);
-  return worldSize / Math.max(1, circumference);
 }
 
 function sampleGrid(values: number[] | Float64Array, columns: number, rows: number, gx: number, gy: number): number {
@@ -229,14 +222,14 @@ function createProgram(gl: WebGLRenderingContext | WebGL2RenderingContext): WebG
 precision highp float;
 uniform mat4 u_matrix;
 uniform float u_world;
-uniform float u_ppm;
 in vec3 a_pos;
 in vec3 a_normal;
 in vec2 a_uv;
 out vec3 v_normal;
 out vec2 v_uv;
 void main() {
-  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_ppm);
+  // x and y are world pixels. z is meters: this matrix already scales z by pixels-per-meter.
+  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z);
   gl_Position = u_matrix * vec4(pos, 1.0);
   v_normal = a_normal;
   v_uv = a_uv;
@@ -255,10 +248,10 @@ void main() {
   float inches = texel.r * 6.0;
   float hot = texel.g;
   vec3 color = ramp(inches);
-  vec3 n = normalize(vec3(v_normal.xy * 1.55, v_normal.z));
-  vec3 light = normalize(vec3(-0.72, 0.38, 0.48));
+  vec3 n = normalize(vec3(v_normal.xy * 1.35, v_normal.z));
+  vec3 light = normalize(vec3(-0.78, 0.36, 0.42));
   float shade = clamp(dot(n, light), 0.0, 1.0);
-  float lit = 0.32 + 1.22 * shade;
+  float lit = 0.36 + 1.18 * shade;
   float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
   color *= lit * (1.0 - 0.22 * contact);
   float w = max(fwidth(inches), 0.02);

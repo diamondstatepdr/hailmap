@@ -128,7 +128,9 @@ export function reliefDome(patch: HailPatch): { dome: Float64Array; inradiusM: n
     for (let x = 0; x < width; x += 1) {
       const edge = inradiusM > 0 ? (dist[y * width + x] ?? 0) / inradiusM : 0;
       const along = reach > 0 ? Math.hypot((x - cx) * cellX, (y - cy) * cellY) / reach : 0;
-      dome[y * width + x] = edge * (1 - 0.42 * along * along);
+      // A light falloff from the middle keeps a long swath from a flat ridge,
+      // without erasing the saddle between two report centers.
+      dome[y * width + x] = edge * (1 - 0.18 * along * along);
     }
   }
   const soft = blur(dome, width, height, 1.15);
@@ -139,15 +141,16 @@ export function reliefDome(patch: HailPatch): { dome: Float64Array; inradiusM: n
 }
 
 /**
- * Meters of a gentle hill. Two and a half inches rises a bit under half the
- * inradius, smaller hail is a lower bump, and the dome holds the fringe on the ground.
+ * Meters of a rolling hill. Two and a half inches rises about three quarters of
+ * the inradius: tall enough to read at a phone pitch, still shorter than the
+ * footprint. The dome holds the fringe on the ground.
  */
 export function drapedMeters(inches: number, inradiusM: number, dome: number): number {
   if (inches <= 0.45) return 0;
   const reference = hillMeters(2.5) || 1;
   const size = Math.sqrt(Math.min(1, hillMeters(inches) / reference));
   const crown = Math.max(0, Math.min(1, dome));
-  return inradiusM * 0.43 * size * crown;
+  return inradiusM * 0.72 * size * crown;
 }
 
 export function hillZoomScale(zoom: number): number {

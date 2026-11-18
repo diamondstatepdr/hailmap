@@ -46,7 +46,7 @@ describe("hail terrain", () => {
     const country = hillZoomScale(5.5) * 2 ** 5.5;
     const regional = hillZoomScale(7.4) * 2 ** 7.4;
     expect(country).toBeLessThan(regional * 0.6);
-    const blue = hillColor(0.45);
+    const blue = hillColor(0.72);
     const green = hillColor(1.1);
     const yellow = hillColor(1.7);
     const orange = hillColor(2);
@@ -68,8 +68,10 @@ describe("hail terrain", () => {
     expect(hot[1]).toBeGreaterThan(0.85);
     expect(hot[2]).toBeGreaterThan(0.85);
     expect(blue[3]).toBeGreaterThan(0);
-    expect(blue[3]).toBeLessThan(red[3]);
-    expect(red[3]).toBeLessThan(0.8);
+    expect(blue[3]).toBeLessThan(0.4);
+    expect(red[3]).toBeGreaterThan(0.55);
+    expect(red[3]).toBeLessThan(0.7);
+    expect(hillColor(0.45)[3]).toBe(0);
     expect(hillColor(0.1)[3]).toBe(0);
     expect(hillMeters(6)).toBeLessThan(hillMeters(2.5) * 1.85);
   });
@@ -145,6 +147,25 @@ describe("hail terrain", () => {
     expect(patches).toHaveLength(1);
     const patch = patches[0];
     expect(Math.max(...patch.values)).toBeGreaterThan(2.3);
+    let west = Infinity;
+    let east = -Infinity;
+    let south = Infinity;
+    let north = -Infinity;
+    for (let y = 0; y < patch.rows; y += 1) {
+      for (let x = 0; x < patch.columns; x += 1) {
+        if ((patch.values[y * patch.columns + x] ?? 0) < 0.5) continue;
+        const lon = patch.west + x * patch.step;
+        const lat = patch.south + y * patch.step;
+        west = Math.min(west, lon);
+        east = Math.max(east, lon);
+        south = Math.min(south, lat);
+        north = Math.max(north, lat);
+      }
+    }
+    expect(west).toBeGreaterThan(-88.5 - 0.12);
+    expect(east).toBeLessThan(-87.55 + 0.12);
+    expect(south).toBeGreaterThan(41.08 - 0.12);
+    expect(north).toBeLessThan(41.22 + 0.12);
     const hot = patch.values.filter((value) => value >= 2.2).length;
     expect(hot).toBeGreaterThan(8);
     const tops: number[] = [];

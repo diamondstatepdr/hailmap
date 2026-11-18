@@ -119,7 +119,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       }
     }
     const stepKm = patch.step * 111;
-    const sigmaKm = Math.max(3.5, stepKm * 0.85);
+    const sigmaKm = Math.min(2.2, Math.max(1.1, stepKm * 0.28));
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < columns; x += 1) {
         const inches = patch.values[y * columns + x] ?? 0;
@@ -140,8 +140,8 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const distKm = Math.hypot((x - peakX) * stepKm, (y - peakY) * stepKm);
         const closeness = peak > 0 ? inches / peak : 0;
         const hot =
-          peak >= 1.9 && closeness >= 0.92
-            ? Math.exp(-(distKm * distKm) / (2 * sigmaKm * sigmaKm)) * Math.min(1, (closeness - 0.92) / 0.08)
+          peak >= 2.05 && closeness >= 0.97
+            ? Math.exp(-(distKm * distKm) / (2 * sigmaKm * sigmaKm)) * Math.min(1, (closeness - 0.97) / 0.03)
             : 0;
         vertices.push(mercator.x, mercator.y, meters[y * columns + x] ?? 0, nx / length, ny / length, nz / length, inches, alpha, hot);
       }
@@ -153,7 +153,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const i01 = i00 + columns;
         const i11 = i01 + 1;
         const highest = Math.max(patch.values[i00] ?? 0, patch.values[i10] ?? 0, patch.values[i01] ?? 0, patch.values[i11] ?? 0);
-        if (highest < 0.08) continue;
+        if (highest < 0.5) continue;
         const a = base + i00;
         const b = base + i10;
         const c = base + i01;
@@ -212,12 +212,12 @@ void main() {
   float w = max(fwidth(inches), 0.02);
   float rim = 0.0;
   ${radarRimGlsl()}
-  color = mix(color, min(vec3(1.0), color + vec3(0.16)), rim * 0.22);
+  color = mix(color, min(vec3(1.0), color + vec3(0.12)), rim * 0.16);
   float hot = clamp(v_hot, 0.0, 1.0);
-  color = mix(color, vec3(1.0, 0.97, 0.95), smoothstep(0.55, 1.0, hot));
-  color += vec3(1.0, 0.97, 0.94) * hot * hot * 0.85;
-  float alpha = min(0.76, clamp(v_alpha, 0.0, 0.7) + hot * 0.08);
-  if (alpha < 0.012) discard;
+  color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
+  color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
+  float alpha = min(0.66, v_alpha);
+  if (inches < 0.5 || alpha < 0.03) discard;
   fragColor = vec4(color * alpha, alpha);
 }`);
   if (!vertex || !fragment) return null;

@@ -132,10 +132,11 @@ export function radarRimGlsl(): string {
  */
 export function hillColor(inches: number): [number, number, number, number] {
   const rgb = sampleColor(inches);
-  if (inches <= 0.12) return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0];
-  const t = Math.min(1, (inches - 0.12) / 1.05);
+  // Nothing under the outer swath. A short fade, then a capped core.
+  if (inches <= 0.5) return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0];
+  const t = Math.min(1, (inches - 0.5) / 0.7);
   const fade = t * t * (3 - 2 * t);
-  const alpha = 0.12 + 0.58 * fade;
+  const alpha = 0.64 * fade;
   return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, alpha];
 }
 
@@ -173,7 +174,8 @@ function blur(source: Float64Array, width: number, height: number, sigma: number
     for (let x = 0; x < width; x += 1) {
       let sum = 0;
       for (let k = -radius; k <= radius; k += 1) {
-        const xx = Math.min(width - 1, Math.max(0, x + k));
+        const xx = x + k;
+        if (xx < 0 || xx >= width) continue;
         sum += source[y * width + xx] * kernel[k + radius];
       }
       temp[y * width + x] = sum;
@@ -183,7 +185,8 @@ function blur(source: Float64Array, width: number, height: number, sigma: number
     for (let x = 0; x < width; x += 1) {
       let sum = 0;
       for (let k = -radius; k <= radius; k += 1) {
-        const yy = Math.min(height - 1, Math.max(0, y + k));
+        const yy = y + k;
+        if (yy < 0 || yy >= height) continue;
         sum += temp[yy * width + x] * kernel[k + radius];
       }
       out[y * width + x] = sum;
@@ -328,30 +331,21 @@ function finishPatch(
   step: number,
 ): HailPatch | null {
   const reduced = downsample(raw, width, height);
-  const span = Math.min(reduced.width, reduced.height);
-  // Wide enough that a straight polygon side bows into a curve.
-  const sigma = Math.min(12, Math.max(5.2, span * 0.42));
-  const skirt = Math.min(26, Math.max(14, Math.ceil(sigma * 2.5)));
+  const skirt = 8;
   const padded = padZeros(reduced.values, reduced.width, reduced.height, skirt);
-  const spread = spreadPeaks(padded.values, padded.width, padded.height, 2);
-  const cores = blur(spread, padded.width, padded.height, 0.65);
-  const presence = new Float64Array(padded.values.length);
-  for (let i = 0; i < padded.values.length; i += 1) presence[i] = padded.values[i] > 0.05 ? 1 : 0;
-  const mask = blur(presence, padded.width, padded.height, sigma);
-  let maskPeak = 0;
+  const spread = spreadPeaks(padded.values, padded.width, padded.height, 1);
+  const soft = blur(spread, padded.width, padded.height, 1.55);
   let rawPeak = 0;
   for (let i = 0; i < padded.values.length; i += 1) rawPeak = Math.max(rawPeak, padded.values[i]);
-  for (let i = 0; i < mask.length; i += 1) maskPeak = Math.max(maskPeak, mask[i]);
-  const shaped = new Float64Array(mask.length);
-  const amp = sigma * 0.9;
-  const sampleMask = (sx: number, sy: number) => {
+  const shaped = new Float64Array(soft.length);
+  const sampleSoft = (sx: number, sy: number) => {
     const x0 = Math.floor(sx);
     const y0 = Math.floor(sy);
     const tx = sx - x0;
     const ty = sy - y0;
     const at = (xx: number, yy: number) => {
       if (xx < 0 || yy < 0 || xx >= padded.width || yy >= padded.height) return 0;
-      return mask[yy * padded.width + xx];
+      return soft[yy * padded.width + xx];
     };
     const a = at(x0, y0);
     const b = at(x0 + 1, y0);
@@ -362,15 +356,15 @@ function finishPatch(
   for (let y = 0; y < padded.height; y += 1) {
     for (let x = 0; x < padded.width; x += 1) {
       const i = y * padded.width + x;
-      const ox = fringeNoise(x * 0.17 + west * 20, y * 0.17 + south * 20) * amp;
-      const oy = fringeNoise(x * 0.17 + 19 + west * 20, y * 0.17 + south * 20) * amp;
-      const t = maskPeak > 0 ? sampleMask(x + ox, y + oy) / maskPeak : 0;
-      const edge = smoothstep(0.04, 0.46, t);
-      if (edge <= 0) continue;
-      const core = cores[i];
-      const coreShare = rawPeak > 0 ? core / rawPeak : 0;
-      const fringe = rawPeak * 0.38 * smoothstep(0.04, 0.55, t) * (1 - smoothstep(0.12, 0.5, coreShare));
-      shaped[i] = Math.max(core * smoothstep(0.08, 0.5, t), fringe) * (0.9 + 0.1 * edge);
+      const inside = spread[i];
+      let inches = inside >= 0.5 ? Math.max(soft[i], inside * 0.98) : 0;
+      if (inches < 0.5) {
+        const ox = fringeNoise(x * 0.37 + west * 24, y * 0.37 + south * 24) * 1.25;
+        const oy = fringeNoise(x * 0.37 + 11 + west * 24, y * 0.37 + south * 24) * 1.25;
+        inches = sampleSoft(x + ox, y + oy);
+      }
+      if (inches < 0.5) continue;
+      shaped[i] = Math.min(rawPeak, inches);
     }
   }
   let peak = 0;

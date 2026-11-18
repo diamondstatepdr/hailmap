@@ -8,7 +8,7 @@ import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
 /** Screen-space lift. The stored meters stay gentle; this makes the hills readable when the map is tilted. */
-const HILL_EXAGGERATION = 3.1;
+const HILL_EXAGGERATION = 4.2;
 
 type PatchDraw = {
   width: number;

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { hillColor, hillMeters, hillZoomScale, type HailPatch } from "@/lib/hail-terrain";
+import { hillColor, hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
@@ -52,16 +52,22 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      const stride = 10 * 4;
+      const stride = 9 * 4;
       const pos = gl.getAttribLocation(program, "a_pos");
-      const color = gl.getAttribLocation(program, "a_color");
       const normal = gl.getAttribLocation(program, "a_normal");
+      const inches = gl.getAttribLocation(program, "a_inches");
+      const alpha = gl.getAttribLocation(program, "a_alpha");
+      const hot = gl.getAttribLocation(program, "a_hot");
       gl.enableVertexAttribArray(pos);
       gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, stride, 0);
-      gl.enableVertexAttribArray(color);
-      gl.vertexAttribPointer(color, 4, gl.FLOAT, false, stride, 3 * 4);
       gl.enableVertexAttribArray(normal);
-      gl.vertexAttribPointer(normal, 3, gl.FLOAT, false, stride, 7 * 4);
+      gl.vertexAttribPointer(normal, 3, gl.FLOAT, false, stride, 3 * 4);
+      gl.enableVertexAttribArray(inches);
+      gl.vertexAttribPointer(inches, 1, gl.FLOAT, false, stride, 6 * 4);
+      gl.enableVertexAttribArray(alpha);
+      gl.vertexAttribPointer(alpha, 1, gl.FLOAT, false, stride, 7 * 4);
+      gl.enableVertexAttribArray(hot);
+      gl.vertexAttribPointer(hot, 1, gl.FLOAT, false, stride, 8 * 4);
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
       const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
@@ -96,10 +102,24 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
   for (const patch of patches) {
     const columns = patch.columns;
     const rows = patch.rows;
-    const base = vertices.length / 10;
+    const base = vertices.length / 9;
     const meters: number[] = [];
-    for (let i = 0; i < patch.values.length; i += 1) meters.push(hillMeters(patch.values[i]));
+    let peak = 0;
+    let peakX = 0;
+    let peakY = 0;
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < columns; x += 1) {
+        const inches = patch.values[y * columns + x] ?? 0;
+        meters.push(hillMeters(inches));
+        if (inches > peak) {
+          peak = inches;
+          peakX = x;
+          peakY = y;
+        }
+      }
+    }
     const stepKm = patch.step * 111;
+    const sigma = Math.max(6, stepKm * 1.7);
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < columns; x += 1) {
         const inches = patch.values[y * columns + x] ?? 0;
@@ -112,12 +132,18 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const up = meters[Math.min(rows - 1, y + 1) * columns + x] ?? 0;
         const dzdx = (right - left) / (stepKm * 2);
         const dzdy = (up - down) / (stepKm * 2);
-        const nx = -dzdx * 1.15;
-        const ny = -dzdy * 1.15;
+        const nx = -dzdx * 0.55;
+        const ny = -dzdy * 0.55;
         const nz = 1;
         const length = Math.hypot(nx, ny, nz) || 1;
-        const [r, g, b, a] = hillColor(inches);
-        vertices.push(mercator.x, mercator.y, meters[y * columns + x] ?? 0, r, g, b, a, nx / length, ny / length, nz / length);
+        const alpha = hillColor(inches)[3];
+        const distKm = Math.hypot((x - peakX) * stepKm, (y - peakY) * stepKm);
+        const closeness = peak > 0 ? inches / peak : 0;
+        const hot =
+          peak >= 1.55 && closeness >= 0.82
+            ? Math.exp(-(distKm * distKm) / (2 * sigma * sigma)) * Math.min(1, (closeness - 0.82) / 0.18)
+            : 0;
+        vertices.push(mercator.x, mercator.y, meters[y * columns + x] ?? 0, nx / length, ny / length, nz / length, inches, alpha, hot);
       }
     }
     for (let y = 0; y < rows - 1; y += 1) {
@@ -132,8 +158,8 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const b = base + i10;
         const c = base + i01;
         const d = base + i11;
-        const far = (vertices[a * 10 + 1] + vertices[c * 10 + 1] + vertices[b * 10 + 1]) / 3;
-        const near = (vertices[b * 10 + 1] + vertices[c * 10 + 1] + vertices[d * 10 + 1]) / 3;
+        const far = (vertices[a * 9 + 1] + vertices[c * 9 + 1] + vertices[b * 9 + 1]) / 3;
+        const near = (vertices[b * 9 + 1] + vertices[c * 9 + 1] + vertices[d * 9 + 1]) / 3;
         triangles.push({ far, ids: [a, c, b] }, { far: near, ids: [b, c, d] });
       }
     }
@@ -151,27 +177,48 @@ uniform mat4 u_matrix;
 uniform float u_world;
 uniform float u_scale;
 in vec3 a_pos;
-in vec4 a_color;
 in vec3 a_normal;
-out vec4 v_color;
+in float a_inches;
+in float a_alpha;
+in float a_hot;
 out vec3 v_normal;
+out float v_inches;
+out float v_alpha;
+out float v_hot;
 void main() {
   vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_scale);
   gl_Position = u_matrix * vec4(pos, 1.0);
-  v_color = a_color;
   v_normal = a_normal;
+  v_inches = a_inches;
+  v_alpha = a_alpha;
+  v_hot = a_hot;
 }`);
   const fragment = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-in vec4 v_color;
 in vec3 v_normal;
+in float v_inches;
+in float v_alpha;
+in float v_hot;
 out vec4 fragColor;
+vec3 ramp(float inches) {
+  ${radarRampGlsl()}
+}
 void main() {
-  vec3 light = normalize(vec3(-0.35, 0.45, 0.82));
+  float inches = max(v_inches, 0.0);
+  vec3 color = ramp(inches);
+  vec3 light = normalize(vec3(-0.32, 0.4, 0.88));
   float shade = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
-  float lit = 0.8 + 0.75 * shade;
-  vec3 color = v_color.rgb * lit;
-  float alpha = v_color.a;
+  color *= 0.94 + 0.14 * shade;
+  float w = max(fwidth(inches), 0.01);
+  float rim = 0.0;
+  ${radarRimGlsl()}
+  color += color * rim * 0.65;
+  color = mix(color, vec3(1.0), rim * 0.22);
+  float hot = clamp(v_hot, 0.0, 1.0);
+  color = mix(color, vec3(1.0, 0.97, 0.94), smoothstep(0.4, 1.0, hot));
+  color += vec3(1.0, 0.96, 0.92) * hot * hot * 0.7;
+  float alpha = min(0.76, clamp(v_alpha, 0.0, 0.7) + hot * 0.08);
+  if (alpha < 0.012) discard;
   fragColor = vec4(color * alpha, alpha);
 }`);
   if (!vertex || !fragment) return null;
@@ -180,8 +227,10 @@ void main() {
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.bindAttribLocation(program, 0, "a_pos");
-  gl.bindAttribLocation(program, 1, "a_color");
-  gl.bindAttribLocation(program, 2, "a_normal");
+  gl.bindAttribLocation(program, 1, "a_normal");
+  gl.bindAttribLocation(program, 2, "a_inches");
+  gl.bindAttribLocation(program, 3, "a_alpha");
+  gl.bindAttribLocation(program, 4, "a_hot");
   gl.linkProgram(program);
   gl.deleteShader(vertex);
   gl.deleteShader(fragment);

@@ -46,12 +46,75 @@ describe("hail terrain", () => {
     const country = hillZoomScale(5.5) * 2 ** 5.5;
     const regional = hillZoomScale(7.4) * 2 ** 7.4;
     expect(country).toBeLessThan(regional * 0.6);
-    const foot = hillColor(0.5);
-    const summit = hillColor(2.6);
-    expect(summit[0]).toBeGreaterThan(foot[0]);
-    expect(foot[1]).toBeGreaterThan(summit[1]);
-    expect(foot[3]).toBeGreaterThan(0);
+    const blue = hillColor(0.45);
+    const green = hillColor(1.1);
+    const yellow = hillColor(1.7);
+    const red = hillColor(2.4);
+    const hot = hillColor(4.2);
+    expect(blue[2]).toBeGreaterThan(blue[0]);
+    expect(green[1]).toBeGreaterThan(green[0]);
+    expect(yellow[0]).toBeGreaterThan(0.7);
+    expect(yellow[1]).toBeGreaterThan(0.6);
+    expect(red[0]).toBeGreaterThan(red[1]);
+    expect(red[0]).toBeGreaterThan(red[2]);
+    expect(hot[0]).toBeGreaterThan(0.9);
+    expect(hot[1]).toBeGreaterThan(0.85);
+    expect(hot[2]).toBeGreaterThan(0.85);
+    expect(blue[3]).toBeGreaterThan(0);
+    expect(blue[3]).toBeLessThan(red[3]);
+    expect(red[3]).toBeLessThan(0.8);
     expect(hillColor(0.1)[3]).toBe(0);
+    expect(hillMeters(6)).toBeLessThan(hillMeters(2.5) * 1.85);
+  });
+
+  it("blends overlapping report polygons into one radar field and keeps distant storms apart", () => {
+    const box = (west: number, south: number, east: number, north: number, inches: number) => ({
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]],
+      },
+      properties: { maxSizeIn: inches, minIn: inches },
+    });
+    const merged = patchesFromPolygons([
+      box(-88.2, 41.0, -87.55, 41.55, 1.1),
+      box(-87.95, 41.18, -87.7, 41.42, 2.6),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(Math.max(...merged[0].values)).toBeGreaterThan(2.1);
+    const apart = patchesFromPolygons([
+      box(-88.2, 41.0, -87.9, 41.25, 1.4),
+      box(-84.2, 39.0, -83.9, 39.25, 2.2),
+    ]);
+    expect(apart).toHaveLength(2);
+  });
+
+  it("breaks a round report edge so it is not a perfect mirror", () => {
+    const patches = patchesFromPolygons([
+      {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [-87.5, 41.1],
+            [-87.2, 41.1],
+            [-87.2, 41.4],
+            [-87.5, 41.4],
+            [-87.5, 41.1],
+          ]],
+        },
+        properties: { maxSizeIn: 1.8, minIn: 1.2 },
+      },
+    ]);
+    expect(patches).toHaveLength(1);
+    const patch = patches[0];
+    const mid = Math.floor(patch.rows / 2);
+    let skew = 0;
+    const inset = 2;
+    for (let x = inset; x < patch.columns / 2; x += 1) {
+      const left = patch.values[mid * patch.columns + x] ?? 0;
+      const right = patch.values[mid * patch.columns + (patch.columns - 1 - x)] ?? 0;
+      skew += Math.abs(left - right);
+    }
+    expect(skew).toBeGreaterThan(0.05);
   });
 
   it("turns distant reports into separate hills", () => {

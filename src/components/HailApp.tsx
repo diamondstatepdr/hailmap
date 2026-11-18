@@ -44,9 +44,8 @@ import StormsPanel from "@/components/panels/StormsPanel";
 import AppShell, { type AppSection } from "@/components/shell/AppShell";
 import { confidenceLabel, defaultFilter, HAZARD_OPTIONS } from "@/components/map-shared";
 import type { AreaSelection, DealerPin, RadarSample } from "@/lib/area-selection";
-import type { HailPatch } from "@/lib/hail-terrain";
+import { radarHeightLegend, radarLegendBands, radarRampCss, type HailPatch } from "@/lib/hail-terrain";
 import { MESH_LEGEND } from "@/lib/mesh-legend";
-import { swathHeightLegend } from "@/lib/swath-extrusion";
 import { formatClockRange, readoutForSelection, statLine, swathTitle } from "@/lib/swath-measure";
 import {
   applyReportFilter,
@@ -2803,7 +2802,7 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
               <details className="map-key glass pointer-events-auto" title={meshNote ?? undefined}>
                 <summary>
                   <span className="map-key-dots" aria-hidden="true">
-                    {MESH_LEGEND.map((band) => (
+                    {(swathDepth ? radarLegendBands() : MESH_LEGEND).map((band) => (
                       <i key={band.label} style={{ background: band.color }} />
                     ))}
                   </span>
@@ -2813,7 +2812,8 @@ export default function HailApp({ intro = false }: { intro?: boolean }) {
                   </span>
                 </summary>
                 <div className="map-key-body">
-                  {MESH_LEGEND.map((band) => (
+                  {swathDepth ? <span className="map-key-ramp" data-radar-ramp style={{ background: radarRampCss() }} /> : null}
+                  {(swathDepth ? radarLegendBands() : MESH_LEGEND).map((band) => (
                     <span key={band.label} className="map-key-item">
                       <i style={{ background: band.color }} />
                       {band.label}
@@ -3552,7 +3552,7 @@ function MobileOrPage({
 }
 
 function SwathHeightKey() {
-  const bars = swathHeightLegend();
+  const bars = radarHeightLegend();
   return (
     <div className="map-height-key" data-height-legend>
       <p>Taller means bigger hail</p>

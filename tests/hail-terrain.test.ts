@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarTexture, reliefDome } from "@/lib/hail-terrain";
+import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarBandLift, radarTexture, reliefDome } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("turns a straight hail polygon into a hill that meets the ground", () => {
@@ -234,6 +234,16 @@ describe("hail terrain", () => {
     expect(left).toBeGreaterThan(inradiusM * 0.2);
     expect(right).toBeGreaterThan(inradiusM * 0.2);
     expect(saddle).toBeLessThan(Math.min(left, right) * 0.8);
+  });
+
+  it("rounds a radar band into a small shelf instead of a wall", () => {
+    expect(radarBandLift(0.5)).toBe(0);
+    expect(radarBandLift(2.7)).toBeGreaterThan(0.9);
+    const below = drapedMeters(1.48, 10000, 1);
+    const above = drapedMeters(1.7, 10000, 1);
+    expect(above).toBeGreaterThan(below);
+    expect(above - below).toBeLessThan(10000 * 0.08);
+    expect(drapedMeters(2.5, 10000, 0)).toBe(0);
   });
 
   it("turns a hard cell step into a ramp several texels wide", () => {

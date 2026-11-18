@@ -150,7 +150,9 @@ export function drapedMeters(inches: number, inradiusM: number, dome: number): n
   const reference = hillMeters(2.5) || 1;
   const size = Math.sqrt(Math.min(1, hillMeters(inches) / reference));
   const crown = Math.max(0, Math.min(1, dome));
-  return inradiusM * 0.72 * size * crown;
+  // The shelves add up to the same crest. Each one is a short rounded rise.
+  const shelves = 0.9 + 0.1 * radarBandLift(inches);
+  return inradiusM * 0.72 * size * shelves * crown;
 }
 
 export function hillZoomScale(zoom: number): number {
@@ -206,11 +208,44 @@ export function radarRampGlsl(): string {
   return lines.join("\n  ");
 }
 
-/** Soft screen-space hints at the main size thresholds. Wide and faint, not a stroke. */
+/** Hail sizes that draw a radar contour. */
+export const RADAR_BANDS = [0.75, 1, 1.5, 2, 2.5] as const;
+
+/**
+ * Band color with a soft hold. Most of a size interval stays near that
+ * threshold's color, then eases into the next one. `px` is fwidth(inches).
+ */
+export function radarBandGlsl(): string {
+  const vec = (rgb: [number, number, number]) => `vec3(${rgb.map((channel) => (channel / 255).toFixed(4)).join(", ")})`;
+  const byInches = new Map(COLOR_STOPS.map((stop) => [stop.inches, stop.rgb]));
+  const lines: string[] = [];
+  for (let i = 0; i < RADAR_BANDS.length - 1; i += 1) {
+    const lo = RADAR_BANDS[i];
+    const hi = RADAR_BANDS[i + 1];
+    const loRgb = byInches.get(lo);
+    const hiRgb = byInches.get(hi);
+    if (!loRgb || !hiRgb) continue;
+    const span = (hi - lo).toFixed(4);
+    lines.push(
+      `if (inches <= ${hi.toFixed(2)}) { float span = ${span}; float edge = clamp(px * 2.4 / span, 0.1, 0.42); float u = clamp((inches - ${lo.toFixed(2)}) / span, 0.0, 1.0); float t = smoothstep(1.0 - edge * 2.2, 1.0, u); return mix(${vec(loRgb)}, ${vec(hiRgb)}, t); }`,
+    );
+  }
+  return lines.join("\n  ");
+}
+
+/** Thin anti-aliased lip (high side) and groove (low side) at each radar threshold. */
 export function radarRimGlsl(): string {
-  return [1, 1.5, 2, 2.5]
-    .map((inches) => `rim = max(rim, 1.0 - smoothstep(w * 0.9, w * 4.8, abs(inches - ${inches.toFixed(2)})));`)
-    .join("\n  ");
+  return RADAR_BANDS.map((inches) => {
+    const stop = inches.toFixed(2);
+    return `s = (inches - ${stop}) / px; line = exp(-0.5 * s * s / 1.7); lip = max(lip, line * smoothstep(-0.25, 1.2, s)); groove = max(groove, line * smoothstep(0.25, -1.2, s));`;
+  }).join("\n  ");
+}
+
+/** 0 below the first contour, 1 once every band has been crossed. Eased, not a step. */
+export function radarBandLift(inches: number): number {
+  let lift = 0;
+  for (const stop of RADAR_BANDS) lift += smoothstep(stop - 0.04, stop + 0.16, inches);
+  return lift / RADAR_BANDS.length;
 }
 
 /**

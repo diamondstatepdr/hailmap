@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { drapedMeters, radarRampGlsl, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
+import { drapedMeters, radarBandGlsl, radarRampGlsl, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
@@ -243,21 +243,30 @@ out vec4 fragColor;
 vec3 ramp(float inches) {
   ${radarRampGlsl()}
 }
+vec3 bands(float inches, float px) {
+  if (inches <= 0.75) return ramp(inches);
+  ${radarBandGlsl()}
+  return ramp(inches);
+}
 void main() {
   vec4 texel = texture(u_field, v_uv);
   float inches = texel.r * 6.0;
   float hot = texel.g;
-  vec3 color = ramp(inches);
+  float px = max(fwidth(inches), 0.004);
+  vec3 color = mix(ramp(inches), bands(inches, px), 0.62);
   vec3 n = normalize(vec3(v_normal.xy * 1.35, v_normal.z));
   vec3 light = normalize(vec3(-0.78, 0.36, 0.42));
   float shade = clamp(dot(n, light), 0.0, 1.0);
   float lit = 0.36 + 1.18 * shade;
   float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
   color *= lit * (1.0 - 0.22 * contact);
-  float w = max(fwidth(inches), 0.02);
-  float rim = 0.0;
+  float lip = 0.0;
+  float groove = 0.0;
+  float line = 0.0;
+  float s = 0.0;
   ${radarRimGlsl()}
-  color = mix(color, min(vec3(1.0), color + vec3(0.12)), rim * 0.16);
+  color *= 1.0 - groove * 0.32;
+  color = mix(color, min(vec3(1.0), color + vec3(0.22)), lip * 0.7);
   color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
   color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
   float t = clamp((inches - 0.50) / 0.70, 0.0, 1.0);

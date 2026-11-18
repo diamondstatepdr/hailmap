@@ -62,10 +62,94 @@ export function hillMeters(inches: number): number {
 }
 
 /**
- * Height scale for the terrain mesh. At a regional zoom the hill stays a
- * similar modest size. Zooming further out shrinks it again, so a country
- * view cannot grow spikes.
+ * 0 at the fringe and 1 at a single crest. Distance-to-edge kills the cliff
+ * at the polygon boundary, and a gentle falloff from the centroid keeps a
+ * long swath from holding a flat ridge. `inradiusM` is the ground distance
+ * from that crest to the fringe, so the slope stays a fraction of the footprint.
  */
+export function reliefDome(patch: HailPatch): { dome: Float64Array; inradiusM: number } {
+  const width = patch.columns;
+  const height = patch.rows;
+  const lat = patch.south + ((height - 1) * patch.step) / 2;
+  const cellX = Math.max(patch.step, 1e-6) * 111320 * Math.max(0.2, Math.cos((lat * Math.PI) / 180));
+  const cellY = Math.max(patch.step, 1e-6) * 111320;
+  const diag = Math.hypot(cellX, cellY);
+  const far = 1e12;
+  const dist = new Float64Array(width * height);
+  let count = 0;
+  let sumX = 0;
+  let sumY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const inside = (patch.values[y * width + x] ?? 0) > 0.45;
+      dist[y * width + x] = inside ? far : 0;
+      if (!inside) continue;
+      count += 1;
+      sumX += x;
+      sumY += y;
+    }
+  }
+  if (!count) return { dome: dist, inradiusM: cellY };
+  const relax = (y0: number, y1: number, dy: number, x0: number, x1: number, dx: number) => {
+    for (let y = y0; y !== y1; y += dy) {
+      for (let x = x0; x !== x1; x += dx) {
+        const index = y * width + x;
+        if (dist[index] === 0) continue;
+        let best = dist[index] ?? far;
+        const px = x - dx;
+        const py = y - dy;
+        if (px >= 0 && px < width) best = Math.min(best, (dist[y * width + px] ?? far) + cellX);
+        if (py >= 0 && py < height) best = Math.min(best, (dist[py * width + x] ?? far) + cellY);
+        if (px >= 0 && px < width && py >= 0 && py < height) best = Math.min(best, (dist[py * width + px] ?? far) + diag);
+        const qx = x + dx;
+        if (qx >= 0 && qx < width && py >= 0 && py < height) best = Math.min(best, (dist[py * width + qx] ?? far) + diag);
+        dist[index] = best;
+      }
+    }
+  };
+  relax(0, height, 1, 0, width, 1);
+  relax(height - 1, -1, -1, width - 1, -1, -1);
+  let inradiusM = 0;
+  for (let i = 0; i < dist.length; i += 1) {
+    if ((dist[i] ?? 0) >= far / 2) dist[i] = 0;
+    if ((dist[i] ?? 0) > inradiusM) inradiusM = dist[i] ?? 0;
+  }
+  const cx = sumX / count;
+  const cy = sumY / count;
+  let reach = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if ((patch.values[y * width + x] ?? 0) <= 0.45) continue;
+      reach = Math.max(reach, Math.hypot((x - cx) * cellX, (y - cy) * cellY));
+    }
+  }
+  const dome = new Float64Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const edge = inradiusM > 0 ? (dist[y * width + x] ?? 0) / inradiusM : 0;
+      const along = reach > 0 ? Math.hypot((x - cx) * cellX, (y - cy) * cellY) / reach : 0;
+      dome[y * width + x] = edge * (1 - 0.42 * along * along);
+    }
+  }
+  const soft = blur(dome, width, height, 1.15);
+  let peak = 0;
+  for (let i = 0; i < soft.length; i += 1) if ((soft[i] ?? 0) > peak) peak = soft[i] ?? 0;
+  if (peak > 0) for (let i = 0; i < soft.length; i += 1) soft[i] = Math.max(0, (soft[i] ?? 0) / peak);
+  return { dome: soft, inradiusM: Math.max(cellY, inradiusM) };
+}
+
+/**
+ * Meters of a gentle hill. Two and a half inches rises about a quarter of the
+ * inradius, smaller hail is a lower bump, and the dome holds the fringe on the ground.
+ */
+export function drapedMeters(inches: number, inradiusM: number, dome: number): number {
+  if (inches <= 0.45) return 0;
+  const reference = hillMeters(2.5) || 1;
+  const size = Math.sqrt(Math.min(1, hillMeters(inches) / reference));
+  const crown = Math.max(0, Math.min(1, dome));
+  return inradiusM * 0.24 * size * crown;
+}
+
 export function hillZoomScale(zoom: number): number {
   const matched = 2 ** (SWATH_HEIGHT_ZOOM - zoom);
   if (zoom >= SWATH_HEIGHT_ZOOM) return 2 ** (0.72 * (SWATH_HEIGHT_ZOOM - zoom));

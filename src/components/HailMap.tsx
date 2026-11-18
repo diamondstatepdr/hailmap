@@ -1168,6 +1168,7 @@ export default function HailMap({
           theme={theme}
           labels
           volume={volume}
+          relief={relief}
           risen={risen}
           riseMs={moveMs}
         />

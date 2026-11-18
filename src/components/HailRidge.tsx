@@ -3,12 +3,10 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, radarTexture, type HailPatch } from "@/lib/hail-terrain";
+import { drapedMeters, radarRampGlsl, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
-/** Screen-space lift. The stored meters stay gentle; this makes the hills readable when the map is tilted. */
-const HILL_EXAGGERATION = 4.2;
 
 type PatchDraw = {
   width: number;
@@ -16,6 +14,7 @@ type PatchDraw = {
   rgba: Uint8Array;
   indexOffset: number;
   indexCount: number;
+  lat: number;
 };
 
 /**
@@ -74,7 +73,7 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: CustomRenderMethodInput) {
       if (!program || !buffer || !indexBuffer || textures.length === 0) return;
       const zoom = this.map?.getZoom() ?? SWATH_HEIGHT_ZOOM;
-      const scale = hillZoomScale(zoom);
+      const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -90,9 +89,8 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, stride, 6 * 4);
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
-      const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
       gl.uniform1f(gl.getUniformLocation(program, "u_world"), worldSize);
-      gl.uniform1f(gl.getUniformLocation(program, "u_scale"), scale);
+      const ppm = gl.getUniformLocation(program, "u_ppm");
       const field = gl.getUniformLocation(program, "u_field");
       gl.uniform1i(field, 0);
       const depthTest = gl.isEnabled(gl.DEPTH_TEST);
@@ -112,6 +110,7 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
         const draw = draws[index];
         const texture = textures[index];
         if (!draw || !texture || draw.indexCount === 0) continue;
+        gl.uniform1f(ppm, worldPixelsPerMeter(worldSize, draw.lat));
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.drawElements(gl.TRIANGLES, draw.indexCount, gl.UNSIGNED_INT, draw.indexOffset * 4);
       }
@@ -123,6 +122,25 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     },
   };
   return layer;
+}
+
+function worldPixelsPerMeter(worldSize: number, lat: number): number {
+  const circumference = 2 * Math.PI * 6378137 * Math.cos((lat * Math.PI) / 180);
+  return worldSize / Math.max(1, circumference);
+}
+
+function sampleGrid(values: number[] | Float64Array, columns: number, rows: number, gx: number, gy: number): number {
+  const x0 = Math.max(0, Math.min(columns - 1, Math.floor(gx)));
+  const y0 = Math.max(0, Math.min(rows - 1, Math.floor(gy)));
+  const x1 = Math.min(columns - 1, x0 + 1);
+  const y1 = Math.min(rows - 1, y0 + 1);
+  const tx = Math.min(1, Math.max(0, gx - x0));
+  const ty = Math.min(1, Math.max(0, gy - y0));
+  const a = values[y0 * columns + x0] ?? 0;
+  const b = values[y0 * columns + x1] ?? 0;
+  const c = values[y1 * columns + x0] ?? 0;
+  const d = values[y1 * columns + x1] ?? 0;
+  return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
 }
 
 function sampleField(patch: HailPatch, gx: number, gy: number): number {
@@ -145,6 +163,9 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
   const draws: PatchDraw[] = [];
   for (const patch of patches) {
     const raster = radarTexture(patch);
+    const relief = reliefDome(patch);
+    const dome = relief.dome;
+    const radiusM = relief.inradiusM;
     const divX = Math.min(84, Math.max(10, patch.columns - 1));
     const divY = Math.min(84, Math.max(10, patch.rows - 1));
     const base = vertices.length / 8;
@@ -153,7 +174,9 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       for (let ix = 0; ix <= divX; ix += 1) {
         const gx = (ix / divX) * (patch.columns - 1);
         const gy = (iy / divY) * (patch.rows - 1);
-        heights.push(hillMeters(sampleField(patch, gx, gy)) * HILL_EXAGGERATION);
+        const inches = sampleField(patch, gx, gy);
+        const crown = sampleGrid(dome, patch.columns, patch.rows, gx, gy);
+        heights.push(drapedMeters(inches, radiusM, crown));
       }
     }
     const stride = divX + 1;
@@ -195,6 +218,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       rgba: raster.rgba,
       indexOffset,
       indexCount: indices.length - indexOffset,
+      lat: patch.south + ((patch.rows - 1) * patch.step) / 2,
     });
   }
   return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), draws };
@@ -205,14 +229,14 @@ function createProgram(gl: WebGLRenderingContext | WebGL2RenderingContext): WebG
 precision highp float;
 uniform mat4 u_matrix;
 uniform float u_world;
-uniform float u_scale;
+uniform float u_ppm;
 in vec3 a_pos;
 in vec3 a_normal;
 in vec2 a_uv;
 out vec3 v_normal;
 out vec2 v_uv;
 void main() {
-  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_scale);
+  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_ppm);
   gl_Position = u_matrix * vec4(pos, 1.0);
   v_normal = a_normal;
   v_uv = a_uv;

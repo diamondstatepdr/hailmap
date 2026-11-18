@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarTexture } from "@/lib/hail-terrain";
+import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarTexture, reliefDome } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("turns a straight hail polygon into a hill that meets the ground", () => {
@@ -182,6 +182,39 @@ describe("hail terrain", () => {
     expect(bend).toBeGreaterThan(0.5);
     const ends = [tops[1] ?? 0, tops[tops.length - 2] ?? 0];
     expect(Math.max(...ends)).toBeLessThan(mean - 0.5);
+  });
+
+  it("keeps a lone report a low bump and the fringe on the ground", () => {
+    const radius = 2500;
+    expect(drapedMeters(2.5, radius, 0)).toBe(0);
+    const bump = drapedMeters(2.5, radius, 1);
+    expect(bump).toBeGreaterThan(radius * 0.15);
+    expect(bump).toBeLessThan(radius * 0.25);
+    expect(drapedMeters(1, radius, 1)).toBeLessThan(bump);
+    const columns = 16;
+    const rows = 16;
+    const values = Array.from({ length: columns * rows }, (_, index) => {
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      return x > 3 && x < 12 && y > 3 && y < 12 ? 1.8 : 0;
+    });
+    const { dome, inradiusM } = reliefDome({ west: -112, south: 33, step: 0.02, columns, rows, values });
+    const center = dome[8 * columns + 8] ?? 0;
+    const corner = dome[0] ?? 0;
+    const shoulder = dome[8 * columns + 10] ?? 0;
+    expect(center).toBeGreaterThan(0.8);
+    expect(shoulder).toBeLessThan(center * 0.82);
+    expect(corner).toBeLessThan(0.2);
+    const crest = drapedMeters(1.8, inradiusM, center);
+    expect(crest).toBeGreaterThan(inradiusM * 0.12);
+    expect(crest).toBeLessThan(inradiusM * 0.25);
+    let tallestStep = 0;
+    for (let x = 4; x < 12; x += 1) {
+      const left = drapedMeters(1.8, inradiusM, dome[8 * columns + x] ?? 0);
+      const right = drapedMeters(1.8, inradiusM, dome[8 * columns + x + 1] ?? 0);
+      tallestStep = Math.max(tallestStep, Math.abs(left - right));
+    }
+    expect(tallestStep).toBeLessThan(inradiusM * 0.08);
   });
 
   it("turns a hard cell step into a ramp several texels wide", () => {

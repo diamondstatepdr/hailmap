@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons } from "@/lib/hail-terrain";
+import { hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarTexture } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("turns a straight hail polygon into a hill that meets the ground", () => {
@@ -182,6 +182,29 @@ describe("hail terrain", () => {
     expect(bend).toBeGreaterThan(0.5);
     const ends = [tops[1] ?? 0, tops[tops.length - 2] ?? 0];
     expect(Math.max(...ends)).toBeLessThan(mean - 0.5);
+  });
+
+  it("turns a hard cell step into a ramp several texels wide", () => {
+    const columns = 12;
+    const rows = 8;
+    const values: number[] = [];
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < columns; x += 1) values.push(x < 6 ? 2.2 : 0);
+    }
+    const texture = radarTexture({ west: -88, south: 41, step: 0.04, columns, rows, values });
+    expect(texture.width).toBeGreaterThan(columns * 2);
+    const mid = Math.floor(texture.height / 2);
+    let leaving = -1;
+    let gone = -1;
+    for (let x = 0; x < texture.width; x += 1) {
+      const inches = (texture.rgba[(mid * texture.width + x) * 4] ?? 0) / 255 * 6;
+      if (leaving < 0 && inches < 1.6) leaving = x;
+      if (inches < 0.35) {
+        gone = x;
+        break;
+      }
+    }
+    expect(gone - leaving).toBeGreaterThan(4);
   });
 
   it("turns distant reports into separate hills", () => {

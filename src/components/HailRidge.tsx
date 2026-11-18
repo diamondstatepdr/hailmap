@@ -3,21 +3,31 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { hillColor, hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, type HailPatch } from "@/lib/hail-terrain";
+import { hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, radarTexture, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
 
+type PatchDraw = {
+  width: number;
+  height: number;
+  rgba: Uint8Array;
+  indexOffset: number;
+  indexCount: number;
+};
+
 /**
- * A sloped hail surface. Each grid quad is two triangles whose corners sit at
- * different heights, so the outer edge stays on the ground and the middle rises
- * to a peak. Zoom only scales the height uniform.
+ * Low hail surface. Color and the outline come from a finely sampled texture
+ * with linear filtering, so the fringe is a continuous fade. The triangle
+ * grid only carries the height and always covers the whole patch, including
+ * the clear skirt, so the visible edge is not the edge of a grid square.
  */
 function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: MapLibreMap | null } {
   let program: WebGLProgram | null = null;
   let buffer: WebGLBuffer | null = null;
   let indexBuffer: WebGLBuffer | null = null;
-  let count = 0;
+  const textures: WebGLTexture[] = [];
+  let draws: PatchDraw[] = [];
   const layer = {
     id: LAYER_ID,
     type: "custom" as const,
@@ -26,7 +36,7 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
       this.map = map;
       const built = buildMesh(patches);
-      count = built.count;
+      draws = built.draws;
       program = createProgram(gl);
       if (!program) console.error("[hail-ridge] shader failed");
       buffer = gl.createBuffer();
@@ -35,44 +45,54 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       gl.bufferData(gl.ARRAY_BUFFER, built.vertices, gl.STATIC_DRAW);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, built.indices, gl.STATIC_DRAW);
+      for (const draw of draws) {
+        const texture = gl.createTexture();
+        if (!texture) continue;
+        textures.push(texture);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, draw.width, draw.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, draw.rgba);
+      }
     },
     onRemove(_map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
       if (program) gl.deleteProgram(program);
       if (buffer) gl.deleteBuffer(buffer);
       if (indexBuffer) gl.deleteBuffer(indexBuffer);
+      for (const texture of textures) gl.deleteTexture(texture);
+      textures.length = 0;
       program = null;
       buffer = null;
       indexBuffer = null;
+      draws = [];
       this.map = null;
     },
     render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: CustomRenderMethodInput) {
-      if (!program || !buffer || !indexBuffer || count === 0) return;
+      if (!program || !buffer || !indexBuffer || textures.length === 0) return;
       const zoom = this.map?.getZoom() ?? SWATH_HEIGHT_ZOOM;
       const scale = hillZoomScale(zoom);
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      const stride = 9 * 4;
+      const stride = 8 * 4;
       const pos = gl.getAttribLocation(program, "a_pos");
       const normal = gl.getAttribLocation(program, "a_normal");
-      const inches = gl.getAttribLocation(program, "a_inches");
-      const alpha = gl.getAttribLocation(program, "a_alpha");
-      const hot = gl.getAttribLocation(program, "a_hot");
+      const uv = gl.getAttribLocation(program, "a_uv");
       gl.enableVertexAttribArray(pos);
       gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, stride, 0);
       gl.enableVertexAttribArray(normal);
       gl.vertexAttribPointer(normal, 3, gl.FLOAT, false, stride, 3 * 4);
-      gl.enableVertexAttribArray(inches);
-      gl.vertexAttribPointer(inches, 1, gl.FLOAT, false, stride, 6 * 4);
-      gl.enableVertexAttribArray(alpha);
-      gl.vertexAttribPointer(alpha, 1, gl.FLOAT, false, stride, 7 * 4);
-      gl.enableVertexAttribArray(hot);
-      gl.vertexAttribPointer(hot, 1, gl.FLOAT, false, stride, 8 * 4);
+      gl.enableVertexAttribArray(uv);
+      gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, stride, 6 * 4);
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
       const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
       gl.uniform1f(gl.getUniformLocation(program, "u_world"), worldSize);
       gl.uniform1f(gl.getUniformLocation(program, "u_scale"), scale);
+      const field = gl.getUniformLocation(program, "u_field");
+      gl.uniform1i(field, 0);
       const depthTest = gl.isEnabled(gl.DEPTH_TEST);
       const cull = gl.isEnabled(gl.CULL_FACE);
       const stencil = gl.isEnabled(gl.STENCIL_TEST);
@@ -85,7 +105,14 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       gl.colorMask(true, true, true, true);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      for (let index = 0; index < textures.length; index += 1) {
+        const draw = draws[index];
+        const texture = textures[index];
+        if (!draw || !texture || draw.indexCount === 0) continue;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.drawElements(gl.TRIANGLES, draw.indexCount, gl.UNSIGNED_INT, draw.indexOffset * 4);
+      }
       gl.clear(gl.DEPTH_BUFFER_BIT);
       if (depthTest) gl.enable(gl.DEPTH_TEST);
       else gl.disable(gl.DEPTH_TEST);
@@ -96,78 +123,76 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
   return layer;
 }
 
-function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uint32Array; count: number } {
+function sampleField(patch: HailPatch, gx: number, gy: number): number {
+  const x0 = Math.max(0, Math.min(patch.columns - 1, Math.floor(gx)));
+  const y0 = Math.max(0, Math.min(patch.rows - 1, Math.floor(gy)));
+  const x1 = Math.min(patch.columns - 1, x0 + 1);
+  const y1 = Math.min(patch.rows - 1, y0 + 1);
+  const tx = Math.min(1, Math.max(0, gx - x0));
+  const ty = Math.min(1, Math.max(0, gy - y0));
+  const a = patch.values[y0 * patch.columns + x0] ?? 0;
+  const b = patch.values[y0 * patch.columns + x1] ?? 0;
+  const c = patch.values[y1 * patch.columns + x0] ?? 0;
+  const d = patch.values[y1 * patch.columns + x1] ?? 0;
+  return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+}
+
+function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uint32Array; draws: PatchDraw[] } {
   const vertices: number[] = [];
-  const triangles: Array<{ far: number; ids: [number, number, number] }> = [];
-  for (const patch of patches) {
-    const columns = patch.columns;
-    const rows = patch.rows;
-    const base = vertices.length / 9;
-    const meters: number[] = [];
-    let peak = 0;
-    let peakX = 0;
-    let peakY = 0;
-    for (let y = 0; y < rows; y += 1) {
-      for (let x = 0; x < columns; x += 1) {
-        const inches = patch.values[y * columns + x] ?? 0;
-        meters.push(hillMeters(inches));
-        if (inches > peak) {
-          peak = inches;
-          peakX = x;
-          peakY = y;
-        }
-      }
-    }
-    const stepKm = patch.step * 111;
-    const sigmaKm = Math.min(2.2, Math.max(1.1, stepKm * 0.28));
-    for (let y = 0; y < rows; y += 1) {
-      for (let x = 0; x < columns; x += 1) {
-        const inches = patch.values[y * columns + x] ?? 0;
-        const lon = patch.west + x * patch.step;
-        const lat = patch.south + y * patch.step;
-        const mercator = MercatorCoordinate.fromLngLat({ lng: lon, lat });
-        const left = meters[y * columns + Math.max(0, x - 1)] ?? 0;
-        const right = meters[y * columns + Math.min(columns - 1, x + 1)] ?? 0;
-        const down = meters[Math.max(0, y - 1) * columns + x] ?? 0;
-        const up = meters[Math.min(rows - 1, y + 1) * columns + x] ?? 0;
-        const dzdx = (right - left) / (stepKm * 2);
-        const dzdy = (up - down) / (stepKm * 2);
-        const nx = -dzdx * 0.55;
-        const ny = -dzdy * 0.55;
-        const nz = 1;
-        const length = Math.hypot(nx, ny, nz) || 1;
-        const alpha = hillColor(inches)[3];
-        const distKm = Math.hypot((x - peakX) * stepKm, (y - peakY) * stepKm);
-        const closeness = peak > 0 ? inches / peak : 0;
-        const hot =
-          peak >= 2.05 && closeness >= 0.97
-            ? Math.exp(-(distKm * distKm) / (2 * sigmaKm * sigmaKm)) * Math.min(1, (closeness - 0.97) / 0.03)
-            : 0;
-        vertices.push(mercator.x, mercator.y, meters[y * columns + x] ?? 0, nx / length, ny / length, nz / length, inches, alpha, hot);
-      }
-    }
-    for (let y = 0; y < rows - 1; y += 1) {
-      for (let x = 0; x < columns - 1; x += 1) {
-        const i00 = y * columns + x;
-        const i10 = i00 + 1;
-        const i01 = i00 + columns;
-        const i11 = i01 + 1;
-        const highest = Math.max(patch.values[i00] ?? 0, patch.values[i10] ?? 0, patch.values[i01] ?? 0, patch.values[i11] ?? 0);
-        if (highest < 0.5) continue;
-        const a = base + i00;
-        const b = base + i10;
-        const c = base + i01;
-        const d = base + i11;
-        const far = (vertices[a * 9 + 1] + vertices[c * 9 + 1] + vertices[b * 9 + 1]) / 3;
-        const near = (vertices[b * 9 + 1] + vertices[c * 9 + 1] + vertices[d * 9 + 1]) / 3;
-        triangles.push({ far, ids: [a, c, b] }, { far: near, ids: [b, c, d] });
-      }
-    }
-  }
-  triangles.sort((left, right) => left.far - right.far);
   const indices: number[] = [];
-  for (const triangle of triangles) indices.push(triangle.ids[0], triangle.ids[1], triangle.ids[2]);
-  return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), count: indices.length };
+  const draws: PatchDraw[] = [];
+  for (const patch of patches) {
+    const raster = radarTexture(patch);
+    const divX = Math.min(36, Math.max(2, patch.columns - 1));
+    const divY = Math.min(36, Math.max(2, patch.rows - 1));
+    const base = vertices.length / 8;
+    const heights: number[] = [];
+    for (let iy = 0; iy <= divY; iy += 1) {
+      for (let ix = 0; ix <= divX; ix += 1) {
+        const gx = (ix / divX) * (patch.columns - 1);
+        const gy = (iy / divY) * (patch.rows - 1);
+        heights.push(hillMeters(sampleField(patch, gx, gy)));
+      }
+    }
+    const stride = divX + 1;
+    for (let iy = 0; iy <= divY; iy += 1) {
+      for (let ix = 0; ix <= divX; ix += 1) {
+        const fx = ix / divX;
+        const fy = iy / divY;
+        const lon = patch.west + fx * (patch.columns - 1) * patch.step;
+        const lat = patch.south + fy * (patch.rows - 1) * patch.step;
+        const mercator = MercatorCoordinate.fromLngLat({ lng: lon, lat });
+        const here = heights[iy * stride + ix] ?? 0;
+        const left = heights[iy * stride + Math.max(0, ix - 1)] ?? here;
+        const right = heights[iy * stride + Math.min(divX, ix + 1)] ?? here;
+        const down = heights[Math.max(0, iy - 1) * stride + ix] ?? here;
+        const up = heights[Math.min(divY, iy + 1) * stride + ix] ?? here;
+        const stepKm = patch.step * Math.max(patch.columns, patch.rows) / Math.max(divX, divY) * 111;
+        const nx = -(right - left) / (stepKm * 2 || 1);
+        const ny = -(up - down) / (stepKm * 2 || 1);
+        const length = Math.hypot(nx, ny, 1) || 1;
+        vertices.push(mercator.x, mercator.y, here, nx / length, ny / length, 1 / length, fx, fy);
+      }
+    }
+    const indexOffset = indices.length;
+    for (let iy = 0; iy < divY; iy += 1) {
+      for (let ix = 0; ix < divX; ix += 1) {
+        const a = base + iy * stride + ix;
+        const b = a + 1;
+        const c = a + stride;
+        const d = c + 1;
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+    draws.push({
+      width: raster.width,
+      height: raster.height,
+      rgba: raster.rgba,
+      indexOffset,
+      indexCount: indices.length - indexOffset,
+    });
+  }
+  return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), draws };
 }
 
 function createProgram(gl: WebGLRenderingContext | WebGL2RenderingContext): WebGLProgram | null {
@@ -178,33 +203,28 @@ uniform float u_world;
 uniform float u_scale;
 in vec3 a_pos;
 in vec3 a_normal;
-in float a_inches;
-in float a_alpha;
-in float a_hot;
+in vec2 a_uv;
 out vec3 v_normal;
-out float v_inches;
-out float v_alpha;
-out float v_hot;
+out vec2 v_uv;
 void main() {
   vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_scale);
   gl_Position = u_matrix * vec4(pos, 1.0);
   v_normal = a_normal;
-  v_inches = a_inches;
-  v_alpha = a_alpha;
-  v_hot = a_hot;
+  v_uv = a_uv;
 }`);
   const fragment = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
+uniform sampler2D u_field;
 in vec3 v_normal;
-in float v_inches;
-in float v_alpha;
-in float v_hot;
+in vec2 v_uv;
 out vec4 fragColor;
 vec3 ramp(float inches) {
   ${radarRampGlsl()}
 }
 void main() {
-  float inches = max(v_inches, 0.0);
+  vec4 texel = texture(u_field, v_uv);
+  float inches = texel.r * 6.0;
+  float hot = texel.g;
   vec3 color = ramp(inches);
   vec3 light = normalize(vec3(-0.32, 0.4, 0.88));
   float shade = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
@@ -213,10 +233,11 @@ void main() {
   float rim = 0.0;
   ${radarRimGlsl()}
   color = mix(color, min(vec3(1.0), color + vec3(0.12)), rim * 0.16);
-  float hot = clamp(v_hot, 0.0, 1.0);
   color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
   color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
-  float alpha = min(0.66, v_alpha);
+  float t = clamp((inches - 0.50) / 0.70, 0.0, 1.0);
+  float fade = t * t * (3.0 - 2.0 * t);
+  float alpha = min(0.66, 0.64 * fade);
   if (alpha < 0.03) discard;
   fragColor = vec4(color * alpha, alpha);
 }`);
@@ -227,9 +248,7 @@ void main() {
   gl.attachShader(program, fragment);
   gl.bindAttribLocation(program, 0, "a_pos");
   gl.bindAttribLocation(program, 1, "a_normal");
-  gl.bindAttribLocation(program, 2, "a_inches");
-  gl.bindAttribLocation(program, 3, "a_alpha");
-  gl.bindAttribLocation(program, 4, "a_hot");
+  gl.bindAttribLocation(program, 2, "a_uv");
   gl.linkProgram(program);
   gl.deleteShader(vertex);
   gl.deleteShader(fragment);

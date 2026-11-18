@@ -368,74 +368,86 @@ function finishPatch(
     }
   }
   let peak = 0;
-  for (let i = 0; i < shaped.length; i += 1) {
-    shaped[i] = Math.min(rawPeak, Math.max(0, shaped[i]));
-    if (shaped[i] > peak) peak = shaped[i];
-  }
-  if (peak < 0.55) return null;
-  const fine = refineField(shaped, padded.width, padded.height);
   const values: number[] = [];
-  peak = 0;
-  for (let i = 0; i < fine.values.length; i += 1) {
-    const inches = Math.round(Math.min(rawPeak, fine.values[i]) * 100) / 100;
+  for (let i = 0; i < shaped.length; i += 1) {
+    const inches = Math.round(Math.min(rawPeak, Math.max(0, shaped[i])) * 100) / 100;
     values.push(inches);
     if (inches > peak) peak = inches;
   }
   if (peak < 0.55) return null;
-  const coarse = (step * reduced.factor) / fine.factor;
+  const coarse = step * reduced.factor;
   return {
-    west: west - skirt * step * reduced.factor,
-    south: south - skirt * step * reduced.factor,
+    west: west - skirt * coarse,
+    south: south - skirt * coarse,
     step: coarse,
-    columns: fine.width,
-    rows: fine.height,
+    columns: padded.width,
+    rows: padded.height,
     values,
   };
 }
 
+const TEXTURE_INCHES = 6;
+
 /**
- * Bilinear resample, then a one-cell blur, so the fringe and the color bands
- * are curves instead of the coarse grid. The result stays under 280 cells so
- * a phone still draws it. Values under 0.2 are dropped; the visible fade is
- * the alpha between there and half an inch.
+ * A fine raster of the patch for the GPU. Linear filtering of this image is
+ * what draws the outline, so the edge is a curve instead of the data cells.
+ * Long side stays at or under 960 texels.
  */
-function refineField(source: Float64Array, width: number, height: number): { values: Float64Array; width: number; height: number; factor: number } {
-  let factor = 3;
-  while (factor > 1 && ((width - 1) * factor + 1 > 280 || (height - 1) * factor + 1 > 280)) factor -= 1;
-  if (factor === 1) return { values: source, width, height, factor: 1 };
-  const columns = (width - 1) * factor + 1;
-  const rows = (height - 1) * factor + 1;
-  const dense = new Float64Array(columns * rows);
-  for (let y = 0; y < rows; y += 1) {
+export function radarTexture(patch: HailPatch): { width: number; height: number; rgba: Uint8Array } {
+  const long = Math.max(patch.columns, patch.rows);
+  const factor = Math.max(2, Math.min(5, Math.floor(960 / Math.max(2, long))));
+  const width = (patch.columns - 1) * factor + 1;
+  const height = (patch.rows - 1) * factor + 1;
+  const dense = new Float64Array(width * height);
+  for (let y = 0; y < height; y += 1) {
     const gy = y / factor;
-    const y0 = Math.min(height - 1, Math.floor(gy));
-    const y1 = Math.min(height - 1, y0 + 1);
+    const y0 = Math.min(patch.rows - 1, Math.floor(gy));
+    const y1 = Math.min(patch.rows - 1, y0 + 1);
     const ty = gy - y0;
     const sy = ty * ty * (3 - 2 * ty);
-    for (let x = 0; x < columns; x += 1) {
+    for (let x = 0; x < width; x += 1) {
       const gx = x / factor;
-      const x0 = Math.min(width - 1, Math.floor(gx));
-      const x1 = Math.min(width - 1, x0 + 1);
+      const x0 = Math.min(patch.columns - 1, Math.floor(gx));
+      const x1 = Math.min(patch.columns - 1, x0 + 1);
       const tx = gx - x0;
       const sx = tx * tx * (3 - 2 * tx);
-      const a = source[y0 * width + x0] ?? 0;
-      const b = source[y0 * width + x1] ?? 0;
-      const c = source[y1 * width + x0] ?? 0;
-      const d = source[y1 * width + x1] ?? 0;
-      dense[y * columns + x] = a * (1 - sx) * (1 - sy) + b * sx * (1 - sy) + c * (1 - sx) * sy + d * sx * sy;
+      const a = patch.values[y0 * patch.columns + x0] ?? 0;
+      const b = patch.values[y0 * patch.columns + x1] ?? 0;
+      const c = patch.values[y1 * patch.columns + x0] ?? 0;
+      const d = patch.values[y1 * patch.columns + x1] ?? 0;
+      dense[y * width + x] = a * (1 - sx) * (1 - sy) + b * sx * (1 - sy) + c * (1 - sx) * sy + d * sx * sy;
     }
   }
-  const smoothed = blur(dense, columns, rows, 1.05);
+  const smoothed = blur(dense, width, height, factor * 0.8);
+  let peak = 0;
+  let peakX = 0;
+  let peakY = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const src = source[y * width + x] ?? 0;
-      if (src < 0.5) continue;
-      const index = y * factor * columns + x * factor;
-      smoothed[index] = Math.max(smoothed[index] ?? 0, src * 0.98);
+      const value = smoothed[y * width + x] ?? 0;
+      if (value > peak) {
+        peak = value;
+        peakX = x;
+        peakY = y;
+      }
     }
   }
-  for (let i = 0; i < smoothed.length; i += 1) if (smoothed[i] < 0.2) smoothed[i] = 0;
-  return { values: smoothed, width: columns, height: rows, factor };
+  const rgba = new Uint8Array(width * height * 4);
+  const hotSigma = 3.2;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const inches = Math.max(0, smoothed[y * width + x] ?? 0);
+      const index = (y * width + x) * 4;
+      rgba[index] = Math.min(255, Math.round((inches / TEXTURE_INCHES) * 255));
+      const dx = x - peakX;
+      const dy = y - peakY;
+      const hot = peak >= 2.05 && inches >= peak * 0.96 ? Math.exp(-(dx * dx + dy * dy) / (2 * hotSigma * hotSigma)) : 0;
+      rgba[index + 1] = Math.min(255, Math.round(hot * 255));
+      rgba[index + 2] = 0;
+      rgba[index + 3] = 255;
+    }
+  }
+  return { width, height, rgba };
 }
 
 /** Deterministic fringe wobble, about -1 to 1, so a round buffer is not a perfect circle. */

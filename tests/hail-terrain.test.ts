@@ -188,8 +188,8 @@ describe("hail terrain", () => {
     const radius = 2500;
     expect(drapedMeters(2.5, radius, 0)).toBe(0);
     const bump = drapedMeters(2.5, radius, 1);
-    expect(bump).toBeGreaterThan(radius * 0.15);
-    expect(bump).toBeLessThan(radius * 0.25);
+    expect(bump).toBeGreaterThan(radius * 0.38);
+    expect(bump).toBeLessThan(radius * 0.48);
     expect(drapedMeters(1, radius, 1)).toBeLessThan(bump);
     const columns = 16;
     const rows = 16;
@@ -206,15 +206,15 @@ describe("hail terrain", () => {
     expect(shoulder).toBeLessThan(center * 0.82);
     expect(corner).toBeLessThan(0.2);
     const crest = drapedMeters(1.8, inradiusM, center);
-    expect(crest).toBeGreaterThan(inradiusM * 0.12);
-    expect(crest).toBeLessThan(inradiusM * 0.25);
+    expect(crest).toBeGreaterThan(inradiusM * 0.22);
+    expect(crest).toBeLessThan(inradiusM * 0.48);
     let tallestStep = 0;
     for (let x = 4; x < 12; x += 1) {
       const left = drapedMeters(1.8, inradiusM, dome[8 * columns + x] ?? 0);
       const right = drapedMeters(1.8, inradiusM, dome[8 * columns + x + 1] ?? 0);
       tallestStep = Math.max(tallestStep, Math.abs(left - right));
     }
-    expect(tallestStep).toBeLessThan(inradiusM * 0.08);
+    expect(tallestStep).toBeLessThan(inradiusM * 0.16);
   });
 
   it("turns a hard cell step into a ramp several texels wide", () => {

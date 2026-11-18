@@ -139,7 +139,7 @@ export function reliefDome(patch: HailPatch): { dome: Float64Array; inradiusM: n
 }
 
 /**
- * Meters of a gentle hill. Two and a half inches rises about a quarter of the
+ * Meters of a gentle hill. Two and a half inches rises a bit under half the
  * inradius, smaller hail is a lower bump, and the dome holds the fringe on the ground.
  */
 export function drapedMeters(inches: number, inradiusM: number, dome: number): number {
@@ -147,7 +147,7 @@ export function drapedMeters(inches: number, inradiusM: number, dome: number): n
   const reference = hillMeters(2.5) || 1;
   const size = Math.sqrt(Math.min(1, hillMeters(inches) / reference));
   const crown = Math.max(0, Math.min(1, dome));
-  return inradiusM * 0.24 * size * crown;
+  return inradiusM * 0.43 * size * crown;
 }
 
 export function hillZoomScale(zoom: number): number {

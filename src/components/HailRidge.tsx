@@ -255,10 +255,10 @@ void main() {
   float inches = texel.r * 6.0;
   float hot = texel.g;
   vec3 color = ramp(inches);
-  vec3 n = normalize(v_normal);
-  vec3 light = normalize(vec3(-0.62, 0.28, 0.62));
+  vec3 n = normalize(vec3(v_normal.xy * 1.55, v_normal.z));
+  vec3 light = normalize(vec3(-0.72, 0.38, 0.48));
   float shade = clamp(dot(n, light), 0.0, 1.0);
-  float lit = 0.46 + 0.92 * shade;
+  float lit = 0.32 + 1.22 * shade;
   float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
   color *= lit * (1.0 - 0.22 * contact);
   float w = max(fwidth(inches), 0.02);

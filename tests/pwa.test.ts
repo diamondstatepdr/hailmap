@@ -59,7 +59,7 @@ describe("offline shell", () => {
 
   it("keeps the service worker on that policy and still receives Web Push", () => {
     const worker = readFileSync("public/sw.js", "utf8");
-    expect(worker).toContain('const CACHE = "swathline-shell-v11"');
+    expect(worker).toContain('const CACHE = "swathline-shell-v12"');
     expect(worker).toContain('pathname.startsWith("/api/")');
     expect(worker).toContain('addEventListener("push"');
     expect(worker).toContain("showNotification");

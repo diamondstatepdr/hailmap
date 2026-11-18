@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { drapedMeters, radarBandGlsl, radarRampGlsl, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
+import { drapedMeters, radarBandGlsl, radarContours, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
@@ -90,6 +90,8 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
       gl.uniform1f(gl.getUniformLocation(program, "u_world"), worldSize);
+      const pixelRatio = this.map?.getPixelRatio?.() ?? (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
+      gl.uniform1f(gl.getUniformLocation(program, "u_dpr"), pixelRatio);
       const field = gl.getUniformLocation(program, "u_field");
       gl.uniform1i(field, 0);
       const depthTest = gl.isEnabled(gl.DEPTH_TEST);
@@ -156,6 +158,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
   const draws: PatchDraw[] = [];
   for (const patch of patches) {
     const raster = radarTexture(patch);
+    const contours = radarContours(patch);
     const relief = reliefDome(patch);
     const dome = relief.dome;
     const radiusM = relief.inradiusM;
@@ -168,8 +171,9 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const gx = (ix / divX) * (patch.columns - 1);
         const gy = (iy / divY) * (patch.rows - 1);
         const inches = sampleField(patch, gx, gy);
+        const contourInches = sampleGrid(contours, patch.columns, patch.rows, gx, gy);
         const crown = sampleGrid(dome, patch.columns, patch.rows, gx, gy);
-        heights.push(drapedMeters(inches, radiusM, crown));
+        heights.push(drapedMeters(inches, radiusM, crown, contourInches));
       }
     }
     const stride = divX + 1;
@@ -237,38 +241,35 @@ void main() {
   const fragment = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
 uniform sampler2D u_field;
+uniform float u_dpr;
 in vec3 v_normal;
 in vec2 v_uv;
 out vec4 fragColor;
-vec3 ramp(float inches) {
-  ${radarRampGlsl()}
-}
 vec3 bands(float inches, float px) {
-  if (inches <= 0.75) return ramp(inches);
   ${radarBandGlsl()}
-  return ramp(inches);
 }
 void main() {
   vec4 texel = texture(u_field, v_uv);
   float inches = texel.r * 6.0;
   float hot = texel.g;
-  float px = max(fwidth(inches), 0.004);
-  vec3 color = mix(ramp(inches), bands(inches, px), 0.62);
+  float px = max(fwidth(inches), 0.001);
+  vec3 color = bands(inches, px);
   vec3 n = normalize(vec3(v_normal.xy * 1.35, v_normal.z));
   vec3 light = normalize(vec3(-0.78, 0.36, 0.42));
   float shade = clamp(dot(n, light), 0.0, 1.0);
   float lit = 0.36 + 1.18 * shade;
   float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
   color *= lit * (1.0 - 0.22 * contact);
+  color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
+  color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
+  float rimPx = px * max(u_dpr, 1.0) * 1.15;
   float lip = 0.0;
   float groove = 0.0;
   float line = 0.0;
   float s = 0.0;
   ${radarRimGlsl()}
-  color *= 1.0 - groove * 0.32;
-  color = mix(color, min(vec3(1.0), color + vec3(0.22)), lip * 0.7);
-  color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
-  color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
+  color = mix(color, color * 0.42, clamp(groove, 0.0, 1.0));
+  color = mix(color, min(vec3(1.0), color * 0.35 + vec3(0.72)), clamp(lip, 0.0, 1.0));
   float t = clamp((inches - 0.50) / 0.70, 0.0, 1.0);
   float fade = t * t * (3.0 - 2.0 * t);
   float alpha = min(0.66, 0.64 * fade);

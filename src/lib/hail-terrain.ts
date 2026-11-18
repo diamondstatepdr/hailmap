@@ -145,13 +145,14 @@ export function reliefDome(patch: HailPatch): { dome: Float64Array; inradiusM: n
  * the inradius: tall enough to read at a phone pitch, still shorter than the
  * footprint. The dome holds the fringe on the ground.
  */
-export function drapedMeters(inches: number, inradiusM: number, dome: number): number {
+export function drapedMeters(inches: number, inradiusM: number, dome: number, contourInches = inches): number {
   if (inches <= 0.45) return 0;
   const reference = hillMeters(2.5) || 1;
   const size = Math.sqrt(Math.min(1, hillMeters(inches) / reference));
   const crown = Math.max(0, Math.min(1, dome));
-  // The shelves add up to the same crest. Each one is a short rounded rise.
-  const shelves = 0.9 + 0.1 * radarBandLift(inches);
+  // Shelves follow the contoured size so each radar band is a low rounded step.
+  // At a full 2 inch core they add back up to the same crest.
+  const shelves = 0.78 + 0.32 * radarBandLift(contourInches);
   return inradiusM * 0.72 * size * shelves * crown;
 }
 
@@ -208,36 +209,54 @@ export function radarRampGlsl(): string {
   return lines.join("\n  ");
 }
 
+/**
+ * Contour thresholds. Closer together through 1–2 inches so a core in that
+ * range still draws several rings.
+ */
+export const RADAR_CONTOURS = [
+  { inches: 0.5, color: "#2450b0" },
+  { inches: 0.75, color: "#1c6adf" },
+  { inches: 1, color: "#14c4b0" },
+  { inches: 1.25, color: "#2fbf5a" },
+  { inches: 1.5, color: "#d6de2a" },
+  { inches: 1.75, color: "#f0a01a" },
+  { inches: 2, color: "#f07814" },
+  { inches: 2.5, color: "#e0232c" },
+  { inches: 3, color: "#e030c8" },
+] as const;
+
 /** Hail sizes that draw a radar contour. */
-export const RADAR_BANDS = [0.75, 1, 1.5, 2, 2.5] as const;
+export const RADAR_BANDS = RADAR_CONTOURS.map((band) => band.inches);
+
+function contourRgb(color: string): [number, number, number] {
+  return [parseInt(color.slice(1, 3), 16), parseInt(color.slice(3, 5), 16), parseInt(color.slice(5, 7), 16)];
+}
 
 /**
- * Band color with a soft hold. Most of a size interval stays near that
- * threshold's color, then eases into the next one. `px` is fwidth(inches).
+ * Flat band color with a short soft edge. `px` is fwidth(inches), so the
+ * blend stays at least a couple of pixels wide.
  */
 export function radarBandGlsl(): string {
   const vec = (rgb: [number, number, number]) => `vec3(${rgb.map((channel) => (channel / 255).toFixed(4)).join(", ")})`;
-  const byInches = new Map(COLOR_STOPS.map((stop) => [stop.inches, stop.rgb]));
-  const lines: string[] = [];
-  for (let i = 0; i < RADAR_BANDS.length - 1; i += 1) {
-    const lo = RADAR_BANDS[i];
-    const hi = RADAR_BANDS[i + 1];
-    const loRgb = byInches.get(lo);
-    const hiRgb = byInches.get(hi);
-    if (!loRgb || !hiRgb) continue;
-    const span = (hi - lo).toFixed(4);
+  const lines: string[] = [`if (inches <= ${RADAR_CONTOURS[0].inches.toFixed(2)}) return ${vec(contourRgb(RADAR_CONTOURS[0].color))};`];
+  for (let i = 0; i < RADAR_CONTOURS.length - 1; i += 1) {
+    const lo = RADAR_CONTOURS[i];
+    const hi = RADAR_CONTOURS[i + 1];
+    const span = (hi.inches - lo.inches).toFixed(4);
     lines.push(
-      `if (inches <= ${hi.toFixed(2)}) { float span = ${span}; float edge = clamp(px * 2.4 / span, 0.1, 0.42); float u = clamp((inches - ${lo.toFixed(2)}) / span, 0.0, 1.0); float t = smoothstep(1.0 - edge * 2.2, 1.0, u); return mix(${vec(loRgb)}, ${vec(hiRgb)}, t); }`,
+      `if (inches <= ${hi.inches.toFixed(2)}) { float span = ${span}; float edge = clamp(px * 1.6 / span, 0.05, 0.18); float u = clamp((inches - ${lo.inches.toFixed(2)}) / span, 0.0, 1.0); float t = smoothstep(1.0 - edge, 1.0, u); return mix(${vec(contourRgb(lo.color))}, ${vec(contourRgb(hi.color))}, t); }`,
     );
   }
+  const last = RADAR_CONTOURS[RADAR_CONTOURS.length - 1];
+  lines.push(`return ${vec(contourRgb(last.color))};`);
   return lines.join("\n  ");
 }
 
-/** Thin anti-aliased lip (high side) and groove (low side) at each radar threshold. */
+/** Anti-aliased lip on the high side of each threshold and a groove on the low side. `s` is in rim-widths. */
 export function radarRimGlsl(): string {
   return RADAR_BANDS.map((inches) => {
     const stop = inches.toFixed(2);
-    return `s = (inches - ${stop}) / px; line = exp(-0.5 * s * s / 1.7); lip = max(lip, line * smoothstep(-0.25, 1.2, s)); groove = max(groove, line * smoothstep(0.25, -1.2, s));`;
+    return `s = (inches - ${stop}) / rimPx; line = exp(-0.5 * s * s / 0.62); lip = max(lip, line * smoothstep(-0.05, 0.7, s)); groove = max(groove, line * smoothstep(0.05, -0.7, s));`;
   }).join("\n  ");
 }
 
@@ -510,12 +529,87 @@ function finishPatch(
 
 const TEXTURE_INCHES = 6;
 
+/** 0 on the fringe of the hail and 1 at the inmost cell. Lobes keep their own crests. */
+function edgeWeight(patch: HailPatch): Float64Array {
+  const width = patch.columns;
+  const height = patch.rows;
+  const far = 1e9;
+  const dist = new Float64Array(width * height);
+  let inside = 0;
+  for (let i = 0; i < patch.values.length; i += 1) {
+    if ((patch.values[i] ?? 0) > 0.45) {
+      dist[i] = far;
+      inside += 1;
+    }
+  }
+  if (!inside) return dist;
+  const relax = (y0: number, y1: number, dy: number, x0: number, x1: number, dx: number) => {
+    for (let y = y0; y !== y1; y += dy) {
+      for (let x = x0; x !== x1; x += dx) {
+        const index = y * width + x;
+        if (dist[index] === 0) continue;
+        let best = dist[index] ?? far;
+        const px = x - dx;
+        const py = y - dy;
+        if (px >= 0 && px < width) best = Math.min(best, (dist[y * width + px] ?? far) + 1);
+        if (py >= 0 && py < height) best = Math.min(best, (dist[py * width + x] ?? far) + 1);
+        if (px >= 0 && px < width && py >= 0 && py < height) best = Math.min(best, (dist[py * width + px] ?? far) + 1.414);
+        const qx = x + dx;
+        if (qx >= 0 && qx < width && py >= 0 && py < height) best = Math.min(best, (dist[py * width + qx] ?? far) + 1.414);
+        dist[index] = best;
+      }
+    }
+  };
+  relax(0, height, 1, 0, width, 1);
+  relax(height - 1, -1, -1, width - 1, -1, -1);
+  let max = 0;
+  for (let i = 0; i < dist.length; i += 1) {
+    if ((dist[i] ?? 0) >= far / 2) dist[i] = 0;
+    if ((dist[i] ?? 0) > max) max = dist[i] ?? 0;
+  }
+  if (max > 0) for (let i = 0; i < dist.length; i += 1) dist[i] = (dist[i] ?? 0) / max;
+  return dist;
+}
+
+/**
+ * Inches for the draped radar picture. A flat report becomes a smooth falloff
+ * from its real size at the core to the outer band at the fringe, and a hotter
+ * pocket rises above the field around it so the contours form rings and islands.
+ */
+export function radarContours(patch: HailPatch): Float64Array {
+  const width = patch.columns;
+  const height = patch.rows;
+  const edge = edgeWeight(patch);
+  const raw = new Float64Array(patch.values.length);
+  for (let i = 0; i < patch.values.length; i += 1) raw[i] = patch.values[i] ?? 0;
+  const fine = blur(raw, width, height, 1.15);
+  const wide = blur(raw, width, height, Math.max(2.4, 0.2 * Math.min(width, height)));
+  let excessMax = 0;
+  const excess = new Float64Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    excess[i] = Math.max(0, (fine[i] ?? 0) - (wide[i] ?? 0));
+    if ((excess[i] ?? 0) > excessMax) excessMax = excess[i] ?? 0;
+  }
+  const out = new Float64Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    const inches = raw[i] ?? 0;
+    if (inches <= 0.45) continue;
+    const fall = Math.min(1, Math.max(0, edge[i] ?? 0));
+    const radial = inches * (0.16 + 0.84 * fall);
+    const bump = excessMax > 0.05 ? (excess[i] ?? 0) / excessMax : 0;
+    const island = inches * (0.5 + 0.5 * bump);
+    out[i] = Math.min(inches, Math.max(radial, island));
+  }
+  return blur(out, width, height, 0.75);
+}
+
 /**
  * A fine raster of the patch for the GPU. Linear filtering of this image is
  * what draws the outline, so the edge is a curve instead of the data cells.
  * Long side stays at or under 960 texels.
  */
 export function radarTexture(patch: HailPatch): { width: number; height: number; rgba: Uint8Array } {
+  const contours = radarContours(patch);
   const long = Math.max(patch.columns, patch.rows);
   const factor = Math.max(2, Math.min(5, Math.floor(960 / Math.max(2, long))));
   const width = (patch.columns - 1) * factor + 1;
@@ -533,14 +627,14 @@ export function radarTexture(patch: HailPatch): { width: number; height: number;
       const x1 = Math.min(patch.columns - 1, x0 + 1);
       const tx = gx - x0;
       const sx = tx * tx * (3 - 2 * tx);
-      const a = patch.values[y0 * patch.columns + x0] ?? 0;
-      const b = patch.values[y0 * patch.columns + x1] ?? 0;
-      const c = patch.values[y1 * patch.columns + x0] ?? 0;
-      const d = patch.values[y1 * patch.columns + x1] ?? 0;
+      const a = contours[y0 * patch.columns + x0] ?? 0;
+      const b = contours[y0 * patch.columns + x1] ?? 0;
+      const c = contours[y1 * patch.columns + x0] ?? 0;
+      const d = contours[y1 * patch.columns + x1] ?? 0;
       dense[y * width + x] = a * (1 - sx) * (1 - sy) + b * sx * (1 - sy) + c * (1 - sx) * sy + d * sx * sy;
     }
   }
-  const smoothed = blur(dense, width, height, factor * 0.8);
+  const smoothed = blur(dense, width, height, Math.max(1.15, factor * 0.28));
   let peak = 0;
   let peakX = 0;
   let peakY = 0;

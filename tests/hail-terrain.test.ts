@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarBandLift, radarTexture, reliefDome } from "@/lib/hail-terrain";
+import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarBandLift, radarContours, radarTexture, reliefDome } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("turns a straight hail polygon into a hill that meets the ground", () => {
@@ -237,13 +237,40 @@ describe("hail terrain", () => {
   });
 
   it("rounds a radar band into a small shelf instead of a wall", () => {
-    expect(radarBandLift(0.5)).toBe(0);
-    expect(radarBandLift(2.7)).toBeGreaterThan(0.9);
+    expect(radarBandLift(0.3)).toBe(0);
+    expect(radarBandLift(3.2)).toBeGreaterThan(0.9);
     const below = drapedMeters(1.48, 10000, 1);
     const above = drapedMeters(1.7, 10000, 1);
     expect(above).toBeGreaterThan(below);
-    expect(above - below).toBeLessThan(10000 * 0.08);
+    expect(above - below).toBeLessThan(10000 * 0.12);
     expect(drapedMeters(2.5, 10000, 0)).toBe(0);
+  });
+
+  it("turns a round hail core into several separated contour bands", () => {
+    const columns = 48;
+    const rows = 24;
+    const values = Array.from({ length: columns * rows }, (_, index) => {
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      const left = (x - 12) ** 2 + (y - 12) ** 2 < 64;
+      const right = (x - 36) ** 2 + (y - 12) ** 2 < 36;
+      if (left) return 2;
+      if (right) return 1.6;
+      return 0;
+    });
+    const field = radarContours({ west: -112, south: 33, step: 0.02, columns, rows, values });
+    const bands = [0.5, 0.75, 1, 1.25, 1.5, 1.75];
+    const crossed = new Set<number>();
+    let prev = field[12 * columns + 12] ?? 0;
+    for (let x = 12; x >= 0; x -= 1) {
+      const value = field[12 * columns + x] ?? 0;
+      for (const band of bands) if (prev >= band && value < band) crossed.add(band);
+      prev = value;
+    }
+    expect(crossed.size).toBeGreaterThanOrEqual(4);
+    const rightCore = field[12 * columns + 36] ?? 0;
+    const gap = field[12 * columns + 24] ?? 0;
+    expect(rightCore).toBeGreaterThan(gap + 0.35);
   });
 
   it("turns a hard cell step into a ramp several texels wide", () => {

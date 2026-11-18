@@ -442,13 +442,20 @@ export default function HailMap({
     return Math.min(SWATH_MAX_PITCH, Math.max(0, raw));
   }
 
+  function viewBearing(): number {
+    if (typeof window === "undefined") return SWATH_BEARING_OFFSET;
+    const raw = Number(new URLSearchParams(window.location.search).get("bearing"));
+    if (!Number.isFinite(raw)) return SWATH_BEARING_OFFSET;
+    return Math.min(50, Math.max(-50, raw));
+  }
+
   function syncSwathDepth(map: MapLibreMap, next: boolean) {
     if (depthSynced.current === next) return;
     depthSynced.current = next;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const duration = reduced ? 0 : moveMsRef.current;
     if (next) {
-      if (!poseRef.current) poseRef.current = { bearing: map.getBearing(), offset: SWATH_BEARING_OFFSET };
+      if (!poseRef.current) poseRef.current = { bearing: map.getBearing(), offset: viewBearing() };
       map.setMaxPitch(SWATH_MAX_PITCH);
       map.touchPitch.enable();
       map.dragRotate.enable();
@@ -1949,7 +1956,7 @@ function SwathSource({
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": (hitOnly ? 0.02 : zoomFill(fill)) as never,
+            "fill-opacity": (hitOnly ? 0 : zoomFill(fill)) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }

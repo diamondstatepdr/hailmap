@@ -7,6 +7,8 @@ import { hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, radarTexture, t
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
+/** Screen-space lift. The stored meters stay gentle; this makes the hills readable when the map is tilted. */
+const HILL_EXAGGERATION = 3.1;
 
 type PatchDraw = {
   width: number;
@@ -143,15 +145,15 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
   const draws: PatchDraw[] = [];
   for (const patch of patches) {
     const raster = radarTexture(patch);
-    const divX = Math.min(36, Math.max(2, patch.columns - 1));
-    const divY = Math.min(36, Math.max(2, patch.rows - 1));
+    const divX = Math.min(84, Math.max(10, patch.columns - 1));
+    const divY = Math.min(84, Math.max(10, patch.rows - 1));
     const base = vertices.length / 8;
     const heights: number[] = [];
     for (let iy = 0; iy <= divY; iy += 1) {
       for (let ix = 0; ix <= divX; ix += 1) {
         const gx = (ix / divX) * (patch.columns - 1);
         const gy = (iy / divY) * (patch.rows - 1);
-        heights.push(hillMeters(sampleField(patch, gx, gy)));
+        heights.push(hillMeters(sampleField(patch, gx, gy)) * HILL_EXAGGERATION);
       }
     }
     const stride = divX + 1;
@@ -167,9 +169,12 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const right = heights[iy * stride + Math.min(divX, ix + 1)] ?? here;
         const down = heights[Math.max(0, iy - 1) * stride + ix] ?? here;
         const up = heights[Math.min(divY, iy + 1) * stride + ix] ?? here;
-        const stepKm = patch.step * Math.max(patch.columns, patch.rows) / Math.max(divX, divY) * 111;
-        const nx = -(right - left) / (stepKm * 2 || 1);
-        const ny = -(up - down) / (stepKm * 2 || 1);
+        const spanX = ((patch.columns - 1) * patch.step) / divX;
+        const spanY = ((patch.rows - 1) * patch.step) / divY;
+        const dxM = Math.max(spanX, 1e-6) * 111000;
+        const dyM = Math.max(spanY, 1e-6) * 111000;
+        const nx = -(right - left) / (2 * dxM);
+        const ny = -(up - down) / (2 * dyM);
         const length = Math.hypot(nx, ny, 1) || 1;
         vertices.push(mercator.x, mercator.y, here, nx / length, ny / length, 1 / length, fx, fy);
       }
@@ -226,9 +231,12 @@ void main() {
   float inches = texel.r * 6.0;
   float hot = texel.g;
   vec3 color = ramp(inches);
-  vec3 light = normalize(vec3(-0.32, 0.4, 0.88));
-  float shade = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
-  color *= 0.96 + 0.1 * shade;
+  vec3 n = normalize(v_normal);
+  vec3 light = normalize(vec3(-0.62, 0.28, 0.62));
+  float shade = clamp(dot(n, light), 0.0, 1.0);
+  float lit = 0.46 + 0.92 * shade;
+  float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
+  color *= lit * (1.0 - 0.22 * contact);
   float w = max(fwidth(inches), 0.02);
   float rim = 0.0;
   ${radarRimGlsl()}

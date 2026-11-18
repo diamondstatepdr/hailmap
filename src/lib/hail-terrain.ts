@@ -68,7 +68,7 @@ export function hillMeters(inches: number): number {
  */
 export function hillZoomScale(zoom: number): number {
   const matched = 2 ** (SWATH_HEIGHT_ZOOM - zoom);
-  if (zoom >= SWATH_HEIGHT_ZOOM) return matched;
+  if (zoom >= SWATH_HEIGHT_ZOOM) return 2 ** (0.72 * (SWATH_HEIGHT_ZOOM - zoom));
   return matched * 2 ** (0.65 * (zoom - SWATH_HEIGHT_ZOOM));
 }
 

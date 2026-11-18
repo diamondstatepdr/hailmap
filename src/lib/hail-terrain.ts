@@ -7,16 +7,14 @@ import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
  * green, yellow, orange, red, and magenta into white-hot.
  */
 export const RADAR_STOPS = [
-  { inches: 0.35, color: "#102a86" },
-  { inches: 0.6, color: "#1d6fe0" },
-  { inches: 0.85, color: "#19c4d6" },
-  { inches: 1.1, color: "#2fbf4a" },
-  { inches: 1.45, color: "#d6e23a" },
-  { inches: 1.8, color: "#f5c400" },
-  { inches: 2.15, color: "#f07a12" },
-  { inches: 2.5, color: "#e4272f" },
-  { inches: 2.95, color: "#e23ad0" },
-  { inches: 3.7, color: "#fff4f8" },
+  { inches: 0.4, color: "#10266f" },
+  { inches: 0.75, color: "#1c6adf" },
+  { inches: 1, color: "#14c4b0" },
+  { inches: 1.5, color: "#d6de2a" },
+  { inches: 2, color: "#f07814" },
+  { inches: 2.3, color: "#e0232c" },
+  { inches: 2.5, color: "#e030c8" },
+  { inches: 3.3, color: "#fff6f8" },
 ] as const;
 
 /** One smoothed piece of the hail field. Values are inches, row-major, including a zero skirt. */
@@ -30,7 +28,6 @@ export type HailPatch = {
 };
 
 const DILATE = 5;
-const BLUR_SIGMA = 2.6;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const span = edge1 - edge0;
@@ -90,7 +87,7 @@ export function radarLegendBands(): Array<{ minIn: number; label: string; mapLab
     minIn: band.minIn,
     label: band.label,
     mapLabel: band.mapLabel,
-    color: hexChannel(sampleColor(band.minIn >= 2.5 ? 2.9 : band.minIn <= 0.75 ? 0.5 : band.minIn)),
+    color: hexChannel(sampleColor(band.minIn <= 0.75 ? 0.7 : band.minIn)),
   }));
 }
 
@@ -101,21 +98,6 @@ export function radarRampCss(): string {
   const span = last - first || 1;
   const stops = RADAR_STOPS.map((stop) => `${stop.color} ${(((stop.inches - first) / span) * 100).toFixed(1)}%`);
   return `linear-gradient(90deg, ${stops.join(", ")})`;
-}
-
-/** Height key for the 3D view, colored by the thermal ramp. */
-export function radarHeightLegend(): Array<{ label: string; color: string; percent: number }> {
-  const rows = radarLegendBands().map((band) => ({
-    label: band.mapLabel,
-    color: band.color,
-    meters: Math.max(1, hillMeters(band.minIn)),
-  }));
-  const peak = rows[rows.length - 1]?.meters ?? 1;
-  return rows.map((row) => ({
-    label: row.label,
-    color: row.color,
-    percent: Math.round((row.meters / peak) * 100),
-  }));
 }
 
 /** GLSL body that samples {@link RADAR_STOPS}. `inches` is the fragment value. */
@@ -137,10 +119,10 @@ export function radarRampGlsl(): string {
   return lines.join("\n  ");
 }
 
-/** Thin screen-space rims at each color threshold after the outer blue. */
+/** Soft screen-space hints at the main size thresholds. Wide and faint, not a stroke. */
 export function radarRimGlsl(): string {
-  return RADAR_STOPS.slice(1)
-    .map((stop) => `rim = max(rim, 1.0 - smoothstep(w * 0.25, w * 1.35, abs(inches - ${stop.inches.toFixed(2)})));`)
+  return [1, 1.5, 2, 2.5]
+    .map((inches) => `rim = max(rim, 1.0 - smoothstep(w * 0.9, w * 4.8, abs(inches - ${inches.toFixed(2)})));`)
     .join("\n  ");
 }
 
@@ -208,32 +190,6 @@ function blur(source: Float64Array, width: number, height: number, sigma: number
     }
   }
   return out;
-}
-
-/** Cells of real hail sit above the ground skirt. Distance is in grid steps. */
-function distanceToSkirt(values: Float64Array, width: number, height: number): Float64Array {
-  const dist = new Float64Array(values.length);
-  const far = 1e9;
-  for (let i = 0; i < values.length; i += 1) dist[i] = values[i] > 0.05 ? far : 0;
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const i = y * width + x;
-      if (x > 0) dist[i] = Math.min(dist[i], dist[i - 1] + 1);
-      if (y > 0) dist[i] = Math.min(dist[i], dist[i - width] + 1);
-      if (x > 0 && y > 0) dist[i] = Math.min(dist[i], dist[i - width - 1] + 1.4);
-      if (x + 1 < width && y > 0) dist[i] = Math.min(dist[i], dist[i - width + 1] + 1.4);
-    }
-  }
-  for (let y = height - 1; y >= 0; y -= 1) {
-    for (let x = width - 1; x >= 0; x -= 1) {
-      const i = y * width + x;
-      if (x + 1 < width) dist[i] = Math.min(dist[i], dist[i + 1] + 1);
-      if (y + 1 < height) dist[i] = Math.min(dist[i], dist[i + width] + 1);
-      if (x + 1 < width && y + 1 < height) dist[i] = Math.min(dist[i], dist[i + width + 1] + 1.4);
-      if (x > 0 && y + 1 < height) dist[i] = Math.min(dist[i], dist[i + width - 1] + 1.4);
-    }
-  }
-  return dist;
 }
 
 function padZeros(values: Float64Array, width: number, height: number, pad: number): { values: Float64Array; width: number; height: number } {
@@ -339,6 +295,30 @@ export function hailPatches(cells: MeshCell[], shape: MeshGridShape): HailPatch[
   return patches;
 }
 
+/** Spread each hail size across a small disk so a hot core is a blob, not one cell. */
+function spreadPeaks(source: Float64Array, width: number, height: number, radius: number): Float64Array {
+  const out = new Float64Array(source.length);
+  const radiusSq = radius * radius;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let max = 0;
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (dx * dx + dy * dy > radiusSq) continue;
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          const value = source[yy * width + xx];
+          if (value > max) max = value;
+        }
+      }
+      out[y * width + x] = max;
+    }
+  }
+  return out;
+}
+
 function finishPatch(
   raw: Float64Array,
   width: number,
@@ -348,40 +328,55 @@ function finishPatch(
   step: number,
 ): HailPatch | null {
   const reduced = downsample(raw, width, height);
-  const skirt = 6;
+  const span = Math.min(reduced.width, reduced.height);
+  // Wide enough that a straight polygon side bows into a curve.
+  const sigma = Math.min(12, Math.max(5.2, span * 0.42));
+  const skirt = Math.min(26, Math.max(14, Math.ceil(sigma * 2.5)));
   const padded = padZeros(reduced.values, reduced.width, reduced.height, skirt);
-  const smooth = blur(padded.values, padded.width, padded.height, BLUR_SIGMA);
-  const distance = distanceToSkirt(padded.values, padded.width, padded.height);
-  let maxDistance = 0;
+  const spread = spreadPeaks(padded.values, padded.width, padded.height, 2);
+  const cores = blur(spread, padded.width, padded.height, 0.65);
+  const presence = new Float64Array(padded.values.length);
+  for (let i = 0; i < padded.values.length; i += 1) presence[i] = padded.values[i] > 0.05 ? 1 : 0;
+  const mask = blur(presence, padded.width, padded.height, sigma);
+  let maskPeak = 0;
   let rawPeak = 0;
   for (let i = 0; i < padded.values.length; i += 1) rawPeak = Math.max(rawPeak, padded.values[i]);
-  for (let i = 0; i < distance.length; i += 1) maxDistance = Math.max(maxDistance, distance[i]);
-  const shaped = new Float64Array(smooth.length);
-  let shapedPeak = 0;
+  for (let i = 0; i < mask.length; i += 1) maskPeak = Math.max(maskPeak, mask[i]);
+  const shaped = new Float64Array(mask.length);
+  const amp = sigma * 0.9;
+  const sampleMask = (sx: number, sy: number) => {
+    const x0 = Math.floor(sx);
+    const y0 = Math.floor(sy);
+    const tx = sx - x0;
+    const ty = sy - y0;
+    const at = (xx: number, yy: number) => {
+      if (xx < 0 || yy < 0 || xx >= padded.width || yy >= padded.height) return 0;
+      return mask[yy * padded.width + xx];
+    };
+    const a = at(x0, y0);
+    const b = at(x0 + 1, y0);
+    const c = at(x0, y0 + 1);
+    const d = at(x0 + 1, y0 + 1);
+    return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+  };
   for (let y = 0; y < padded.height; y += 1) {
     for (let x = 0; x < padded.width; x += 1) {
       const i = y * padded.width + x;
-      const dist = distance[i];
-      // The skirt stays on the ground. Blur spill past the hail mask is dropped.
-      if (dist < 0.5) continue;
-      const fade = smoothstep(0, 2.6, dist);
-      const dome = maxDistance > 0 ? dist / maxDistance : 0;
-      // A light crown, so a uniform patch is not a flat table and not a spike.
-      const crown = 0.84 + 0.16 * dome ** 1.7;
-      let value = smooth[i] * crown * (0.22 + 0.78 * fade);
-      if (dist < 5.2 && value < rawPeak * 0.62) {
-        const wobble = fringeNoise(x * 1.7 + west * 40, y * 1.3 + south * 40);
-        value = Math.max(0, value + wobble * 0.15 * (1.2 - fade));
-      }
-      shaped[i] = value;
-      if (value > shapedPeak) shapedPeak = value;
+      const ox = fringeNoise(x * 0.17 + west * 20, y * 0.17 + south * 20) * amp;
+      const oy = fringeNoise(x * 0.17 + 19 + west * 20, y * 0.17 + south * 20) * amp;
+      const t = maskPeak > 0 ? sampleMask(x + ox, y + oy) / maskPeak : 0;
+      const edge = smoothstep(0.04, 0.46, t);
+      if (edge <= 0) continue;
+      const core = cores[i];
+      const coreShare = rawPeak > 0 ? core / rawPeak : 0;
+      const fringe = rawPeak * 0.38 * smoothstep(0.04, 0.55, t) * (1 - smoothstep(0.12, 0.5, coreShare));
+      shaped[i] = Math.max(core * smoothstep(0.08, 0.5, t), fringe) * (0.9 + 0.1 * edge);
     }
   }
-  const gain = shapedPeak > 0 ? rawPeak / shapedPeak : 1;
   let peak = 0;
   const values: number[] = [];
   for (let i = 0; i < shaped.length; i += 1) {
-    const inches = Math.round(Math.min(rawPeak, shaped[i] * gain) * 100) / 100;
+    const inches = Math.round(Math.min(rawPeak, Math.max(0, shaped[i])) * 100) / 100;
     values.push(inches);
     if (inches > peak) peak = inches;
   }

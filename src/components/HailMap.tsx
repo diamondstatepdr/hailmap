@@ -1949,7 +1949,7 @@ function SwathSource({
         paint={
           {
             "fill-color": swathColor as never,
-            "fill-opacity": (hitOnly ? 0.02 : zoomFill(fill)) as never,
+            "fill-opacity": (hitOnly ? 0 : zoomFill(fill)) as never,
             ...(transition ? { "fill-opacity-transition": transition } : {}),
           } as never
         }

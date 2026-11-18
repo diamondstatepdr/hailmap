@@ -4132,6 +4132,39 @@ html.dark .money-glance-kicker {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
+.map-size-key {
+  pointer-events: none;
+  min-width: 9.2rem;
+  border: 1px solid color-mix(in srgb, #ff5a00 48%, transparent);
+  border-radius: 0.9rem;
+  padding: 0.4rem 0.55rem 0.36rem;
+  color: var(--chrome-ink);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--chrome) 92%, transparent), color-mix(in srgb, var(--chrome-2) 90%, transparent));
+  box-shadow: 0 10px 22px color-mix(in srgb, #071433 28%, transparent);
+}
+
+.map-size-key p {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.map-size-ramp {
+  display: block;
+  width: 100%;
+  height: 0.46rem;
+  margin-top: 0.28rem;
+}
+
+.map-size-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.16rem;
+  font-size: 0.62rem;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+}
+
 .map-key-label,
 .map-key-back {
   font-weight: 720;

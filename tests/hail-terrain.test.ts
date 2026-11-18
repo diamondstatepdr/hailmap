@@ -49,8 +49,15 @@ describe("hail terrain", () => {
     const blue = hillColor(0.45);
     const green = hillColor(1.1);
     const yellow = hillColor(1.7);
+    const orange = hillColor(2);
+    const magenta = hillColor(2.5);
     const red = hillColor(2.4);
     const hot = hillColor(4.2);
+    expect(orange[0]).toBeGreaterThan(0.85);
+    expect(orange[0]).toBeGreaterThan(orange[1]);
+    expect(orange[1]).toBeGreaterThan(orange[2]);
+    expect(magenta[0]).toBeGreaterThan(0.7);
+    expect(magenta[2]).toBeGreaterThan(magenta[1]);
     expect(blue[2]).toBeGreaterThan(blue[0]);
     expect(green[1]).toBeGreaterThan(green[0]);
     expect(yellow[0]).toBeGreaterThan(0.7);
@@ -80,7 +87,9 @@ describe("hail terrain", () => {
       box(-87.95, 41.18, -87.7, 41.42, 2.6),
     ]);
     expect(merged).toHaveLength(1);
-    expect(Math.max(...merged[0].values)).toBeGreaterThan(2.1);
+    expect(Math.max(...merged[0].values)).toBeGreaterThan(2.2);
+    const hotCells = merged[0].values.filter((value) => value >= 2.2).length;
+    expect(hotCells).toBeGreaterThan(4);
     const apart = patchesFromPolygons([
       box(-88.2, 41.0, -87.9, 41.25, 1.4),
       box(-84.2, 39.0, -83.9, 39.25, 2.2),
@@ -115,6 +124,43 @@ describe("hail terrain", () => {
       skew += Math.abs(left - right);
     }
     expect(skew).toBeGreaterThan(0.05);
+  });
+
+  it("rounds a long rectangular footprint so the edge is not a straight run", () => {
+    const patches = patchesFromPolygons([
+      {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [-88.5, 41.08],
+            [-87.55, 41.08],
+            [-87.55, 41.22],
+            [-88.5, 41.22],
+            [-88.5, 41.08],
+          ]],
+        },
+        properties: { maxSizeIn: 2.48, minIn: 1.4 },
+      },
+    ]);
+    expect(patches).toHaveLength(1);
+    const patch = patches[0];
+    expect(Math.max(...patch.values)).toBeGreaterThan(2.3);
+    const hot = patch.values.filter((value) => value >= 2.2).length;
+    expect(hot).toBeGreaterThan(8);
+    const tops: number[] = [];
+    for (let x = 0; x < patch.columns; x += 1) {
+      let top = -1;
+      for (let y = 0; y < patch.rows; y += 1) {
+        if ((patch.values[y * patch.columns + x] ?? 0) > 0.35) top = y;
+      }
+      if (top >= 0) tops.push(top);
+    }
+    const mid = tops.slice(Math.floor(tops.length * 0.3), Math.floor(tops.length * 0.7));
+    const mean = mid.reduce((sum, value) => sum + value, 0) / mid.length;
+    const bend = Math.max(...mid.map((value) => Math.abs(value - mean)));
+    expect(bend).toBeGreaterThan(0.5);
+    const ends = [tops[1] ?? 0, tops[tops.length - 2] ?? 0];
+    expect(Math.max(...ends)).toBeLessThan(mean - 0.5);
   });
 
   it("turns distant reports into separate hills", () => {

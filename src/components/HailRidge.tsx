@@ -119,7 +119,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       }
     }
     const stepKm = patch.step * 111;
-    const sigma = Math.max(6, stepKm * 1.7);
+    const sigmaKm = Math.max(3.5, stepKm * 0.85);
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < columns; x += 1) {
         const inches = patch.values[y * columns + x] ?? 0;
@@ -140,8 +140,8 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
         const distKm = Math.hypot((x - peakX) * stepKm, (y - peakY) * stepKm);
         const closeness = peak > 0 ? inches / peak : 0;
         const hot =
-          peak >= 1.55 && closeness >= 0.82
-            ? Math.exp(-(distKm * distKm) / (2 * sigma * sigma)) * Math.min(1, (closeness - 0.82) / 0.18)
+          peak >= 1.9 && closeness >= 0.92
+            ? Math.exp(-(distKm * distKm) / (2 * sigmaKm * sigmaKm)) * Math.min(1, (closeness - 0.92) / 0.08)
             : 0;
         vertices.push(mercator.x, mercator.y, meters[y * columns + x] ?? 0, nx / length, ny / length, nz / length, inches, alpha, hot);
       }
@@ -208,15 +208,14 @@ void main() {
   vec3 color = ramp(inches);
   vec3 light = normalize(vec3(-0.32, 0.4, 0.88));
   float shade = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
-  color *= 0.94 + 0.14 * shade;
-  float w = max(fwidth(inches), 0.01);
+  color *= 0.96 + 0.1 * shade;
+  float w = max(fwidth(inches), 0.02);
   float rim = 0.0;
   ${radarRimGlsl()}
-  color += color * rim * 0.65;
-  color = mix(color, vec3(1.0), rim * 0.22);
+  color = mix(color, min(vec3(1.0), color + vec3(0.16)), rim * 0.22);
   float hot = clamp(v_hot, 0.0, 1.0);
-  color = mix(color, vec3(1.0, 0.97, 0.94), smoothstep(0.4, 1.0, hot));
-  color += vec3(1.0, 0.96, 0.92) * hot * hot * 0.7;
+  color = mix(color, vec3(1.0, 0.97, 0.95), smoothstep(0.55, 1.0, hot));
+  color += vec3(1.0, 0.97, 0.94) * hot * hot * 0.85;
   float alpha = min(0.76, clamp(v_alpha, 0.0, 0.7) + hot * 0.08);
   if (alpha < 0.012) discard;
   fragColor = vec4(color * alpha, alpha);

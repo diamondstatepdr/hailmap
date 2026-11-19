@@ -439,7 +439,11 @@ export default function HailMap({
     if (typeof window === "undefined") return SWATH_3D_PITCH;
     const raw = Number(new URLSearchParams(window.location.search).get("pitch"));
     if (!Number.isFinite(raw)) return SWATH_3D_PITCH;
-    return Math.min(SWATH_MAX_PITCH, Math.max(0, raw));
+    return Math.min(75, Math.max(0, raw));
+  }
+
+  function pitchLimit(): number {
+    return Math.max(SWATH_MAX_PITCH, viewPitch());
   }
 
   function viewBearing(): number {
@@ -456,7 +460,7 @@ export default function HailMap({
     const duration = reduced ? 0 : moveMsRef.current;
     if (next) {
       if (!poseRef.current) poseRef.current = { bearing: map.getBearing(), offset: viewBearing() };
-      map.setMaxPitch(SWATH_MAX_PITCH);
+      map.setMaxPitch(pitchLimit());
       map.touchPitch.enable();
       map.dragRotate.enable();
       map.touchZoomRotate.enable();
@@ -1014,7 +1018,7 @@ export default function HailMap({
         if (raw) {
           raw.on("style.load", () => {
             if (!depthRef.current) return;
-            raw.setMaxPitch(SWATH_MAX_PITCH);
+            raw.setMaxPitch(pitchLimit());
             raw.touchPitch.enable();
             raw.dragRotate.enable();
             raw.touchZoomRotate.enableRotation();
@@ -1168,6 +1172,7 @@ export default function HailMap({
           theme={theme}
           labels
           volume={volume}
+          relief={relief}
           risen={risen}
           riseMs={moveMs}
         />

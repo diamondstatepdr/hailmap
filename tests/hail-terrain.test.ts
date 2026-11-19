@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarTexture } from "@/lib/hail-terrain";
+import { drapedMeters, hailPatches, hillColor, hillMeters, hillZoomScale, patchesFromPolygons, radarBandLift, radarContours, radarTexture, reliefDome } from "@/lib/hail-terrain";
 
 describe("hail terrain", () => {
   it("turns a straight hail polygon into a hill that meets the ground", () => {
@@ -182,6 +182,95 @@ describe("hail terrain", () => {
     expect(bend).toBeGreaterThan(0.5);
     const ends = [tops[1] ?? 0, tops[tops.length - 2] ?? 0];
     expect(Math.max(...ends)).toBeLessThan(mean - 0.5);
+  });
+
+  it("keeps a lone report a low bump and the fringe on the ground", () => {
+    const radius = 2500;
+    expect(drapedMeters(2.5, radius, 0)).toBe(0);
+    const bump = drapedMeters(2.5, radius, 1);
+    expect(bump).toBeGreaterThan(radius * 0.65);
+    expect(bump).toBeLessThan(radius * 0.8);
+    expect(drapedMeters(1, radius, 1)).toBeLessThan(bump);
+    const columns = 16;
+    const rows = 16;
+    const values = Array.from({ length: columns * rows }, (_, index) => {
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      return x > 3 && x < 12 && y > 3 && y < 12 ? 1.8 : 0;
+    });
+    const { dome, inradiusM } = reliefDome({ west: -112, south: 33, step: 0.02, columns, rows, values });
+    const center = dome[8 * columns + 8] ?? 0;
+    const corner = dome[0] ?? 0;
+    const shoulder = dome[8 * columns + 10] ?? 0;
+    expect(center).toBeGreaterThan(0.8);
+    expect(shoulder).toBeLessThan(center * 0.82);
+    expect(corner).toBeLessThan(0.2);
+    const crest = drapedMeters(1.8, inradiusM, center);
+    expect(crest).toBeGreaterThan(inradiusM * 0.4);
+    expect(crest).toBeLessThan(inradiusM * 0.8);
+    let tallestStep = 0;
+    for (let x = 4; x < 12; x += 1) {
+      const left = drapedMeters(1.8, inradiusM, dome[8 * columns + x] ?? 0);
+      const right = drapedMeters(1.8, inradiusM, dome[8 * columns + x + 1] ?? 0);
+      tallestStep = Math.max(tallestStep, Math.abs(left - right));
+    }
+    expect(tallestStep).toBeLessThan(inradiusM * 0.28);
+  });
+
+  it("dips between two report centers", () => {
+    const columns = 32;
+    const rows = 18;
+    const values = Array.from({ length: columns * rows }, (_, index) => {
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      const left = (x - 10) ** 2 + (y - 9) ** 2 <= 36;
+      const right = (x - 21) ** 2 + (y - 9) ** 2 <= 36;
+      return left || right ? 1.8 : 0;
+    });
+    const { dome, inradiusM } = reliefDome({ west: -112, south: 33, step: 0.02, columns, rows, values });
+    const left = drapedMeters(1.8, inradiusM, dome[9 * columns + 10] ?? 0);
+    const right = drapedMeters(1.8, inradiusM, dome[9 * columns + 21] ?? 0);
+    const saddle = drapedMeters(1.8, inradiusM, dome[9 * columns + 15] ?? 0);
+    expect(left).toBeGreaterThan(inradiusM * 0.2);
+    expect(right).toBeGreaterThan(inradiusM * 0.2);
+    expect(saddle).toBeLessThan(Math.min(left, right) * 0.8);
+  });
+
+  it("rounds a radar band into a small shelf instead of a wall", () => {
+    expect(radarBandLift(0.3)).toBe(0);
+    expect(radarBandLift(3.2)).toBeGreaterThan(0.9);
+    const below = drapedMeters(1.48, 10000, 1);
+    const above = drapedMeters(1.7, 10000, 1);
+    expect(above).toBeGreaterThan(below);
+    expect(above - below).toBeLessThan(10000 * 0.12);
+    expect(drapedMeters(2.5, 10000, 0)).toBe(0);
+  });
+
+  it("turns a round hail core into several separated contour bands", () => {
+    const columns = 48;
+    const rows = 24;
+    const values = Array.from({ length: columns * rows }, (_, index) => {
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      const left = (x - 12) ** 2 + (y - 12) ** 2 < 64;
+      const right = (x - 36) ** 2 + (y - 12) ** 2 < 36;
+      if (left) return 2;
+      if (right) return 1.6;
+      return 0;
+    });
+    const field = radarContours({ west: -112, south: 33, step: 0.02, columns, rows, values });
+    const bands = [0.5, 0.75, 1, 1.25, 1.5, 1.75];
+    const crossed = new Set<number>();
+    let prev = field[12 * columns + 12] ?? 0;
+    for (let x = 12; x >= 0; x -= 1) {
+      const value = field[12 * columns + x] ?? 0;
+      for (const band of bands) if (prev >= band && value < band) crossed.add(band);
+      prev = value;
+    }
+    expect(crossed.size).toBeGreaterThanOrEqual(4);
+    const rightCore = field[12 * columns + 36] ?? 0;
+    const gap = field[12 * columns + 24] ?? 0;
+    expect(rightCore).toBeGreaterThan(gap + 0.35);
   });
 
   it("turns a hard cell step into a ramp several texels wide", () => {

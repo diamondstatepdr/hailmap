@@ -3,12 +3,10 @@
 import { useEffect } from "react";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MapLibreMap } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
-import { hillMeters, hillZoomScale, radarRampGlsl, radarRimGlsl, radarTexture, type HailPatch } from "@/lib/hail-terrain";
+import { drapedMeters, radarBandGlsl, radarContours, radarRimGlsl, radarTexture, reliefDome, type HailPatch } from "@/lib/hail-terrain";
 import { SWATH_HEIGHT_ZOOM } from "@/lib/swath-extrusion";
 
 const LAYER_ID = "hail-ridge";
-/** Screen-space lift. The stored meters stay gentle; this makes the hills readable when the map is tilted. */
-const HILL_EXAGGERATION = 4.2;
 
 type PatchDraw = {
   width: number;
@@ -16,6 +14,7 @@ type PatchDraw = {
   rgba: Uint8Array;
   indexOffset: number;
   indexCount: number;
+  lat: number;
 };
 
 /**
@@ -74,7 +73,7 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
     render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: CustomRenderMethodInput) {
       if (!program || !buffer || !indexBuffer || textures.length === 0) return;
       const zoom = this.map?.getZoom() ?? SWATH_HEIGHT_ZOOM;
-      const scale = hillZoomScale(zoom);
+      const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -90,9 +89,9 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
       gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, stride, 6 * 4);
       const matrix = options.modelViewProjectionMatrix;
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix instanceof Float32Array ? matrix : new Float32Array(matrix));
-      const worldSize = this.map?.transform?.worldSize ?? 512 * 2 ** zoom;
       gl.uniform1f(gl.getUniformLocation(program, "u_world"), worldSize);
-      gl.uniform1f(gl.getUniformLocation(program, "u_scale"), scale);
+      const pixelRatio = this.map?.getPixelRatio?.() ?? (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
+      gl.uniform1f(gl.getUniformLocation(program, "u_dpr"), pixelRatio);
       const field = gl.getUniformLocation(program, "u_field");
       gl.uniform1i(field, 0);
       const depthTest = gl.isEnabled(gl.DEPTH_TEST);
@@ -125,6 +124,20 @@ function createRidgeLayer(patches: HailPatch[]): CustomLayerInterface & { map: M
   return layer;
 }
 
+function sampleGrid(values: number[] | Float64Array, columns: number, rows: number, gx: number, gy: number): number {
+  const x0 = Math.max(0, Math.min(columns - 1, Math.floor(gx)));
+  const y0 = Math.max(0, Math.min(rows - 1, Math.floor(gy)));
+  const x1 = Math.min(columns - 1, x0 + 1);
+  const y1 = Math.min(rows - 1, y0 + 1);
+  const tx = Math.min(1, Math.max(0, gx - x0));
+  const ty = Math.min(1, Math.max(0, gy - y0));
+  const a = values[y0 * columns + x0] ?? 0;
+  const b = values[y0 * columns + x1] ?? 0;
+  const c = values[y1 * columns + x0] ?? 0;
+  const d = values[y1 * columns + x1] ?? 0;
+  return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+}
+
 function sampleField(patch: HailPatch, gx: number, gy: number): number {
   const x0 = Math.max(0, Math.min(patch.columns - 1, Math.floor(gx)));
   const y0 = Math.max(0, Math.min(patch.rows - 1, Math.floor(gy)));
@@ -145,6 +158,10 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
   const draws: PatchDraw[] = [];
   for (const patch of patches) {
     const raster = radarTexture(patch);
+    const contours = radarContours(patch);
+    const relief = reliefDome(patch);
+    const dome = relief.dome;
+    const radiusM = relief.inradiusM;
     const divX = Math.min(84, Math.max(10, patch.columns - 1));
     const divY = Math.min(84, Math.max(10, patch.rows - 1));
     const base = vertices.length / 8;
@@ -153,7 +170,10 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       for (let ix = 0; ix <= divX; ix += 1) {
         const gx = (ix / divX) * (patch.columns - 1);
         const gy = (iy / divY) * (patch.rows - 1);
-        heights.push(hillMeters(sampleField(patch, gx, gy)) * HILL_EXAGGERATION);
+        const inches = sampleField(patch, gx, gy);
+        const contourInches = sampleGrid(contours, patch.columns, patch.rows, gx, gy);
+        const crown = sampleGrid(dome, patch.columns, patch.rows, gx, gy);
+        heights.push(drapedMeters(inches, radiusM, crown, contourInches));
       }
     }
     const stride = divX + 1;
@@ -195,6 +215,7 @@ function buildMesh(patches: HailPatch[]): { vertices: Float32Array; indices: Uin
       rgba: raster.rgba,
       indexOffset,
       indexCount: indices.length - indexOffset,
+      lat: patch.south + ((patch.rows - 1) * patch.step) / 2,
     });
   }
   return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices), draws };
@@ -205,14 +226,14 @@ function createProgram(gl: WebGLRenderingContext | WebGL2RenderingContext): WebG
 precision highp float;
 uniform mat4 u_matrix;
 uniform float u_world;
-uniform float u_scale;
 in vec3 a_pos;
 in vec3 a_normal;
 in vec2 a_uv;
 out vec3 v_normal;
 out vec2 v_uv;
 void main() {
-  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z * u_scale);
+  // x and y are world pixels. z is meters: this matrix already scales z by pixels-per-meter.
+  vec3 pos = vec3(a_pos.xy * u_world, a_pos.z);
   gl_Position = u_matrix * vec4(pos, 1.0);
   v_normal = a_normal;
   v_uv = a_uv;
@@ -220,29 +241,35 @@ void main() {
   const fragment = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
 uniform sampler2D u_field;
+uniform float u_dpr;
 in vec3 v_normal;
 in vec2 v_uv;
 out vec4 fragColor;
-vec3 ramp(float inches) {
-  ${radarRampGlsl()}
+vec3 bands(float inches, float px) {
+  ${radarBandGlsl()}
 }
 void main() {
   vec4 texel = texture(u_field, v_uv);
   float inches = texel.r * 6.0;
   float hot = texel.g;
-  vec3 color = ramp(inches);
-  vec3 n = normalize(v_normal);
-  vec3 light = normalize(vec3(-0.62, 0.28, 0.62));
+  float px = max(fwidth(inches), 0.001);
+  vec3 color = bands(inches, px);
+  vec3 n = normalize(vec3(v_normal.xy * 1.35, v_normal.z));
+  vec3 light = normalize(vec3(-0.78, 0.36, 0.42));
   float shade = clamp(dot(n, light), 0.0, 1.0);
-  float lit = 0.46 + 0.92 * shade;
+  float lit = 0.36 + 1.18 * shade;
   float contact = smoothstep(1.15, 0.5, inches) * (1.0 - shade);
   color *= lit * (1.0 - 0.22 * contact);
-  float w = max(fwidth(inches), 0.02);
-  float rim = 0.0;
-  ${radarRimGlsl()}
-  color = mix(color, min(vec3(1.0), color + vec3(0.12)), rim * 0.16);
   color = mix(color, vec3(1.0, 0.98, 0.96), smoothstep(0.78, 1.0, hot));
   color += vec3(1.0, 0.98, 0.96) * hot * hot * 0.22;
+  float rimPx = px * max(u_dpr, 1.0) * 1.15;
+  float lip = 0.0;
+  float groove = 0.0;
+  float line = 0.0;
+  float s = 0.0;
+  ${radarRimGlsl()}
+  color = mix(color, color * 0.42, clamp(groove, 0.0, 1.0));
+  color = mix(color, min(vec3(1.0), color * 0.35 + vec3(0.72)), clamp(lip, 0.0, 1.0));
   float t = clamp((inches - 0.50) / 0.70, 0.0, 1.0);
   float fade = t * t * (3.0 - 2.0 * t);
   float alpha = min(0.66, 0.64 * fade);
